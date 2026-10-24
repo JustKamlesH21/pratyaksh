@@ -29,7 +29,9 @@ from ..signals import SignalExtractor
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
 from .interpreter import Context, Interpreter, TurnKind
-from .store import AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow
+from .store import (
+    GENESIS, AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow, chain_hash,
+)
 
 log = logging.getLogger(__name__)
 
@@ -268,6 +270,14 @@ class Verifier:
             if call is None:
                 raise CallNotFound(call_id)
             return self._view(s, call, with_events)
+
+    def audit_check(self, call_id: str) -> dict:
+        """Recompute the Call's hash chain: is its Audit Trail exactly as it was written?
+        Returns {intact, events, broken_at (first bad event), head (hash of the last event)}."""
+        with self._db.session() as s:
+            if s.get(CallRow, call_id) is None:
+                raise CallNotFound(call_id)
+            return self._check_chain(s, call_id)
 
     def calls(self, limit: int = 50) -> list[dict]:
         with self._db.session() as s:
@@ -651,9 +661,27 @@ class Verifier:
         return msgs[-1] if msgs else None
 
     def _audit(self, s: Session, call: CallRow, kind: str, data: dict) -> None:
-        seq = (s.scalar(select(func.max(AuditEventRow.seq)).where(AuditEventRow.call_id == call.id)) or 0) + 1
-        s.add(AuditEventRow(call_id=call.id, seq=seq, kind=kind, data=_jsonable(data), created_at=self._now()))
+        last = s.execute(
+            select(AuditEventRow.seq, AuditEventRow.hash)
+            .where(AuditEventRow.call_id == call.id).order_by(AuditEventRow.seq.desc()).limit(1)
+        ).first()
+        seq, prev = (last.seq + 1, last.hash) if last else (1, GENESIS)
+        data, at = _jsonable(data), self._now()
+        s.add(AuditEventRow(
+            call_id=call.id, seq=seq, kind=kind, data=data, created_at=at,
+            prev_hash=prev, hash=chain_hash(prev, call.id, seq, kind, data, at),
+        ))
         s.flush()
+
+    @staticmethod
+    def _check_chain(s: Session, call_id: str) -> dict:
+        rows = s.scalars(select(AuditEventRow).where(AuditEventRow.call_id == call_id).order_by(AuditEventRow.seq)).all()
+        prev = GENESIS
+        for n, e in enumerate(rows, start=1):
+            if e.seq != n or e.prev_hash != prev or e.hash != chain_hash(prev, e.call_id, e.seq, e.kind, e.data, e.created_at):
+                return {"intact": False, "events": len(rows), "broken_at": n, "head": None}
+            prev = e.hash
+        return {"intact": True, "events": len(rows), "broken_at": None, "head": prev}
 
     def _publish_after(self, call_id: str) -> None:
         """Push the Call's latest state to live Consoles. Call only after the session commits."""
@@ -693,6 +721,7 @@ class Verifier:
             view["events"] = [
                 {"seq": e.seq, "kind": e.kind, "data": e.data, "at": e.created_at.isoformat()} for e in rows
             ]
+            view["audit"] = self._check_chain(s, call.id)
         return view
 
 

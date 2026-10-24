@@ -1,12 +1,16 @@
 """Database tables. MySQL in production, SQLite in tests (same models; see ADR-0004).
 
 The Audit Trail table is insert-only: nothing in the code updates or deletes it, and
-create_schema() adds database triggers that reject UPDATE and DELETE on it.
+create_schema() adds database triggers that reject UPDATE and DELETE on it. Each event also
+carries a SHA-256 hash chained to the previous event of its Call (chain_hash), so an edit or a
+deleted event is detectable even by someone who drops the triggers.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import logging
 import sys
 from contextlib import contextmanager
@@ -16,7 +20,8 @@ from typing import Iterator
 import secrets
 
 from sqlalchemy import (
-    JSON, Boolean, DateTime as _DateTime, Double, ForeignKey, Integer, String, Text, create_engine, select, text,
+    JSON, Boolean, DateTime as _DateTime, Double, ForeignKey, Integer, String, Text, create_engine, inspect, select,
+    text,
 )
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -91,6 +96,28 @@ class AuditEventRow(Base):
     kind: Mapped[str] = mapped_column(String(40))
     data: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime)
+    prev_hash: Mapped[str] = mapped_column(String(64), default="")
+    hash: Mapped[str] = mapped_column(String(64), default="")
+
+
+GENESIS = "0" * 64  # prev_hash of a Call's first event
+
+
+def chain_hash(prev_hash: str, call_id: str, seq: int, kind: str, data: dict, created_at: datetime) -> str:
+    """SHA-256 of one Audit Trail event and the hash before it. Stable across MySQL and SQLite."""
+    body = json.dumps(_canonical(data), sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    line = f"{prev_hash}|{call_id}|{seq}|{kind}|{body}|{created_at.isoformat(timespec='microseconds')}"
+    return hashlib.sha256(line.encode()).hexdigest()
+
+
+def _canonical(v):
+    if isinstance(v, float) and v.is_integer():
+        return int(v)  # a database may hand 1.0 back as 1
+    if isinstance(v, dict):
+        return {str(k): _canonical(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_canonical(x) for x in v]
+    return v
 
 
 class PossessionCodeRow(Base):
@@ -134,6 +161,10 @@ DEMO_CUSTOMERS = [
 ]
 
 
+class SchemaOutOfDate(RuntimeError):
+    """The database was created by an older version: create_all() never adds columns."""
+
+
 class Database:
     def __init__(self, url: str):
         kwargs: dict = {"pool_pre_ping": True}
@@ -147,7 +178,23 @@ class Database:
     def create_schema(self) -> list[str]:
         """Create the tables and the Audit Trail triggers. Returns the triggers that could not be added."""
         Base.metadata.create_all(self.engine)
+        self._check_columns()
         return self._protect_audit_trail()
+
+    def reset(self) -> None:
+        """Drop every table (and with it the Audit Trail and its triggers). Demo data only."""
+        Base.metadata.drop_all(self.engine)
+
+    def _check_columns(self) -> None:
+        tables = inspect(self.engine)
+        for table in Base.metadata.sorted_tables:
+            have = {c["name"] for c in tables.get_columns(table.name)}
+            missing = [c.name for c in table.columns if c.name not in have]
+            if missing:
+                raise SchemaOutOfDate(
+                    f"table {table.name} has no {', '.join(missing)}: the database is older than this code. "
+                    "Run pratyaksh-seed --reset (deletes all Calls and the Audit Trail) to recreate it."
+                )
 
     def _protect_audit_trail(self) -> list[str]:
         dialect = self.engine.dialect.name
@@ -220,13 +267,17 @@ class Database:
 
 
 def seed_main() -> None:
-    """Create tables and demo Customers. Usage: pratyaksh-seed [--database-url URL]"""
+    """Create tables and demo Customers. Usage: pratyaksh-seed [--database-url URL] [--reset]"""
     from ..config import Settings
 
     parser = argparse.ArgumentParser(description=seed_main.__doc__)
     parser.add_argument("--database-url", default=None)
+    parser.add_argument("--reset", action="store_true", help="drop all tables first (deletes Calls and the Audit Trail)")
     args = parser.parse_args()
     db = Database(args.database_url or Settings().database_url)
+    if args.reset:
+        db.reset()
+        print("dropped all tables")
     missing = db.create_schema()
     db.seed_demo_customers()
     print("tables ready, demo customers seeded" if missing else "schema ready, demo customers seeded")

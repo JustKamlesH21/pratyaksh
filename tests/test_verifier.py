@@ -6,7 +6,7 @@ import pytest
 from conftest import Harness, voiced, whispered
 
 from pratyaksh.domain import CallState, Outcome
-from pratyaksh.verification import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
+from pratyaksh.verification import CallNotFound, Database, DeviceNotPaired, NotAllowed, UnknownCustomer
 
 C = "cust-ananya"
 
@@ -293,3 +293,44 @@ def test_the_voice_pause_ends_by_itself(harness):
     h.clock.advance(31 * 60)
     call_id = h.verifier.start_call(C, "r").call_id
     assert h.say(call_id, "add a payee").state is CallState.CHALLENGING
+
+
+def test_the_audit_trail_is_hash_chained_so_edits_show_even_without_triggers(harness):
+    from sqlalchemy import text
+
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    check = h.verifier.audit_check(call_id)
+    assert check["intact"] and check["events"] >= 5 and len(check["head"]) == 64
+    assert h.verifier.call(call_id)["audit"] == check
+
+    # Someone with database access drops the triggers and rewrites what the Caller said.
+    with h.db.engine.begin() as conn:
+        conn.execute(text("DROP TRIGGER audit_events_no_update"))
+        conn.execute(text("DROP TRIGGER audit_events_no_delete"))
+        conn.execute(text("UPDATE audit_events SET data = :d WHERE call_id = :c AND seq = 2"),
+                      {"d": '{"transcript": "check my balance"}', "c": call_id})
+    assert h.verifier.audit_check(call_id) == {"intact": False, "events": check["events"], "broken_at": 2, "head": None}
+
+    other = h.verifier.start_call(C, "r2").call_id
+    h.say(other, "add a payee")
+    with h.db.engine.begin() as conn:
+        conn.execute(text("DELETE FROM audit_events WHERE call_id = :c AND seq = 2"), {"c": other})
+    assert h.verifier.audit_check(other)["broken_at"] == 2
+
+
+def test_an_old_database_is_refused_with_the_fix_named():
+    from sqlalchemy import text
+
+    from pratyaksh.verification.store import SchemaOutOfDate
+
+    db = Database("sqlite://")
+    with db.engine.begin() as conn:
+        conn.execute(text("CREATE TABLE audit_events (id INTEGER PRIMARY KEY, call_id VARCHAR(36), seq INTEGER, "
+                          "kind VARCHAR(40), data JSON, created_at DATETIME)"))
+    with pytest.raises(SchemaOutOfDate, match="pratyaksh-seed --reset"):
+        db.create_schema()
+    db.reset()
+    assert db.create_schema() == []
