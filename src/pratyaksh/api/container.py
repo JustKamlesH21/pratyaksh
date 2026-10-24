@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..config import Settings
 from ..policy import Policy
@@ -20,6 +20,8 @@ class Container:
     speech: SpeechModels
     verifier: Verifier
     voice: PromptVoice
+    missing_triggers: list[str] = field(default_factory=list)  # Audit Trail triggers the database lacks
+    warm: bool = False  # models and the whisper DSP have been loaded once
 
 
 FIXED_PROMPTS = [GREETING, CLARIFY]
@@ -27,7 +29,7 @@ FIXED_PROMPTS = [GREETING, CLARIFY]
 
 def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
     db = Database(settings.database_url)
-    db.create_schema()
+    missing_triggers = db.create_schema()
     db.seed_demo_customers()
 
     if speech is None:
@@ -42,11 +44,7 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
                 spoof_fake_labels=tuple(l.strip() for l in settings.spoof_fake_labels.split(",") if l.strip()),
             )
 
-    llm = (
-        OllamaChat(settings.ollama_host, settings.ollama_model, settings.ollama_api_key)
-        if settings.ollama_api_key or "localhost" in settings.ollama_host or "127.0.0.1" in settings.ollama_host
-        else None
-    )
+    llm = OllamaChat(settings.ollama_host, settings.ollama_model, settings.ollama_api_key) if llm_configured(settings) else None
     events = EventHub()
     verifier = Verifier(
         db,
@@ -65,4 +63,10 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
         else ToneVoice()
     )
     voice = PromptVoice(synth, settings.tts_cache_dir, fallback=ToneVoice())
-    return Container(settings, db, events, speech, verifier, voice)
+    return Container(settings, db, events, speech, verifier, voice, missing_triggers)
+
+
+def llm_configured(settings: Settings) -> bool:
+    """Ollama Cloud needs a key; a local Ollama server does not."""
+    host = settings.ollama_host
+    return bool(settings.ollama_api_key) or "localhost" in host or "127.0.0.1" in host

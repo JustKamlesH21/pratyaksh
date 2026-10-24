@@ -338,6 +338,27 @@ class Verifier:
             return {"valid": False, "reason": "the Call's Audit Trail no longer matches the receipt", "claims": claims}
         return {"valid": True, "reason": "", "claims": claims}
 
+    def stats(self) -> dict:
+        """Live numbers for the Console: Calls by Outcome, and the Added Time genuine Callers spent on
+        Challenges (from the Risk Tier being set to the Verdict, for Calls that passed with Challenges)."""
+        with self._db.session() as s:
+            by_outcome = {o or "in_progress": n for o, n in s.execute(
+                select(CallRow.outcome, func.count()).group_by(CallRow.outcome)).all()}
+            passed = [c.id for c in s.scalars(select(CallRow).where(CallRow.outcome.in_(
+                [Outcome.PASSED.value, Outcome.PASSED_PENDING_REVIEW.value]))).all() if c.evidence]
+            added: list[float] = []
+            for call_id in passed[-200:]:
+                times = dict(s.execute(select(AuditEventRow.kind, AuditEventRow.created_at).where(
+                    AuditEventRow.call_id == call_id, AuditEventRow.kind.in_(["risk_tier_set", "verdict"]))).all())
+                if len(times) == 2:
+                    added.append((times["verdict"] - times["risk_tier_set"]).total_seconds())
+        return {
+            "calls": sum(by_outcome.values()),
+            "by_outcome": by_outcome,
+            "blocked": by_outcome.get(Outcome.BLOCKED.value, 0),
+            "avg_added_seconds": round(sum(added) / len(added), 1) if added else None,
+        }
+
     def receipt_key(self) -> dict:
         """The public key (JWK) that checks Verification Receipts."""
         return self._signer.public_jwk()
