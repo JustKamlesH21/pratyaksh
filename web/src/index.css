@@ -1,6 +1,6 @@
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/geist-mono/wght.css";
-@import "@fontsource-variable/bricolage-grotesque/wght.css";
+@import "@fontsource-variable/bricolage-grotesque/opsz.css"; /* weight + optical size: headlines get display cuts */
 @import "@fontsource-variable/noto-sans-devanagari/wght.css";
 @import "@fontsource-variable/noto-sans-kannada/wght.css";
 @import "tailwindcss";

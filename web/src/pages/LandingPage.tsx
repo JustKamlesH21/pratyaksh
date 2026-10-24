@@ -111,7 +111,7 @@ function VerifyDemo() {
       ...(s.agent ? [{ id: `a${callStart + k}`, agent: true, text: s.agent, tag: undefined }] : []),
       ...(s.caller ? [{ id: `c${callStart + k}`, agent: false, text: s.caller, tag: s.tag }] : []),
     ])
-    .slice(scene.signals ? -2 : -3); // the Signal strip takes a line's room
+    .slice(-4);
   const tone = scene.verdict === "PASS" ? "bg-pass" : scene.verdict === "BLOCK" ? "bg-block" : scene.mode === "idle" ? "bg-ink-soft/40" : "bg-accent";
   const stepIndex = STEPS.indexOf(scene.step);
   return (
@@ -161,7 +161,7 @@ function VerifyDemo() {
         )}
       </div>
 
-      <div className="relative flex h-[17rem] flex-col justify-end gap-2.5 overflow-hidden p-4" aria-live="polite">
+      <div className="relative flex h-[22.5rem] flex-col justify-end gap-2.5 overflow-hidden p-4" aria-live="polite">
         {chat.map((line) =>
           line.agent ? (
             <p key={line.id} className="motion-enter flex max-w-[85%] items-start gap-2 rounded-2xl rounded-tl-sm bg-sunken px-3 py-2 text-sm">
@@ -304,7 +304,7 @@ export default function LandingPage() {
               <span className="live-dot text-accent" aria-hidden />
               FET Aavishkar 2026 · Cybersecurity · Team Omnitrons
             </span>
-            <h1 className="motion-enter font-display text-[2.6rem] font-semibold leading-[1.04] tracking-[-0.035em] sm:text-6xl md:text-7xl" style={{ "--i": 1 } as CSSProperties}>
+            <h1 className="motion-enter font-display text-[2.6rem] font-semibold leading-[1.04] tracking-[-0.02em] sm:text-6xl md:text-7xl" style={{ "--i": 1 } as CSSProperties}>
               Voice clones sound like anyone.
               <span className="block text-accent">Pratyaksh checks for a live person.</span>
             </h1>
