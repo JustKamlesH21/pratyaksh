@@ -124,8 +124,13 @@ def _share(rows: list[dict], pred) -> float | None:
 # Audit kinds written exactly once per posted Response (keeps recordings and events aligned).
 _RESPONSE_EVENTS = {
     "caller_said", "challenge_repeated", "code_retry", "app_approval_asked", "response_scored", "processing_error",
-    "response_ignored",
+    "response_ignored", "code_expired",
 }
+
+
+def _as_utc(text: str) -> datetime:
+    """--since as naive UTC, like created_at. Without an offset it is the laptop's local time (IST at the venue)."""
+    return datetime.fromisoformat(text).astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def export(db: Database, audio_dir: Path, label: str, since: datetime | None, out: Path) -> int:
@@ -189,7 +194,7 @@ def main(argv: list[str] | None = None) -> None:
 
     pe = sub.add_parser("export", help="turn recorded Calls into manifest rows")
     pe.add_argument("--label", choices=["real", "clone"], required=True)
-    pe.add_argument("--since", type=datetime.fromisoformat)
+    pe.add_argument("--since", type=_as_utc, help="local time unless it has an offset, e.g. 2026-10-31T10:00")
     pe.add_argument("--out", type=Path, default=Path("data/eval/manifest.csv"))
 
     args = p.parse_args(argv)

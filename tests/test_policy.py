@@ -95,3 +95,21 @@ def test_an_attack_wave_is_several_blocks_in_a_short_time(policy):
     raw = yaml.safe_load(resources.files("pratyaksh").joinpath("policy.yaml").read_text())
     raw["protection"]["wave_customers"] = 0
     assert not Policy(raw).attack_wave(100)  # 0 turns it off
+
+
+def test_a_step_up_for_an_inconclusive_call_is_not_a_retry_for_a_later_miss(policy):
+    # Inconclusive, so one more Whisper Phrase; that phrase is then missed. The mean alone would PASS.
+    shaky = human_whisper(task_match=1.0, whisper_score=1.0, spoof_score=0.6)
+    first = policy.decide([shaky, code(latency=1500, spoof=0.6)], step_ups_used=0)
+    assert first.verdict is Verdict.STEP_UP and first.next_challenge is W
+    missed = human_whisper(task_match=0.65, whisper_score=1.0, spoof_score=0.0)
+    second = policy.decide([shaky, code(latency=1500, spoof=0.6), missed], step_ups_used=1)
+    assert second.liveness >= 0.75 and second.verdict is Verdict.STEP_UP and second.offer_app_approval
+    assert "no retry is left" in second.reasons[0]
+
+
+def test_a_planned_phrase_is_not_a_retry_for_an_earlier_miss(policy):
+    missed = human_whisper(task_match=0.5)
+    first = policy.decide([missed, human_whisper(), code()], step_ups_used=0)
+    assert first.verdict is Verdict.STEP_UP and first.next_challenge is W
+    assert policy.decide([missed, human_whisper(), code(), human_whisper()], step_ups_used=1).verdict is Verdict.PASS

@@ -356,7 +356,8 @@ def test_a_verification_receipt_says_whether_the_request_may_be_carried_out(harn
     claims = issued["claims"]
     assert claims["executable"] and claims["verdict"] == "PASS" and claims["request"] == "add_payee"
     assert claims["audit_head"] == h.verifier.audit_check(call_id)["head"]
-    assert h.verifier.verify_receipt(issued["receipt"]) == {"valid": True, "reason": "", "claims": claims}
+    assert h.verifier.verify_receipt(issued["receipt"]) == {"valid": True, "reason": "", "claims": claims, "redeemed": False}
+    assert claims["jti"] != h.verifier.receipt(call_id)["claims"]["jti"]  # every receipt is distinct
 
     # High-value transfers are executable only once a Bank Agent confirms them.
     transfer = passed_call(h, "mujhe 6 lakh transfer karna hai")
@@ -364,9 +365,11 @@ def test_a_verification_receipt_says_whether_the_request_may_be_carried_out(harn
     h.verifier.review(transfer, approve=True, reviewer="officer-1")
     assert h.verifier.receipt(transfer)["claims"]["executable"] is True
 
-    # A blocked Call gets a receipt that says so.
+    # A blocked Call gets a receipt that says so, and it cannot be redeemed.
     blocked = clone_blocked(h)
     assert h.verifier.receipt(blocked)["claims"]["executable"] is False
+    with pytest.raises(NotAllowed):
+        h.verifier.redeem_receipt(h.verifier.receipt(blocked)["receipt"])
 
     # No receipt while a Call is still going.
     live = h.verifier.start_call("cust-meera", "r").call_id
@@ -505,3 +508,104 @@ def test_customer_risk_shows_alerts_voice_pause_and_history(harness):
     assert [c["id"] for c in h.verifier.calls(customer_id=C)] == [blocked]
     with pytest.raises(UnknownCustomer):
         h.verifier.customer_risk("nobody")
+
+
+def test_a_correct_code_read_after_it_expired_gets_a_fresh_code_not_a_block(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    old = h.code_on_device(C)
+    h.clock.advance(125)  # two questions about the code, then reading it: past the 120 s
+    step = h.say(call_id, " ".join(old), voiced(), 900)
+    assert "sent a new one" in step.say and not step.end
+    new = h.code_on_device(C)
+    assert new != old and len(h.inbox(C)["messages"]) == 1  # the old code is gone from the Bank App
+    assert not h.say(call_id, " ".join(old), voiced(), 900).end  # the old code no longer works: one retry
+    step = h.say(call_id, " ".join(new), voiced(), 900)
+    assert step.end and step.outcome is Outcome.PASSED
+    notes = [ln.get("note", "") for ln in h.verifier.call(call_id)["transcript"]]
+    assert any("read after it expired" in n for n in notes)
+
+
+def test_a_second_expired_code_goes_to_app_approval(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    for _ in range(2):
+        code = h.code_on_device(C)
+        h.clock.advance(125)
+        step = h.say(call_id, " ".join(code), voiced(), 900)
+    assert step.wait and h.verifier.call(call_id)["state"] == "awaiting_app_approval"
+    assert h.verifier.customer_risk(C)["open_security_alerts"] == 0  # a slow Customer is not a Clone
+
+
+def test_a_wrong_code_after_expiry_still_counts_as_wrong(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    h.clock.advance(125)
+    for _ in range(2):
+        h.say(call_id, "9 9 9 9 9 9", voiced(), 900)
+    assert h.verifier.call(call_id)["outcome"] == "blocked"
+
+
+def test_a_hang_up_during_the_apply_phase_waits_for_it(threaded):
+    """respond() checks the Call did not change, then applies. A hang-up arriving between the two must
+    wait for the row lock (on SQLite: BEGIN IMMEDIATE), never close the Call a second time."""
+    import threading
+
+    from sqlalchemy import event
+
+    h = threaded
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    h.models.push(" ".join(h.code_on_device(C)))
+    in_respond, checks, hang_ups = threading.local(), [], []
+
+    @event.listens_for(h.db.engine, "before_cursor_execute")
+    def _between_check_and_apply(conn, cursor, statement, *args):
+        if getattr(in_respond, "on", False) and "max(audit_events.seq)" in statement:
+            checks.append(statement)
+            if len(checks) == 2:  # phase 3's version check: hang up right now
+                hang_ups.append(threading.Thread(target=h.verifier.hang_up, args=(call_id,)))
+                hang_ups[0].start()
+                hang_ups[0].join(0.3)  # without the lock it would finish here
+
+    def respond():
+        in_respond.on = True
+        h.verifier.respond(call_id, Response(voiced(), 900))
+
+    t = threading.Thread(target=respond)
+    t.start()
+    t.join(10)
+    hang_ups[0].join(10)
+    event.remove(h.db.engine, "before_cursor_execute", _between_check_and_apply)
+    call = h.verifier.call(call_id)
+    assert [e["data"]["outcome"] for e in call["events"] if e["kind"] == "call_closed"] == ["passed"]
+    assert call["outcome"] == "passed" and call["audit"]["intact"]
+
+
+def test_a_double_tap_on_dismiss_writes_one_event(threaded):
+    import threading
+
+    h = threaded
+    call_id = clone_blocked(h)
+    token = h.verifier.pairing(C)
+    start, results = threading.Barrier(2), []
+
+    def tap():
+        start.wait()
+        results.append(h.verifier.dismiss_alerts(C, token))
+
+    taps = [threading.Thread(target=tap) for _ in range(2)]
+    for t in taps:
+        t.start()
+    for t in taps:
+        t.join(10)
+    call = h.verifier.call(call_id)
+    assert sorted(results) == [0, 1] and call["audit"]["intact"]
+    assert [e["kind"] for e in call["events"]].count("security_alert_dismissed") == 1

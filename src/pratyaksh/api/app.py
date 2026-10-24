@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import json
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -18,6 +19,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as HTTPResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from pydantic import BaseModel, Field
 
 from ..config import Settings
@@ -73,6 +75,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         yield
 
     app = FastAPI(title="Pratyaksh verifier", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(_BodyGuard, settings=settings)  # inside CORS, so its refusals carry CORS headers
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.cors_origin_list, allow_methods=["*"], allow_headers=["*"]
     )
@@ -98,10 +101,19 @@ def create_app(settings: Settings | None = None, container: Container | None = N
 
     def agent_only(request: Request, x_agent_key: str = Header(default="")) -> None:
         key = c(request).settings.agent_key
-        if key and not hmac.compare_digest(key, x_agent_key):
+        if key and not _same(key, x_agent_key):
             raise HTTPException(401, "this endpoint is for the Voice Agent only")
 
     agent = [Depends(agent_only)]
+
+    def console_only(request: Request, x_console_key: str = Header(default="")) -> None:
+        key = c(request).settings.console_key
+        if key and not _same(key, x_console_key):
+            raise HTTPException(403, "wrong console key")
+
+    # With CONSOLE_KEY set, what Callers said and each Customer's risk are for the bank's staff only.
+    # Aggregates (/v1/status, /v1/stats), the Customer picker and receipt checking stay open.
+    console = [Depends(console_only)]
 
     @app.get("/healthz")
     def healthz():
@@ -166,12 +178,20 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         data = await audio.read(limit + 1)
         if len(data) > limit:
             raise HTTPException(413, f"audio is larger than {cont.settings.max_upload_mb:g} MB")
+        # Check the header before decoding: a WAV claiming a tiny sample rate would be resampled into
+        # gigabytes. Decoding then runs off the event loop, so other requests are not held up.
         try:
-            clip = Audio.from_wav(data) if data else Audio.silence()
+            seconds, rate = Audio.wav_info(data) if data else (0.0, 16000)
         except Exception as e:
             raise HTTPException(422, f"audio must be WAV: {e}") from e
-        if clip.seconds > cont.settings.max_response_s:
+        if not 8000 <= rate <= 48000:
+            raise HTTPException(422, f"audio sample rate must be 8-48 kHz, not {rate} Hz")
+        if seconds > cont.settings.max_response_s:
             raise HTTPException(413, f"audio is longer than {cont.settings.max_response_s:g} s")
+        try:
+            clip = await asyncio.to_thread(Audio.from_wav, data) if data else Audio.silence()
+        except Exception as e:
+            raise HTTPException(422, f"audio must be WAV: {e}") from e
         if cont.settings.retain_audio:
             _keep(cont.settings.audio_dir, call_id, data)
         step = await asyncio.to_thread(cont.verifier.respond, call_id, Response(clip, reply_latency_ms))
@@ -211,7 +231,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
 
     # -- Console --------------------------------------------------------------------
 
-    @app.get("/v1/calls")
+    @app.get("/v1/calls", dependencies=console)
     def list_calls(
         request: Request, limit: int = Query(50, ge=1, le=500), outcome: str | None = None,
         customer_id: str | None = None,
@@ -220,19 +240,19 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             raise HTTPException(422, f"outcome must be in_progress or one of {sorted(Outcome._value2member_map_)}")
         return c(request).verifier.calls(limit, outcome=outcome, customer_id=customer_id)
 
-    @app.get("/v1/customers/{customer_id}/risk")
+    @app.get("/v1/customers/{customer_id}/risk", dependencies=console)
     def customer_risk(customer_id: str, request: Request):
         return c(request).verifier.customer_risk(customer_id)
 
-    @app.get("/v1/calls/{call_id}")
+    @app.get("/v1/calls/{call_id}", dependencies=console)
     def get_call(call_id: str, request: Request):
         return c(request).verifier.call(call_id)
 
-    @app.get("/v1/calls/{call_id}/audit")
+    @app.get("/v1/calls/{call_id}/audit", dependencies=console)
     def audit_check(call_id: str, request: Request):
         return c(request).verifier.audit_check(call_id)
 
-    @app.get("/v1/calls/{call_id}/transcript")
+    @app.get("/v1/calls/{call_id}/transcript", dependencies=console)
     def transcript(call_id: str, request: Request, fmt: str = Query("json", alias="format", pattern="^(json|text)$")):
         v = c(request).verifier
         if fmt == "text":
@@ -242,14 +262,9 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             )
         return {"call_id": call_id, "lines": v.call(call_id)["transcript"]}
 
-    def console_only(request: Request, x_console_key: str = Header(default="")) -> None:
-        key = c(request).settings.console_key
-        if key and not hmac.compare_digest(key, x_console_key):
-            raise HTTPException(403, "wrong console key")
-
     # -- Core banking: Verification Receipts ----------------------------------------------
 
-    @app.get("/v1/calls/{call_id}/receipt", dependencies=[Depends(console_only)])
+    @app.get("/v1/calls/{call_id}/receipt", dependencies=console)
     def receipt(call_id: str, request: Request):
         return c(request).verifier.receipt(call_id)
 
@@ -257,21 +272,30 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     def verify_receipt(body: ReceiptCheck, request: Request):
         return c(request).verifier.verify_receipt(body.receipt)
 
+    @app.post("/v1/receipts/redeem", dependencies=console)
+    def redeem_receipt(body: ReceiptCheck, request: Request):
+        return c(request).verifier.redeem_receipt(body.receipt)
+
     @app.get("/v1/receipts/key")
     def receipt_key(request: Request):
         return {"keys": [c(request).verifier.receipt_key()]}
 
-    @app.post("/v1/calls/{call_id}/review")
-    def review(call_id: str, body: Review, request: Request, x_console_key: str = Header(default="")):
-        key = c(request).settings.console_key
-        if key and not hmac.compare_digest(key, x_console_key):
-            raise HTTPException(403, "wrong console key")
+    @app.post("/v1/calls/{call_id}/review", dependencies=console)
+    def review(call_id: str, body: Review, request: Request):
         return c(request).verifier.review(call_id, body.approve, body.reviewer)
 
     @app.websocket("/v1/events")
     async def events(ws: WebSocket):
         await ws.accept()
         cont: Container = ws.app.state.c
+        if cont.settings.console_key:  # browsers cannot set headers on a WebSocket: the key is the first message
+            try:
+                hello = await asyncio.wait_for(ws.receive_json(), 5)
+            except Exception:
+                hello = None
+            if not isinstance(hello, dict) or not _same(cont.settings.console_key, str(hello.get("key", ""))):
+                await ws.close(code=4401, reason="wrong console key")
+                return
         async with cont.events.subscribe() as queue:
             calls = await asyncio.to_thread(cont.verifier.calls, 30)
             await ws.send_json({"type": "snapshot", "calls": calls})
@@ -321,6 +345,56 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         return {"url": cont.settings.livekit_public_url or cont.settings.livekit_url, "token": token, "room": room}
 
     return app
+
+
+def _same(expected: str, given: str) -> bool:
+    """Constant-time key check that also works for non-ASCII input (compare_digest refuses such str)."""
+    return hmac.compare_digest(expected.encode(), given.encode())
+
+
+_JSON_CAP = 64 * 1024  # the largest JSON body any route takes (a receipt to verify) is about 1 KB
+
+
+class _BodyGuard:
+    """Refuses keyless uploads and oversized bodies before they are read. FastAPI parses (and spools to
+    disk) a request body before route dependencies run, so the checks in the routes alone come too late."""
+
+    def __init__(self, app, settings: Settings):
+        self.app = app
+        self.upload_cap = int(settings.max_upload_mb * 1024 * 1024) + 64 * 1024  # + multipart framing
+        self.agent_key = settings.agent_key
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] in ("GET", "HEAD", "OPTIONS"):
+            return await self.app(scope, receive, send)
+        upload = scope["path"].endswith("/responses")
+        cap = self.upload_cap if upload else _JSON_CAP
+        headers = dict(scope["headers"])
+        given = headers.get(b"x-agent-key", b"")
+        if upload and self.agent_key and not hmac.compare_digest(self.agent_key.encode(), given):
+            return await _reply(send, 401, "this endpoint is for the Voice Agent only")
+        length = headers.get(b"content-length", b"")
+        if length.isdigit() and int(length) > cap:
+            return await _reply(send, 413, f"request body is larger than {cap // 1024} KB")
+        seen = 0
+
+        async def capped():  # chunked uploads have no Content-Length: count what arrives
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > cap:
+                    raise StarletteHTTPException(413, f"request body is larger than {cap // 1024} KB")
+            return message
+
+        await self.app(scope, capped, send)
+
+
+async def _reply(send, status: int, detail: str) -> None:
+    body = json.dumps({"detail": detail}).encode()
+    await send({"type": "http.response.start", "status": status,
+                "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})
+    await send({"type": "http.response.body", "body": body})
 
 
 def _warm_up(c: Container) -> None:
