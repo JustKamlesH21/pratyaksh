@@ -50,6 +50,20 @@ _DONE = {
 }
 ANYTHING_ELSE = "Is there anything else I can help you with?"
 TAKE_YOUR_TIME = "Sure, take your time."
+WHEN_READY = "Tell me when you're ready."
+# What the Voice Agent says around an answer, in the language the Caller asked in (answers: knowledge.yaml).
+_IN_LANGUAGE = {
+    "hi": {
+        ANYTHING_ELSE: "क्या मैं आपकी और कोई मदद कर सकती हूँ?",
+        TAKE_YOUR_TIME: "ज़रूर, आराम से।",
+        WHEN_READY: "जब तैयार हों, बता दीजिए।",
+    },
+    "kn": {
+        ANYTHING_ELSE: "ನಾನು ನಿಮಗೆ ಇನ್ನೇನಾದರೂ ಸಹಾಯ ಮಾಡಬಹುದೇ?",
+        TAKE_YOUR_TIME: "ಪರವಾಗಿಲ್ಲ, ನಿಧಾನವಾಗಿ ಮಾಡಿ.",
+        WHEN_READY: "ಸಿದ್ಧವಾದಾಗ ಹೇಳಿ.",
+    },
+}
 # Asking a Challenge again after a side turn; the full Possession Code prompt would say "I've sent" twice.
 _REASK = {ChallengeKind.POSSESSION_CODE: "When you're ready, please read out the six-digit code from your bank app."}
 HANDOFF = "I'll connect you to a bank officer now. They will verify you again before making any change. Please stay on the line."
@@ -311,10 +325,10 @@ class Verifier:
             if heard.kind is TurnKind.REPEAT:
                 return listen(_strip_lead(self._pending(call).say))
             if heard.kind is TurnKind.WAIT:
-                return listen(f"{TAKE_YOUR_TIME} Tell me when you're ready.")
+                return listen(f"{_said_in(heard, TAKE_YOUR_TIME)} {_said_in(heard, WHEN_READY)}")
             if heard.kind is TurnKind.CHAT:
                 return listen(heard.reply)
-            return listen(f"{heard.reply} {ANYTHING_ELSE}")
+            return listen(f"{heard.reply} {_said_in(heard, ANYTHING_ELSE)}")
         if heard.kind is TurnKind.APP_APPROVAL and heard.request is None:
             return listen("Sure, I can send it to your bank app. Which request is it: a payee, a SIM or password change, "
                           "a transfer, or another account change?")
@@ -396,7 +410,7 @@ class Verifier:
                 if heard.kind is TurnKind.REPEAT:
                     say = f"Of course. {challenge.prompt}"
                 elif heard.kind is TurnKind.WAIT:
-                    say = f"{TAKE_YOUR_TIME} {reask}"
+                    say = f"{_said_in(heard, TAKE_YOUR_TIME)} {reask}"
                 else:
                     say = f"{heard.reply} {reask}"
                 return self._set_step(call, Step(
@@ -658,6 +672,10 @@ def _jsonable(data: dict) -> dict:
             v = v.value
         out[k] = v
     return out
+
+
+def _said_in(heard, text: str) -> str:
+    return _IN_LANGUAGE.get(heard.language, {}).get(text, text)
 
 
 def _strip_lead(say: str) -> str:

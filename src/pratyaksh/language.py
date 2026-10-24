@@ -2,7 +2,8 @@
 
 Speech-to-text may return Kannada script, Devanagari, another Indic script, Latin, or a mix.
 Everything is romanised and folded to a rough phonetic form so "ನಾಳೆ", "नाळे" and "naale"
-compare equal. Internal to SignalExtractor and the Request classifier.
+compare equal. language_of() tells which of the three a Caller spoke, so answers match it.
+Internal to SignalExtractor and the Interpreter.
 """
 
 from __future__ import annotations
@@ -84,7 +85,41 @@ def spoken_digits(text: str) -> str:
     return "".join(digits)
 
 
+def language_of(text: str) -> str:
+    """The language the Caller spoke: "hi", "kn" or "en". Native script decides; romanised Hindi
+    and Kannada are recognised by their common words. Mostly-English code-mixing is English."""
+    hi = kn = total = 0
+    for token in text.split():
+        words = fold(token).split()
+        if not words:
+            continue
+        total += 1
+        if any("ऀ" <= ch <= "ॿ" for ch in token):
+            hi += 1
+        elif any("ಀ" <= ch <= "೿" for ch in token):
+            kn += 1
+        elif words[0] in _HINDI_WORDS:
+            hi += 1
+        elif words[0] in _KANNADA_WORDS:
+            kn += 1
+    if not total or max(hi, kn) / total < 0.4:
+        return "en"
+    return "hi" if hi >= kn else "kn"
+
+
 _DIGIT_WORDS: dict[str, str] = {
     _fold_word(w): digit for digit, words in _DIGIT_SPELLINGS.items() for w in words
 }
 _REPEATS = {_fold_word(k): v for k, v in _REPEATS.items()}
+# Common romanised words (not "aap": it folds like "app"; not "hana": it folds like "haan").
+_HINDI_WORDS = set(fold(
+    "hai hain kya kyon kyu kaise kab kahan kaun mera meri mere mujhe nahi nahin karna karni karu karo kar raha "
+    "rahi gaya gayi kitna kitne chahiye liye kisi dena milega batao bataiye khulta khulti hota paisa paise khata "
+    "ho ya bhi aur se ko ke ki pe par insaan kho haan aaya aayi aaye mila mili hua hui karte karti karta sakte "
+    "sakti sakta khole kholna kholu lagega lagta dijiye kijiye bolna bolo bolu samajh ek"
+).split())
+_KANNADA_WORDS = set(fold(
+    "nanna nanage nimma nimage neevu naanu enu yenu yake hege yavaga elli estu illa ide ideya beku maadi madbeku "
+    "agide aagutte alli hogide hoythu banthilla bandilla kaledu hosa swalpa ondu sigtilla gottilla heli helbeku "
+    "jothe yaaru yaara iddini aaytu mattu barutte bartide bandide aagilla maadodu kalisi helali torisi"
+).split())
