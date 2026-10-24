@@ -189,3 +189,28 @@ def test_stats_count_outcomes_and_added_time(api):
     stats = api.get("/v1/stats").json()
     assert stats["calls"] >= 1 and stats["by_outcome"].get("passed_pending_review", 0) + stats["by_outcome"].get("passed", 0) >= 1
     assert stats["avg_added_seconds"] is not None and stats["avg_added_seconds"] >= 0
+    hearing = stats["hearing_ms"]
+    assert hearing["responses"] == 3 and 0 <= hearing["p50"] <= hearing["p95"]
+
+
+def test_transcripts_over_http(api):
+    test_a_full_call_over_http(api)
+    call_id = api.get("/v1/calls").json()[0]["id"]
+    lines = api.get(f"/v1/calls/{call_id}/transcript").json()["lines"]
+    assert [ln["speaker"] for ln in lines][:3] == ["system", "agent", "caller"]
+    r = api.get(f"/v1/calls/{call_id}/transcript", params={"format": "text"})
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/plain")
+    assert "attachment" in r.headers["content-disposition"] and "naya payee add karna hai" in r.text
+    assert api.get(f"/v1/calls/{call_id}/transcript", params={"format": "pdf"}).status_code == 422
+    assert api.get("/v1/calls/nope/transcript").status_code == 404
+
+
+def test_call_filters_and_customer_risk_over_http(api):
+    test_a_full_call_over_http(api)
+    assert [c["outcome"] for c in api.get("/v1/calls", params={"outcome": "passed"}).json()] == ["passed"]
+    assert api.get("/v1/calls", params={"outcome": "blocked"}).json() == []
+    assert api.get("/v1/calls", params={"outcome": "nonsense"}).status_code == 422
+    assert len(api.get("/v1/calls", params={"customer_id": C}).json()) == 1
+    risk = api.get(f"/v1/customers/{C}/risk").json()
+    assert risk["risk"] == "normal" and risk["calls_7d"] == 1 and risk["voice_pause"]["active"] is False
+    assert api.get("/v1/customers/nobody/risk").status_code == 404

@@ -4,8 +4,9 @@ import hashlib
 import hmac
 import logging
 import random
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -30,12 +31,16 @@ from ..signals import SignalExtractor
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
 from .receipts import InvalidReceipt, ReceiptSigner
+from .transcript import as_text, lines
 from .interpreter import Context, Interpreter, TurnKind, Understanding
 from .store import (
     GENESIS, AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow, chain_hash,
 )
 
 log = logging.getLogger(__name__)
+
+# Audit kinds that record a heard Response (and its timings_ms).
+_HEARD_EVENTS = ["caller_said", "app_approval_asked", "code_retry", "response_scored"]
 
 MAX_REQUEST_ATTEMPTS = 3  # unclear turns before handing over to a Bank Agent
 MAX_SIDE_TURNS = 6  # questions and repeats answered per Call
@@ -111,6 +116,7 @@ class _Heard:
     understanding: Understanding | None = None  # before a Request
     signals: Signals | None = None  # during a Challenge
     off_script: Understanding | None = None  # during a Challenge: a question, "hold on"… not an answer
+    timings: dict[str, int] = field(default_factory=dict)  # ms per stage, for the Console and stats()
 
 
 class Verifier:
@@ -164,7 +170,7 @@ class Verifier:
             s.add(call)
             s.flush()
             self._audit(s, call, "call_started", {"customer_id": customer_id, "room": room})
-            step = self._set_step(call, Step(call.id, GREETING, listen=True, state=CallState.AWAITING_REQUEST))
+            step = self._set_step(s, call, Step(call.id, GREETING, listen=True, state=CallState.AWAITING_REQUEST))
         self._publish_after(call.id)
         return step
 
@@ -207,12 +213,19 @@ class Verifier:
 
     def _hear(self, turn: _Turn, response: Response) -> _Heard:
         speech = response.reply_latency_ms is not None
+        start = time.perf_counter()
         if turn.state is CallState.AWAITING_REQUEST:
             transcript = self._signals.transcribe(response.audio) if speech else ""
-            return _Heard(transcript, understanding=self._interpreter.understand(transcript, turn.context))
+            heard_at = time.perf_counter()
+            understanding = self._interpreter.understand(transcript, turn.context)
+            return _Heard(transcript, understanding=understanding, timings={
+                "speech_to_text": _ms(start, heard_at), "understand": _ms(heard_at), "total": _ms(start)})
         if turn.state is CallState.CHALLENGING and turn.challenge and (speech or turn.repeated):
-            signals = self._signals.extract(turn.challenge, response)
-            return _Heard(signals.transcript, signals=signals, off_script=self._off_script(turn, signals))
+            signals = self._signals.extract(turn.challenge, response)  # speech-to-text, DSP and spoof model at once
+            heard_at = time.perf_counter()
+            off_script = self._off_script(turn, signals)
+            return _Heard(signals.transcript, signals=signals, off_script=off_script, timings={
+                "signals": _ms(start, heard_at), "understand": _ms(heard_at), "total": _ms(start)})
         return _Heard()  # silence the first time (the Challenge is repeated), or nothing to hear
 
     def _recover(self, call_id: str) -> Step:
@@ -226,7 +239,7 @@ class Verifier:
             if errors >= 1:
                 return self._hand_over(s, call, "I'm having trouble on this line.")
             last = self._pending(call)
-            return self._set_step(call, Step(
+            return self._set_step(s, call, Step(
                 call.id, f"Sorry, I had trouble hearing that. {_strip_lead(last.say)}", listen=True,
                 long_reply=last.long_reply, state=CallState(call.state),
             ))
@@ -333,6 +346,10 @@ class Verifier:
                 raise CallNotFound(call_id)
             return self._view(s, call, with_events)
 
+    def transcript(self, call_id: str) -> str:
+        """The Call as plain text, for a fraud case or a download. (call() has the same lines as JSON.)"""
+        return as_text(self.call(call_id))
+
     def audit_check(self, call_id: str) -> dict:
         """Recompute the Call's hash chain: is its Audit Trail exactly as it was written?
         Returns {intact, events, broken_at (first bad event), head (hash of the last event)}."""
@@ -425,16 +442,95 @@ class Verifier:
             "by_outcome": by_outcome,
             "blocked": by_outcome.get(Outcome.BLOCKED.value, 0),
             "avg_added_seconds": round(sum(added) / len(added), 1) if added else None,
+            "hearing_ms": self._hearing_ms(),
+            "attack_wave": self.attack_wave(),
         }
+
+    def attack_wave(self) -> dict:
+        """Is a Clone campaign under way? Customers with a blocked Call within the Policy's window."""
+        with self._db.session() as s:
+            return self._attack_wave(s)
+
+    def _attack_wave(self, s: Session) -> dict:
+        since = self._now() - timedelta(minutes=self._policy.wave_minutes)
+        blocked, customers = s.execute(
+            select(func.count(), func.count(func.distinct(CallRow.customer_id)))
+            .where(CallRow.outcome == Outcome.BLOCKED.value, CallRow.updated_at >= since)
+        ).one()
+        return {
+            "active": self._policy.attack_wave(customers), "blocked": blocked, "customers": customers,
+            "minutes": self._policy.wave_minutes, "threshold": self._policy.wave_customers,
+        }
+
+    def customer_risk(self, customer_id: str) -> dict:
+        """What a fraud officer wants to know about a Customer now: the last 7 days of Calls, open
+        Security Alerts and whether Voice Pause is on. risk: high (an open Security Alert), elevated
+        (a blocked Call in 7 days) or normal. Display only; Verdicts come from the Policy."""
+        with self._db.session() as s:
+            customer = s.get(CustomerRow, customer_id)
+            if customer is None:
+                raise UnknownCustomer(customer_id)
+            now = self._now()
+            calls = s.execute(
+                select(CallRow.id, CallRow.outcome, CallRow.request, CallRow.created_at)
+                .where(CallRow.customer_id == customer_id, CallRow.created_at >= now - timedelta(days=7))
+                .order_by(CallRow.created_at.desc())
+            ).all()
+            alerts = s.scalar(select(func.count()).where(
+                DeviceMessageRow.customer_id == customer_id, DeviceMessageRow.kind == "security_alert",
+                DeviceMessageRow.resolved_at.is_(None), DeviceMessageRow.expires_at > now,
+            ))
+            since_block = self._minutes_since_block(s, customer_id)
+        paused = self._policy.voice_paused(since_block) is not None
+        by_outcome: dict[str, int] = {}
+        for c in calls:
+            by_outcome[c.outcome or "in_progress"] = by_outcome.get(c.outcome or "in_progress", 0) + 1
+        blocked = [c for c in calls if c.outcome == Outcome.BLOCKED.value]
+        return {
+            "customer": {"id": customer.id, "name": customer.name, "phone_masked": customer.phone_masked},
+            "risk": "high" if alerts else "elevated" if blocked else "normal",
+            "calls_7d": len(calls),
+            "by_outcome_7d": by_outcome,
+            "blocked_24h": sum(1 for c in blocked if c.created_at >= now - timedelta(hours=24)),
+            "open_security_alerts": alerts,
+            "voice_pause": {
+                "active": paused,
+                "minutes_left": round(self._policy.pause_minutes - since_block, 1) if paused else None,
+            },
+            "last_blocked_call": blocked[0].id if blocked else None,
+            "recent": [
+                {"id": c.id, "request": c.request, "outcome": c.outcome, "created_at": c.created_at.isoformat()}
+                for c in calls[:10]
+            ],
+        }
+
+    def _hearing_ms(self, last: int = 500) -> dict:
+        """How long hearing a Response took (speech models + understanding), over the latest Responses."""
+        with self._db.session() as s:
+            rows = s.scalars(
+                select(AuditEventRow.data).where(AuditEventRow.kind.in_(_HEARD_EVENTS))
+                .order_by(AuditEventRow.id.desc()).limit(last)
+            ).all()
+        totals = sorted(d["timings_ms"]["total"] for d in rows if (d or {}).get("timings_ms"))
+        if not totals:
+            return {"responses": 0, "p50": None, "p95": None}
+        pick = lambda q: totals[min(len(totals) - 1, int(q * len(totals)))]  # noqa: E731
+        return {"responses": len(totals), "p50": pick(0.5), "p95": pick(0.95)}
 
     def receipt_key(self) -> dict:
         """The public key (JWK) that checks Verification Receipts."""
         return self._signer.public_jwk()
 
-    def calls(self, limit: int = 50) -> list[dict]:
+    def calls(self, limit: int = 50, outcome: str | None = None, customer_id: str | None = None) -> list[dict]:
+        """Latest Calls first. outcome "in_progress" means Calls not closed yet."""
+        q = select(CallRow)
+        if outcome:
+            q = q.where(CallRow.outcome.is_(None) if outcome == "in_progress" else CallRow.outcome == outcome)
+        if customer_id:
+            q = q.where(CallRow.customer_id == customer_id)
         with self._db.session() as s:
             names = dict(s.execute(select(CustomerRow.id, CustomerRow.name)).all())  # one query, not one per Call
-            rows = s.scalars(select(CallRow).order_by(CallRow.created_at.desc()).limit(limit)).all()
+            rows = s.scalars(q.order_by(CallRow.created_at.desc()).limit(limit)).all()
             return [self._view(s, c, with_events=False, names=names) for c in rows]
 
     def pairing(self, customer_id: str) -> str:
@@ -485,13 +581,13 @@ class Verifier:
     def _on_request(self, s: Session, call: CallRow, said: _Heard) -> Step:
         transcript, heard = said.transcript, said.understanding
         assert heard is not None
-        self._audit(
-            s, call, "caller_said",
+        self._audit_heard(
+            s, call, "caller_said", said,
             {"transcript": transcript, "kind": heard.kind.value, "request": heard.request,
-             "wants_app_approval": heard.wants_app_approval},
+             "wants_app_approval": heard.wants_app_approval, "language": heard.language, "by_llm": heard.by_llm},
         )
         listen = lambda say: self._set_step(  # noqa: E731
-            call, Step(call.id, say, listen=True, state=CallState.AWAITING_REQUEST)
+            s, call, Step(call.id, say, listen=True, state=CallState.AWAITING_REQUEST)
         )
 
         if heard.kind is TurnKind.HUMAN:
@@ -521,15 +617,17 @@ class Verifier:
         request = heard.request
         answered = f"{heard.reply} " if heard.reply else ""  # "Is this safe? I want to transfer…": answer first
         plan = self._policy.plan(request)
+        wave = bool(plan.challenges) and self._attack_wave(s)["active"]  # a Clone campaign: a person checks too
         call.request = request.value
-        call.agent_review = plan.agent_review
+        call.agent_review = plan.agent_review or wave
         call.planned = [k.value for k in plan.challenges]
         self._audit(
             s, call, "risk_tier_set",
-            {"request": request.value, "challenges": call.planned, "agent_review": plan.agent_review},
+            {"request": request.value, "challenges": call.planned, "agent_review": call.agent_review,
+             "attack_wave": wave},
         )
         if plan.challenges:  # after a blocked Call for this Customer, an impostor must not simply call again
-            paused = self._policy.voice_paused(self._minutes_since_block(s, call))
+            paused = self._policy.voice_paused(self._minutes_since_block(s, call.customer_id))
             if paused is not None:
                 return self._block(s, call, paused)
         if not plan.challenges:
@@ -567,7 +665,7 @@ class Verifier:
             call.challenges = call.challenges[:-1] + [{**issued, "repeated": True}]
             self._audit(s, call, "challenge_repeated", {"reason": "no speech heard"})
             return self._set_step(
-                call, Step(call.id, f"Sorry, I didn't hear you. {challenge.prompt}", listen=True,
+                s, call, Step(call.id, f"Sorry, I didn't hear you. {challenge.prompt}", listen=True,
                            long_reply=challenge.kind is ChallengeKind.POSSESSION_CODE, state=CallState.CHALLENGING),
             )
         signals = said.signals
@@ -576,7 +674,7 @@ class Verifier:
         if off_script is not None:
             heard = off_script
             if heard.kind is TurnKind.APP_APPROVAL:
-                self._audit(s, call, "app_approval_asked", {"transcript": signals.transcript})
+                self._audit_heard(s, call, "app_approval_asked", said, {"transcript": signals.transcript})
                 # Evidence already gathered still counts: a Clone cannot escape a BLOCK by asking for the app.
                 if call.evidence:
                     so_far = self._policy.decide(_evidence(call.evidence), call.step_ups)
@@ -584,13 +682,17 @@ class Verifier:
                         return self._block(s, call, so_far)
                 return self._start_app_approval(s, call, "No problem.")
             if heard.kind is TurnKind.HUMAN:
-                self._audit(s, call, "caller_said", {"transcript": signals.transcript, "kind": heard.kind.value})
+                self._audit_heard(s, call, "caller_said", said, {
+                    "transcript": signals.transcript, "kind": heard.kind.value, "language": heard.language,
+                    "by_llm": heard.by_llm})
                 return self._hand_over(s, call, "Sure.")
             asked = int(issued.get("side_turns", 0))
             if asked < MAX_SIDE_TURNS_PER_CHALLENGE:  # QUESTION, CHAT, REPEAT or WAIT: reply, then ask again
                 call.challenges = call.challenges[:-1] + [{**issued, "side_turns": asked + 1}]
                 call.side_turns += 1
-                self._audit(s, call, "caller_said", {"transcript": signals.transcript, "kind": heard.kind.value})
+                self._audit_heard(s, call, "caller_said", said, {
+                    "transcript": signals.transcript, "kind": heard.kind.value, "language": heard.language,
+                    "by_llm": heard.by_llm})
                 reask = _REASK.get(challenge.kind, challenge.prompt)
                 if heard.kind is TurnKind.REPEAT:
                     say = f"Of course. {challenge.prompt}"
@@ -598,7 +700,7 @@ class Verifier:
                     say = f"{_said_in(heard, TAKE_YOUR_TIME)} {reask}"
                 else:
                     say = f"{heard.reply} {reask}"
-                return self._set_step(call, Step(
+                return self._set_step(s, call, Step(
                     call.id, say, listen=True,
                     long_reply=challenge.kind is ChallengeKind.POSSESSION_CODE, state=CallState.CHALLENGING,
                 ))
@@ -609,8 +711,9 @@ class Verifier:
             if match is not True and not issued.get("retried"):
                 # One more try: people mis-read or pause mid-code. The code stays valid.
                 call.challenges = call.challenges[:-1] + [{**issued, "retried": True}]
-                self._audit(s, call, "code_retry", {"heard_digits": signals.spoken_digits})
-                return self._set_step(call, Step(
+                self._audit_heard(s, call, "code_retry", said,
+                                  {"transcript": signals.transcript, "heard_digits": signals.spoken_digits})
+                return self._set_step(s, call, Step(
                     call.id, "That didn't match. Please read the six digits from your bank app again, slowly.",
                     listen=True, long_reply=True, state=CallState.CHALLENGING,
                 ))
@@ -620,8 +723,8 @@ class Verifier:
         call.evidence = evidence
         decision = self._policy.decide(_evidence(evidence), call.step_ups)
         call.scores = [round(x, 3) for x in decision.per_response]
-        self._audit(
-            s, call, "response_scored",
+        self._audit_heard(
+            s, call, "response_scored", said,
             {"challenge": len(evidence), "kind": challenge.kind.value, "signals": signals.to_dict(),
              "liveness": call.scores[-1]},
         )
@@ -715,7 +818,7 @@ class Verifier:
             record = {"kind": kind.value, "prompt": prompt, "phrase": "", "issued_at": now.isoformat()}
         call.challenges = list(call.challenges) + [record]
         self._audit(s, call, "challenge_issued", {k: v for k, v in record.items() if k != "issued_at"})
-        return self._set_step(call, Step(
+        return self._set_step(s, call, Step(
             call.id, f"{lead_in} {prompt}", listen=True, long_reply=kind is ChallengeKind.POSSESSION_CODE,
             state=CallState.CHALLENGING,
         ))
@@ -733,7 +836,7 @@ class Verifier:
         ))
         self._audit(s, call, "app_approval_requested", {"expires_in_s": int(self._approval_ttl.total_seconds())})
         say = f"{lead_in} I've sent an approval request to the bank app on your registered phone. Please approve it there."
-        return self._set_step(call, Step(call.id, say, wait=True, state=CallState.AWAITING_APP_APPROVAL))
+        return self._set_step(s, call, Step(call.id, say, wait=True, state=CallState.AWAITING_APP_APPROVAL))
 
     def _check_code(self, s: Session, call: CallRow, spoken: str | None, final: bool) -> bool | None:
         """Compare the spoken digits with the issued Possession Code.
@@ -767,7 +870,7 @@ class Verifier:
         call.outcome = outcome.value
         call.planned = []
         self._audit(s, call, "call_closed", {"outcome": outcome.value})
-        return self._set_step(call, Step(call.id, say, end=True, state=CallState.CLOSED, outcome=outcome))
+        return self._set_step(s, call, Step(call.id, say, end=True, state=CallState.CLOSED, outcome=outcome))
 
     # ------------------------------------------------------------------ helpers
 
@@ -786,9 +889,11 @@ class Verifier:
             raise CallNotFound(call_id)
         return call
 
-    def _set_step(self, call: CallRow, step: Step) -> Step:
+    def _set_step(self, s: Session, call: CallRow, step: Step) -> Step:
+        """What the Voice Agent says next. It goes on the Audit Trail too, so the transcript is complete."""
         call.pending_step = step.to_dict()
         call.updated_at = self._now()
+        self._audit(s, call, "agent_said", {"say": step.say})
         return step
 
     @staticmethod
@@ -802,10 +907,10 @@ class Verifier:
         q = q.where(DeviceMessageRow.kind == kind) if kind else q.where(DeviceMessageRow.kind != "security_alert")
         return list(s.scalars(q).all())
 
-    def _minutes_since_block(self, s: Session, call: CallRow) -> float | None:
+    def _minutes_since_block(self, s: Session, customer_id: str) -> float | None:
         """Minutes since this Customer's latest blocked Call whose Security Alert is still showing."""
         last = s.scalar(select(func.max(DeviceMessageRow.created_at)).where(
-            DeviceMessageRow.customer_id == call.customer_id,
+            DeviceMessageRow.customer_id == customer_id,
             DeviceMessageRow.kind == "security_alert",
             DeviceMessageRow.resolved_at.is_(None),
         ))
@@ -814,6 +919,10 @@ class Verifier:
     def _open_approval(self, s: Session, call: CallRow) -> DeviceMessageRow | None:
         msgs = self._open_messages(s, call, kind="app_approval")
         return msgs[-1] if msgs else None
+
+    def _audit_heard(self, s: Session, call: CallRow, kind: str, said: _Heard, data: dict) -> None:
+        """The one Audit Trail event for a heard Response, with how long hearing it took."""
+        self._audit(s, call, kind, {**data, "timings_ms": said.timings} if said.timings else data)
 
     def _audit(self, s: Session, call: CallRow, kind: str, data: dict) -> None:
         last = s.execute(
@@ -888,7 +997,12 @@ class Verifier:
                 {"seq": e.seq, "kind": e.kind, "data": e.data, "at": e.created_at.isoformat()} for e in rows
             ]
             view["audit"] = self._check_chain(s, call.id)
+            view["transcript"] = lines(view["events"])
         return view
+
+
+def _ms(start: float, end: float | None = None) -> int:
+    return round(((end if end is not None else time.perf_counter()) - start) * 1000)
 
 
 def _evidence(rows: list[dict]) -> list[Evidence]:

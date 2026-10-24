@@ -5,7 +5,8 @@ Interface:
     policy.plan(request)                       -> Plan
     policy.decide(evidence, step_ups_used)     -> Decision
     policy.voice_paused(minutes_since_block)   -> Decision | None   (after a BLOCK for the Customer)
-    policy.max_code_digits, pause_minutes, alert_hours
+    policy.attack_wave(customers_blocked)      -> bool   (Customers with a blocked Call in wave_minutes)
+    policy.max_code_digits, pause_minutes, alert_hours, wave_customers, wave_minutes
 
 Pure and in-process: no I/O after loading.
 """
@@ -57,6 +58,8 @@ class Policy:
             p = raw.get("protection", {})
             self.pause_minutes = float(p.get("pause_minutes", 30))
             self.alert_hours = float(p.get("alert_hours", 24))
+            self.wave_customers = int(p.get("wave_customers", 3))
+            self.wave_minutes = float(p.get("wave_minutes", 15))
         except (KeyError, TypeError, ValueError) as e:
             raise PolicyError(f"invalid policy: {e!r}") from e
         missing = set(RequestKind) - set(self._plans)
@@ -72,6 +75,8 @@ class Policy:
             raise PolicyError("code_match.max_digits must be at least 6, the length of a Possession Code")
         if self.pause_minutes < 0 or self.alert_hours <= 0:
             raise PolicyError("protection.pause_minutes must be >= 0 and alert_hours > 0")
+        if self.wave_customers < 0 or self.wave_minutes <= 0:
+            raise PolicyError("protection.wave_customers must be >= 0 and wave_minutes > 0")
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "Policy":
@@ -93,6 +98,11 @@ class Policy:
             f"A call for this Customer was blocked {minutes_since_block:.0f} min ago; voice requests are paused "
             f"for {self.pause_minutes:.0f} min or until the Customer dismisses the alert on their Registered Device.",
         ])
+
+    def attack_wave(self, customers_blocked: int) -> bool:
+        """Blocked Calls for several different Customers within wave_minutes look like a Clone
+        campaign: while it lasts every risky Request also needs Agent Review."""
+        return self.wave_customers > 0 and customers_blocked >= self.wave_customers
 
     def decide(self, evidence: list[Evidence], step_ups_used: int = 0) -> Decision:
         """Verdict over all answered Challenges of a Call."""

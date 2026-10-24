@@ -124,6 +124,8 @@ Answers come from `src/pratyaksh/knowledge.yaml` (its header explains the keywor
 - **Security Alert and Voice Pause.** Every BLOCK shows "Blocked call attempt" on the Customer's Bank App. Until they dismiss it there (or `protection.pause_minutes` in `policy.yaml` passes), risky Requests for that Customer are refused on voice, so an impostor cannot keep calling back. Dismiss the alert before re-running the demo.
 - **Tamper-evident Audit Trail.** Events are insert-only (database triggers) and hash-chained; `GET /v1/calls/{id}/audit` and the Console badge show whether anything was edited or deleted.
 - **Verification Receipts.** `GET /v1/calls/{id}/receipt` (console key) returns an Ed25519-signed JWT of a closed Call's result; `executable` says whether core banking may act. Check it with `POST /v1/receipts/verify` or any JWT library and `GET /v1/receipts/key`. The signing key is created in `data/keys/` on first start; keep it off git (it is ignored).
+- **Attack Wave.** Blocked Calls for 3 different Customers within 15 minutes (`protection.wave_customers`, `wave_minutes`) look like a Clone campaign: until it passes, every risky Request also needs Agent Review and the Console shows a banner. Re-running the clone demo three times trips it; wait it out or set `wave_customers: 0`.
+- **Transcripts.** Every line the Voice Agent says is an Audit Trail event too, so `GET /v1/calls/{id}/transcript?format=text` is a complete, tamper-evident record with the Audit head to match a Verification Receipt.
 - **Guessing is bounded.** 1,344 equally likely Whisper Phrases; a code readout with more than 8 digits never matches; LLM replies that claim an outcome or ask for a PIN, OTP or password are dropped.
 
 ## Gotchas

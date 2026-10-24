@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, Response as HTTPResponse
 from pydantic import BaseModel, Field
 
 from ..config import Settings
-from ..domain import Audio, Response
+from ..domain import Audio, Outcome, Response
 from ..signals import warm_up_dsp
 from ..verification import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .container import FIXED_PROMPTS, Container, build, llm_configured
@@ -212,8 +212,17 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     # -- Console --------------------------------------------------------------------
 
     @app.get("/v1/calls")
-    def list_calls(request: Request, limit: int = Query(50, ge=1, le=500)):
-        return c(request).verifier.calls(limit)
+    def list_calls(
+        request: Request, limit: int = Query(50, ge=1, le=500), outcome: str | None = None,
+        customer_id: str | None = None,
+    ):
+        if outcome and outcome != "in_progress" and outcome not in Outcome._value2member_map_:
+            raise HTTPException(422, f"outcome must be in_progress or one of {sorted(Outcome._value2member_map_)}")
+        return c(request).verifier.calls(limit, outcome=outcome, customer_id=customer_id)
+
+    @app.get("/v1/customers/{customer_id}/risk")
+    def customer_risk(customer_id: str, request: Request):
+        return c(request).verifier.customer_risk(customer_id)
 
     @app.get("/v1/calls/{call_id}")
     def get_call(call_id: str, request: Request):
@@ -222,6 +231,16 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @app.get("/v1/calls/{call_id}/audit")
     def audit_check(call_id: str, request: Request):
         return c(request).verifier.audit_check(call_id)
+
+    @app.get("/v1/calls/{call_id}/transcript")
+    def transcript(call_id: str, request: Request, fmt: str = Query("json", alias="format", pattern="^(json|text)$")):
+        v = c(request).verifier
+        if fmt == "text":
+            return HTTPResponse(
+                v.transcript(call_id), media_type="text/plain; charset=utf-8",
+                headers={"Content-Disposition": f'attachment; filename="pratyaksh-call-{call_id[:8]}.txt"'},
+            )
+        return {"call_id": call_id, "lines": v.call(call_id)["transcript"]}
 
     def console_only(request: Request, x_console_key: str = Header(default="")) -> None:
         key = c(request).settings.console_key

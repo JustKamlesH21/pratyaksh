@@ -108,6 +108,14 @@ _Avoid_: notification, warning
 After a BLOCK, risky Requests for that Customer are refused on voice until the Customer dismisses the Security Alert or the Policy's pause runs out, so an impostor cannot simply call again. Balance enquiries and Questions are not paused.
 _Avoid_: lockout, cooldown
 
+**Attack Wave**:
+Blocked Calls for several different Customers within a short window (Policy: `wave_customers`, `wave_minutes`), the shape of a Clone campaign. While it lasts, every risky Request also needs Agent Review, and the Console warns the fraud team.
+_Avoid_: incident, outbreak, campaign mode
+
+**Transcript**:
+A Call as a conversation (what the Voice Agent and the Caller said, with the Verifier's steps between), built only from the Audit Trail, so it is as tamper-evident as the events.
+_Avoid_: log, recording
+
 **Policy**:
 The bank-configurable rules that map Requests to Risk Tiers and Signals to a Verdict.
 _Avoid_: config, rules engine
