@@ -395,14 +395,25 @@ class Verifier:
         with self._db.session() as s:
             by_outcome = {o or "in_progress": n for o, n in s.execute(
                 select(CallRow.outcome, func.count()).group_by(CallRow.outcome)).all()}
-            passed = [c.id for c in s.scalars(select(CallRow).where(CallRow.outcome.in_(
-                [Outcome.PASSED.value, Outcome.PASSED_PENDING_REVIEW.value]))).all() if c.evidence]
-            added: list[float] = []
-            for call_id in passed[-200:]:
-                times = dict(s.execute(select(AuditEventRow.kind, AuditEventRow.created_at).where(
-                    AuditEventRow.call_id == call_id, AuditEventRow.kind.in_(["risk_tier_set", "verdict"]))).all())
-                if len(times) == 2:
-                    added.append((times["verdict"] - times["risk_tier_set"]).total_seconds())
+            # Two queries, whatever the number of Calls: the latest 200 passed Calls' timing events.
+            # (A derived table, not IN (... LIMIT): MySQL refuses LIMIT inside an IN subquery.)
+            passed = (select(CallRow.id).where(CallRow.outcome.in_(
+                [Outcome.PASSED.value, Outcome.PASSED_PENDING_REVIEW.value]))
+                .order_by(CallRow.created_at.desc()).limit(200).subquery())
+            events = s.execute(
+                select(AuditEventRow.call_id, AuditEventRow.kind, AuditEventRow.created_at)
+                .join(passed, passed.c.id == AuditEventRow.call_id)
+                .where(AuditEventRow.kind.in_(["risk_tier_set", "response_scored", "verdict"]))
+            ).all()
+        times: dict[str, dict[str, datetime]] = {}
+        challenged: set[str] = set()  # balance enquiries pass with no Challenges and add no time
+        for call_id, kind, at in events:
+            if kind == "response_scored":
+                challenged.add(call_id)
+            else:
+                times.setdefault(call_id, {})[kind] = at
+        added = [(t["verdict"] - t["risk_tier_set"]).total_seconds()
+                 for call_id, t in times.items() if call_id in challenged and len(t) == 2]
         return {
             "calls": sum(by_outcome.values()),
             "by_outcome": by_outcome,
@@ -416,8 +427,9 @@ class Verifier:
 
     def calls(self, limit: int = 50) -> list[dict]:
         with self._db.session() as s:
+            names = dict(s.execute(select(CustomerRow.id, CustomerRow.name)).all())  # one query, not one per Call
             rows = s.scalars(select(CallRow).order_by(CallRow.created_at.desc()).limit(limit)).all()
-            return [self._view(s, c, with_events=False) for c in rows]
+            return [self._view(s, c, with_events=False, names=names) for c in rows]
 
     def pairing(self, customer_id: str) -> str:
         """The device token the Bank App needs. Show it only on the operator's own machine."""
@@ -836,11 +848,13 @@ class Verifier:
             return
         self._events.publish({"type": "call", "call": view})
 
-    def _view(self, s: Session, call: CallRow, with_events: bool) -> dict:
-        customer = s.get(CustomerRow, call.customer_id)
+    def _view(self, s: Session, call: CallRow, with_events: bool, names: dict[str, str] | None = None) -> dict:
+        if names is None:
+            customer = s.get(CustomerRow, call.customer_id)
+            names = {call.customer_id: customer.name} if customer else {}
         view = {
             "id": call.id,
-            "customer": {"id": call.customer_id, "name": customer.name if customer else call.customer_id},
+            "customer": {"id": call.customer_id, "name": names.get(call.customer_id, call.customer_id)},
             "room": call.room,
             "state": call.state,
             "request": call.request,
