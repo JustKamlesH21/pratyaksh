@@ -14,6 +14,13 @@ from pratyaksh.verification import Database, EventHub, Interpreter, Verifier
 from pratyaksh.verification.store import Base
 
 
+@pytest.fixture(autouse=True)
+def _no_live_llm(monkeypatch):
+    """Tests use a stub LLM or none: a real OLLAMA_API_KEY in the shell must not reach the network."""
+    for name in ("OLLAMA_API_KEY", "OLLAMA_HOST", "OLLAMA_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def database_url(default: str = "sqlite://") -> str:
     """The database a test runs on: SQLite, or MySQL when PRATYAKSH_TEST_DATABASE_URL is set.
 

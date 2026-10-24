@@ -80,6 +80,8 @@ def test_asking_for_a_person_mid_challenge_still_blocks_a_detected_clone():
     h.say(call_id, h.current_phrase(call_id), whispered(), 700)  # synthetic voice: hard fail
     step = h.say(call_id, "let me talk to a real person", voiced(), 700)
     assert step.outcome is Outcome.BLOCKED
+    said = [e["data"] for e in h.verifier.call(call_id)["events"] if e["kind"] == "caller_said"]
+    assert said[-1] == {"transcript": "let me talk to a real person", "kind": "human"}
 
 
 def test_the_llm_handles_the_rest_and_cannot_leak_numbers():

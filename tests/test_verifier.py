@@ -413,4 +413,5 @@ def test_the_database_is_free_while_a_response_is_heard_and_a_late_one_is_ignore
     step = h.verifier.respond(call_id, Response(voiced(), 700))
     call = h.verifier.call(call_id)
     assert step.end and call["outcome"] == "abandoned" and call["request"] is None
-    assert "caller_said" not in [e["kind"] for e in call["events"]]
+    kinds = [e["kind"] for e in call["events"]]
+    assert "caller_said" not in kinds and kinds[-1] == "response_ignored"

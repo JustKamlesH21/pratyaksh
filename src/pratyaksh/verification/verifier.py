@@ -179,13 +179,13 @@ class Verifier:
             with self._db.session() as s:  # 3. apply under the row lock
                 call = self._lock(s, call_id)
                 if self._turn(s, call) != turn:  # the Caller hung up or approved in the app meanwhile
-                    step = self._pending(call)
+                    step = self._ignore(s, call, "the Call changed while the Response was heard")
                 elif call.state == CallState.AWAITING_REQUEST:
                     step = self._on_request(s, call, heard)
                 elif call.state == CallState.CHALLENGING:
                     step = self._on_challenge_response(s, call, response, heard)
-                else:  # Responses after close or while waiting for the app are ignored
-                    step = self._pending(call)
+                else:
+                    step = self._ignore(s, call, f"the Call is {call.state}")
         except CallNotFound:
             raise
         except Exception:
@@ -219,7 +219,7 @@ class Verifier:
         with self._db.session() as s:
             call = self._lock(s, call_id)
             if call.state == CallState.CLOSED:
-                return self._pending(call)
+                return self._ignore(s, call, "the Call is closed")
             errors = sum(1 for e in s.scalars(select(AuditEventRow).where(
                 AuditEventRow.call_id == call.id, AuditEventRow.kind == "processing_error")))
             self._audit(s, call, "processing_error", {"attempt": errors + 1})
@@ -230,6 +230,12 @@ class Verifier:
                 call.id, f"Sorry, I had trouble hearing that. {_strip_lead(last.say)}", listen=True,
                 long_reply=last.long_reply, state=CallState(call.state),
             ))
+
+    def _ignore(self, s: Session, call: CallRow, reason: str) -> Step:
+        """A Response that arrived too late to count. Still one Audit Trail event per Response, so
+        retained recordings and events stay paired for the Eval export."""
+        self._audit(s, call, "response_ignored", {"reason": reason})
+        return self._pending(call)
 
     def current_step(self, call_id: str) -> Step:
         with self._db.session() as s:
@@ -578,6 +584,7 @@ class Verifier:
                         return self._block(s, call, so_far)
                 return self._start_app_approval(s, call, "No problem.")
             if heard.kind is TurnKind.HUMAN:
+                self._audit(s, call, "caller_said", {"transcript": signals.transcript, "kind": heard.kind.value})
                 return self._hand_over(s, call, "Sure.")
             asked = int(issued.get("side_turns", 0))
             if asked < MAX_SIDE_TURNS_PER_CHALLENGE:  # QUESTION, CHAT, REPEAT or WAIT: reply, then ask again

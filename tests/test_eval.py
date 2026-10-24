@@ -28,6 +28,8 @@ def _call(client, models, genuine: bool):
         token = client.app.state.c.verifier.pairing(C)
         code = client.get(f"/v1/customers/{C}/inbox", headers={"X-Device-Token": token}).json()["messages"][0]["body"]["code"]
         send(code, voiced(), 900)
+        # A late Response after the Call closed is kept and ignored, and the export still pairs it.
+        client.post(f"/v1/calls/{call_id}/responses", files={"audio": ("r.wav", voiced().to_wav(), "audio/wav")})
     else:
         send("some other words", voiced(), 3100)
         send("9 9 9 9 9 9", voiced(), 3200)
