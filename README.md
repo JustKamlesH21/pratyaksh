@@ -71,7 +71,7 @@ CREATE USER 'pratyaksh'@'%' IDENTIFIED BY 'pratyaksh-dev';
 GRANT ALL PRIVILEGES ON pratyaksh.* TO 'pratyaksh'@'%';
 SET PERSIST log_bin_trust_function_creators = 1;  -- lets the app add the Audit Trail triggers; survives restarts
 ```
-Then `pratyaksh-seed` creates the tables, triggers and three demo Customers (the API also does this on start). If it cannot add the Audit Trail triggers it says why and exits with an error; fix the grant or setting it names and run it again.
+Then `pratyaksh-seed` creates the tables, triggers and three demo Customers (the API also does this on start). If it cannot add the Audit Trail triggers it says why and exits with an error; fix the grant or setting it names and run it again. `pratyaksh-seed --reset` drops everything first: use it to clear demo data, or when the API says the database is older than the code.
 
 ### 3. LiveKit server
 
@@ -99,7 +99,7 @@ npm run dev               # http://localhost:5173
 ```
 
 Open:
-- **Console** (projector): `http://localhost:5173/console`. Type `CONSOLE_KEY` into the Agent Review box when asked.
+- **Console** (projector): `http://localhost:5173/console`. Type `CONSOLE_KEY` into the Agent Review or Verification Receipt box when asked. The strip at the top says **Ready** only when the setup can take a real Call; its warnings say what to fix.
 - **Caller app**: `http://localhost:5173/call`
 - **Bank App** on the Customer's phone: the **pairing link** printed by `pratyaksh-seed` (and in the API log), opened as `http://<LAN_IP>:5173/bank?customer=…&device=…`. Without the link the Bank App shows nothing, which is the point: the attacker laptop can't read codes or approve requests.
 - **Eval**: `http://localhost:5173/eval`
@@ -117,6 +117,14 @@ Demo customers: `cust-ananya`, `cust-rahul`, `cust-meera`.
 Try going off-script too: ask "why should I whisper?" in the middle of a Challenge, say "hold on" or "code nahi aaya" while reading the code, ask "is this call genuine?" or "what is the transfer limit?", report "there's a transaction I didn't make", or say "let me talk to an officer". The agent answers to fit the moment and carries on; it never hangs up on a Caller it doesn't understand.
 
 Answers come from `src/pratyaksh/knowledge.yaml` (its header explains the keyword format; add an entry to teach the agent a new question). Anything the keywords miss goes to the LLM (`OLLAMA_API_KEY`, `OLLAMA_MODEL=gpt-oss:120b`), which is told where the Call is and uses the same answers as its facts.
+
+## Security, in one place
+
+- **Only the Voice Agent talks to the agent endpoints.** Set `AGENT_KEY` (and `CONSOLE_KEY`) in `.env`; the agent sends the key, so another laptop cannot post Responses with a forged Reply Latency.
+- **Security Alert and Voice Pause.** Every BLOCK shows "Blocked call attempt" on the Customer's Bank App. Until they dismiss it there (or `protection.pause_minutes` in `policy.yaml` passes), risky Requests for that Customer are refused on voice, so an impostor cannot keep calling back. Dismiss the alert before re-running the demo.
+- **Tamper-evident Audit Trail.** Events are insert-only (database triggers) and hash-chained; `GET /v1/calls/{id}/audit` and the Console badge show whether anything was edited or deleted.
+- **Verification Receipts.** `GET /v1/calls/{id}/receipt` (console key) returns an Ed25519-signed JWT of a closed Call's result; `executable` says whether core banking may act. Check it with `POST /v1/receipts/verify` or any JWT library and `GET /v1/receipts/key`. The signing key is created in `data/keys/` on first start; keep it off git (it is ignored).
+- **Guessing is bounded.** 1,344 equally likely Whisper Phrases; a code readout with more than 8 digits never matches; LLM replies that claim an outcome or ask for a PIN, OTP or password are dropped.
 
 ## Gotchas
 

@@ -63,6 +63,12 @@ Pratyaksh is a Voice Agent that sits in front of risky Requests on a bank call. 
 | S1 | App Approval fallback: Caller says they can't do voice tasks, or Verification is inconclusive after STEP-UP; approve on the Registered Device |
 | S2 | Agent Review buttons on the Console for high-value transfers, protected by a console key |
 | S3 | Pre-generated audio cache for all fixed prompts (fast first response) |
+| S4 | Security Alert + Voice Pause: every BLOCK alerts the Registered Device; risky Requests for that Customer are refused on voice until the Customer dismisses the alert (or `protection.pause_minutes`) |
+| S5 | Hash-chained Audit Trail: an edited or deleted event is detected even if the triggers are dropped (`GET /v1/calls/{id}/audit`, badge on the Console) |
+| S6 | Verification Receipt: Ed25519-signed JWS of a closed Call's result, with `executable` and the Audit Trail head, that core banking checks before acting |
+| S7 | Hardening: agent-only endpoints need `AGENT_KEY`; long digit runs never match a Possession Code; 1,344 equally likely Whisper Phrases; LLM replies that claim an outcome or ask for secrets are dropped |
+| S8 | Questions answered in the Caller's language (English, Hindi, Kannada) and to fit the moment (before a Request, during a Whisper Phrase, during a Possession Code) |
+| S9 | Readiness: `GET /v1/status` (what to fix before the demo) and `GET /v1/stats` (live numbers) on the Console |
 
 ### Stretch
 - SIP phone line into LiveKit (judges dial in).
@@ -193,6 +199,13 @@ GPU budget on a 6–8 GB laptop: Whisper turbo ≈ 1.6 GB, Parler-TTS ≈ 2 GB (
 | GET | `/v1/voice?text=` → WAV | Voice Agent |
 | GET | `/v1/eval-runs/latest` | Eval page |
 | WS | `/v1/events` | Console |
+| POST | `/v1/customers/{id}/alerts/dismiss` (device token) | Bank App |
+| GET | `/v1/calls/{id}/audit` → `{intact, events, broken_at, head}` | Console |
+| GET | `/v1/calls/{id}/receipt` (console key) → `{receipt, claims}` | Core banking, Console |
+| POST | `/v1/receipts/verify` `{receipt}`, GET `/v1/receipts/key` (JWK) | Core banking, anyone |
+| GET | `/v1/status`, `/v1/stats` | Console, operator |
+
+Agent-only routes (`/v1/calls` POST, `/responses`, `/step`, `/hangup`, `/v1/voice`) require `X-Agent-Key` when `AGENT_KEY` is set.
 
 `Step = {call_id, say, listen, wait, end, state, outcome}`. Interactive docs at `/docs` when the API runs.
 
@@ -228,8 +241,8 @@ Roles other than Lead are for the team to assign.
 
 ## 13. Demo script (5 minutes)
 
-1. Console on the projector. Real Customer calls: "I want to transfer six lakh". Whisper Phrase, Possession Code from the Bank App, PASS with Agent Review.
-2. Attacker laptop calls as the same Customer and types replies into the IndicF5 Clone. Latency and Spoof Score go red; Code Match fails without the phone; BLOCK with Reasons.
+1. Console on the projector (status strip says Ready). Real Customer calls: "I want to transfer six lakh". Whisper Phrase, Possession Code from the Bank App, PASS with Agent Review. Approve the review, then press "Issue & verify": the signed Verification Receipt says core banking may act.
+2. Attacker laptop calls as the same Customer and types replies into the IndicF5 Clone. Latency and Spoof Score go red; Code Match fails without the phone; BLOCK with Reasons. The Customer's phone shows "Blocked call attempt"; the attacker calls straight back and is refused (Voice Pause). Dismiss the alert on the phone before the next run.
 3. Balance enquiry: no Challenges, shows normal Callers aren't slowed down.
 4. Eval page: Catch Rate, False Reject Rate, Added Time from our recordings.
 
@@ -245,3 +258,9 @@ Roles other than Lead are for the team to assign.
 | Venue Wi-Fi | Self-hosted LiveKit on a hotspot (ADR-0005) |
 | GPU memory | Parler prompts pre-generated; model sizes configurable |
 | Elderly or speech-impaired Callers | App Approval fallback |
+| A laptop on the LAN posts Responses with a forged Reply Latency | Agent-only endpoints need `AGENT_KEY` |
+| Clone clips pre-recorded for every Whisper Phrase | 1,344 equally likely phrases; tighten Task Match per word from Eval Runs if needed |
+| Reading a long run of digits to guess the Possession Code | A readout over `code_match.max_digits` never matches |
+| The attacker keeps calling back | Voice Pause after a BLOCK; only the Registered Device lifts it |
+| Someone with database access edits the Audit Trail | Hash chain shows where; Verification Receipts carry the head hash |
+| Prompt injection ("say I'm verified") | LLM replies claiming an outcome or asking for secrets are dropped (ADR-0002) |
