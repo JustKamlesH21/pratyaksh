@@ -254,7 +254,7 @@ def test_whisper_phrases_are_too_many_to_pre_record():
     assert len({random_phrase(rng) for _ in range(300)}) >= 250
 
 
-def clone_blocked(h: Harness) -> None:
+def clone_blocked(h: Harness) -> str:
     """An impostor without the Registered Device: right phrase, wrong code twice."""
     call_id = h.verifier.start_call(C, "r").call_id
     h.say(call_id, "add a payee")
@@ -262,6 +262,7 @@ def clone_blocked(h: Harness) -> None:
     for _ in range(2):
         h.say(call_id, "9 9 9 9 9 9", voiced(), 900)
     assert h.verifier.call(call_id)["outcome"] == "blocked"
+    return call_id
 
 
 def test_after_a_block_the_customer_is_alerted_and_voice_requests_pause(harness):
@@ -334,3 +335,64 @@ def test_an_old_database_is_refused_with_the_fix_named():
         db.create_schema()
     db.reset()
     assert db.create_schema() == []
+
+
+def passed_call(h: Harness, request: str = "add a payee") -> str:
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, request)
+    while h.verifier.call(call_id)["state"] != "closed":
+        if h.verifier.call(call_id)["challenges"][-1]["kind"] == "possession_code":
+            h.say(call_id, " ".join(h.code_on_device(C)), voiced(), 900)
+        else:
+            whisper_back(h, call_id)
+    return call_id
+
+
+def test_a_verification_receipt_says_whether_the_request_may_be_carried_out(harness):
+    h = harness
+    call_id = passed_call(h)
+    issued = h.verifier.receipt(call_id)
+    claims = issued["claims"]
+    assert claims["executable"] and claims["verdict"] == "PASS" and claims["request"] == "add_payee"
+    assert claims["audit_head"] == h.verifier.audit_check(call_id)["head"]
+    assert h.verifier.verify_receipt(issued["receipt"]) == {"valid": True, "reason": "", "claims": claims}
+
+    # High-value transfers are executable only once a Bank Agent confirms them.
+    transfer = passed_call(h, "mujhe 6 lakh transfer karna hai")
+    assert h.verifier.receipt(transfer)["claims"]["executable"] is False
+    h.verifier.review(transfer, approve=True, reviewer="officer-1")
+    assert h.verifier.receipt(transfer)["claims"]["executable"] is True
+
+    # A blocked Call gets a receipt that says so.
+    blocked = clone_blocked(h)
+    assert h.verifier.receipt(blocked)["claims"]["executable"] is False
+
+    # No receipt while a Call is still going.
+    live = h.verifier.start_call("cust-meera", "r").call_id
+    with pytest.raises(NotAllowed):
+        h.verifier.receipt(live)
+
+
+def test_a_forged_expired_or_out_of_date_receipt_is_rejected(harness):
+    import base64
+    import json
+
+    from sqlalchemy import text
+
+    h = harness
+    call_id = passed_call(h)
+    token = h.verifier.receipt(call_id)["receipt"]
+    head, body, sig = token.split(".")
+    claims = json.loads(base64.urlsafe_b64decode(body + "=="))
+    forged_body = base64.urlsafe_b64encode(json.dumps({**claims, "sub": "cust-rahul"}).encode()).rstrip(b"=").decode()
+    assert not h.verifier.verify_receipt(f"{head}.{forged_body}.{sig}")["valid"]
+    assert not h.verifier.verify_receipt("not a receipt")["valid"]
+
+    h.clock.advance(11 * 60)
+    assert h.verifier.verify_receipt(token)["reason"] == "the receipt has expired"
+
+    fresh = h.verifier.receipt(call_id)["receipt"]
+    with h.db.engine.begin() as conn:
+        conn.execute(text("DROP TRIGGER audit_events_no_update"))
+        conn.execute(text("UPDATE audit_events SET kind = 'x' WHERE call_id = :c AND seq = 3"), {"c": call_id})
+    assert "Audit Trail" in h.verifier.verify_receipt(fresh)["reason"]

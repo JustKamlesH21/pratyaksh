@@ -11,6 +11,8 @@ Interface (commands; each returns the Step the Voice Agent must do next):
 Reads:
     call(call_id), calls(limit), inbox(customer_id, device_token), customers()
     audit_check(call_id) -> {intact, events, broken_at, head}   (recomputes the Audit Trail's hash chain)
+    receipt(call_id) -> {receipt, claims}   (signed Verification Receipt of a closed Call)
+    verify_receipt(receipt) -> {valid, reason, claims}, receipt_key() -> public JWK
     pairing(customer_id) -> device token (shown only on the operator's machine)
 
 Errors: CallNotFound, UnknownCustomer, NotAllowed, DeviceNotPaired.
@@ -22,6 +24,7 @@ Possession Codes and the Device Inbox, Policy decisions, the Audit Trail and liv
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
 from .interpreter import Faq, Interpreter, OllamaChat
+from .receipts import ReceiptSigner
 from .store import Database
 from .verifier import Verifier
 
@@ -34,6 +37,7 @@ __all__ = [
     "Interpreter",
     "NotAllowed",
     "OllamaChat",
+    "ReceiptSigner",
     "UnknownCustomer",
     "Verifier",
 ]

@@ -22,7 +22,7 @@ def api(tmp_path):
         database_url=database_url(),
         speech_backend="scripted",
         tts_backend="tone",
-        tts_cache_dir=str(tmp_path / "tts"),
+        tts_cache_dir=str(tmp_path / "tts"), receipt_key_path=str(tmp_path / "key.pem"),
         ollama_api_key="",
         warm_up_models=False,
         livekit_public_url="ws://192.168.1.10:7880",
@@ -129,7 +129,7 @@ def test_errors(api):
 def test_only_the_voice_agent_can_start_calls_and_post_responses(tmp_path):
     settings = Settings(
         _env_file=None, database_url=database_url(), speech_backend="scripted", tts_backend="tone",
-        tts_cache_dir=str(tmp_path / "tts"), warm_up_models=False, agent_key="agent-secret",
+        tts_cache_dir=str(tmp_path / "tts"), receipt_key_path=str(tmp_path / "key.pem"), warm_up_models=False, agent_key="agent-secret",
     )
     agent = {"X-Agent-Key": "agent-secret"}
     reply = {"files": {"audio": ("r.wav", voiced().to_wav(), "audio/wav")}, "data": {"reply_latency_ms": "300"}}
@@ -156,3 +156,19 @@ def test_oversized_or_overlong_audio_is_refused(api):
 
     long = Audio.silence(61).to_wav()
     assert api.post(f"/v1/calls/{call_id}/responses", files={"audio": ("r.wav", long, "audio/wav")}).status_code == 413
+
+
+def test_verification_receipts_over_http_check_with_any_jwt_library(api):
+    jwt = pytest.importorskip("jwt")
+    call_id = api.post("/v1/calls", json={"customer_id": C}).json()["call_id"]
+    send(api, call_id, "what is my balance", voiced())
+    assert api.get(f"/v1/calls/{call_id}/receipt").status_code == 403  # bank systems only
+    issued = api.get(f"/v1/calls/{call_id}/receipt", headers={"X-Console-Key": "console-secret"}).json()
+    assert issued["claims"]["executable"] is True
+
+    checked = api.post("/v1/receipts/verify", json={"receipt": issued["receipt"]}).json()
+    assert checked["valid"] is True and checked["claims"]["call_id"] == call_id
+
+    jwk = api.get("/v1/receipts/key").json()["keys"][0]
+    key = jwt.PyJWK(jwk).key
+    assert jwt.decode(issued["receipt"], key, algorithms=["EdDSA"])["call_id"] == call_id

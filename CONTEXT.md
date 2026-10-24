@@ -113,8 +113,12 @@ The bank-configurable rules that map Requests to Risk Tiers and Signals to a Ver
 _Avoid_: config, rules engine
 
 **Audit Trail**:
-The insert-only, ordered record of everything that happened on a Call.
+The insert-only, ordered record of everything that happened on a Call. Each event is hash-chained to the one before, so an edit or a missing event shows.
 _Avoid_: log, history
+
+**Verification Receipt**:
+A signed statement of a closed Call's result (Verdict, Outcome, whether the Request may be carried out, and the Audit Trail's latest hash) that the bank's core systems check before acting on the Request.
+_Avoid_: token, certificate
 
 ### Attack and measurement
 
