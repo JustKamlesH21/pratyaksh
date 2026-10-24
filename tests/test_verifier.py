@@ -242,3 +242,13 @@ def test_a_stray_digit_around_the_code_still_matches(harness):
     whisper_back(h, call_id)
     step = h.say(call_id, f"my code is {' '.join(h.code_on_device(C))} 2", voiced(), 900)
     assert step.outcome is Outcome.PASSED
+
+
+def test_whisper_phrases_are_too_many_to_pre_record():
+    import random
+
+    from pratyaksh.phrases import phrase_count, random_phrase
+
+    assert phrase_count() >= 1000
+    rng = random.Random(3)
+    assert len({random_phrase(rng) for _ in range(300)}) >= 250
