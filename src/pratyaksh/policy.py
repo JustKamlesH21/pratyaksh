@@ -4,6 +4,8 @@ Interface:
     Policy.load(path=None)                     -> Policy
     policy.plan(request)                       -> Plan
     policy.decide(evidence, step_ups_used)     -> Decision
+    policy.voice_paused(minutes_since_block)   -> Decision | None   (after a BLOCK for the Customer)
+    policy.max_code_digits, pause_minutes, alert_hours
 
 Pure and in-process: no I/O after loading.
 """
@@ -52,6 +54,9 @@ class Policy:
             self._pass_at = float(v["pass_at"])
             self._block_at = float(v["block_at"])
             self._max_step_ups = int(v["max_step_ups"])
+            p = raw.get("protection", {})
+            self.pause_minutes = float(p.get("pause_minutes", 30))
+            self.alert_hours = float(p.get("alert_hours", 24))
         except (KeyError, TypeError, ValueError) as e:
             raise PolicyError(f"invalid policy: {e!r}") from e
         missing = set(RequestKind) - set(self._plans)
@@ -65,6 +70,8 @@ class Policy:
             raise PolicyError("reply_latency.machine_ms must exceed human_ms")
         if self.max_code_digits < 6:
             raise PolicyError("code_match.max_digits must be at least 6, the length of a Possession Code")
+        if self.pause_minutes < 0 or self.alert_hours <= 0:
+            raise PolicyError("protection.pause_minutes must be >= 0 and alert_hours > 0")
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "Policy":
@@ -76,6 +83,16 @@ class Policy:
 
     def plan(self, request: RequestKind) -> Plan:
         return self._plans[request]
+
+    def voice_paused(self, minutes_since_block: float | None) -> Decision | None:
+        """BLOCK for a risky Request when a recent Call for the same Customer was blocked and the
+        Customer has not dismissed the Security Alert yet; None when voice Verification may go ahead."""
+        if minutes_since_block is None or minutes_since_block >= self.pause_minutes:
+            return None
+        return Decision(Verdict.BLOCK, None, [
+            f"A call for this Customer was blocked {minutes_since_block:.0f} min ago; voice requests are paused "
+            f"for {self.pause_minutes:.0f} min or until the Customer dismisses the alert on their Registered Device.",
+        ])
 
     def decide(self, evidence: list[Evidence], step_ups_used: int = 0) -> Decision:
         """Verdict over all answered Challenges of a Call."""

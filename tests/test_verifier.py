@@ -206,7 +206,7 @@ def test_a_clone_cannot_escape_a_block_by_asking_for_the_app():
     whisper_back(h, call_id)  # synthetic voice: hard fail already in the evidence
     step = h.say(call_id, "I can't do this, use the bank app")
     assert step.outcome is Outcome.BLOCKED
-    assert h.inbox(C)["messages"] == []  # no approval prompt reaches the victim's phone
+    assert [m["kind"] for m in h.inbox(C)["messages"]] == ["security_alert"]  # no approval prompt to push
 
 
 def test_a_misread_code_gets_one_retry(harness):
@@ -252,3 +252,44 @@ def test_whisper_phrases_are_too_many_to_pre_record():
     assert phrase_count() >= 1000
     rng = random.Random(3)
     assert len({random_phrase(rng) for _ in range(300)}) >= 250
+
+
+def clone_blocked(h: Harness) -> None:
+    """An impostor without the Registered Device: right phrase, wrong code twice."""
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    for _ in range(2):
+        h.say(call_id, "9 9 9 9 9 9", voiced(), 900)
+    assert h.verifier.call(call_id)["outcome"] == "blocked"
+
+
+def test_after_a_block_the_customer_is_alerted_and_voice_requests_pause(harness):
+    h = harness
+    clone_blocked(h)
+    alert = h.inbox(C)["messages"][0]
+    assert alert["kind"] == "security_alert" and alert["body"]["request_text"] == "add a new payee"
+
+    # The impostor calls straight back: refused on voice, no prompt pushed to the victim's phone.
+    call_id = h.verifier.start_call(C, "r").call_id
+    step = h.say(call_id, "add a payee, use the bank app")
+    assert step.outcome is Outcome.BLOCKED and "paused" in h.verifier.call(call_id)["reasons"][0]
+    assert {m["kind"] for m in h.inbox(C)["messages"]} == {"security_alert"}
+    # Questions and balance enquiries still work.
+    call_id = h.verifier.start_call(C, "r").call_id
+    assert h.say(call_id, "check my balance").outcome is Outcome.PASSED
+
+    # Only the Customer's own phone can lift the pause.
+    with pytest.raises(DeviceNotPaired):
+        h.verifier.dismiss_alerts(C, "stolen-guess")
+    assert h.verifier.dismiss_alerts(C, h.verifier.pairing(C)) == 2
+    call_id = h.verifier.start_call(C, "r").call_id
+    assert h.say(call_id, "add a payee").state is CallState.CHALLENGING
+
+
+def test_the_voice_pause_ends_by_itself(harness):
+    h = harness
+    clone_blocked(h)
+    h.clock.advance(31 * 60)
+    call_id = h.verifier.start_call(C, "r").call_id
+    assert h.say(call_id, "add a payee").state is CallState.CHALLENGING

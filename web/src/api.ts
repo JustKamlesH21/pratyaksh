@@ -29,6 +29,11 @@ export const api = {
       headers: { "X-Device-Token": deviceToken },
       body: JSON.stringify({ customer_id: customerId, approve }),
     }),
+  dismissAlerts: (customerId: string, deviceToken: string) =>
+    http<{ dismissed: number }>(`/v1/customers/${customerId}/alerts/dismiss`, {
+      method: "POST",
+      headers: { "X-Device-Token": deviceToken },
+    }),
   calls: (limit = 50) => http<CallView[]>(`/v1/calls?limit=${limit}`),
   call: (id: string) => http<CallView>(`/v1/calls/${id}`),
   review: (id: string, approve: boolean, consoleKey: string, reviewer = "bank-agent") =>

@@ -154,6 +154,10 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     def inbox(customer_id: str, request: Request, x_device_token: str = Header(default="")):
         return c(request).verifier.inbox(customer_id, x_device_token)
 
+    @app.post("/v1/customers/{customer_id}/alerts/dismiss")
+    def dismiss_alerts(customer_id: str, request: Request, x_device_token: str = Header(default="")):
+        return {"dismissed": c(request).verifier.dismiss_alerts(customer_id, x_device_token)}
+
     @app.post("/v1/calls/{call_id}/app-approval")
     def app_approval(call_id: str, body: AppApproval, request: Request, x_device_token: str = Header(default="")):
         return c(request).verifier.app_approval(call_id, body.customer_id, x_device_token, body.approve).to_dict()

@@ -232,6 +232,23 @@ class Verifier:
         self._publish_after(call_id)
         return self.call(call_id)
 
+    def dismiss_alerts(self, customer_id: str, device_token: str) -> int:
+        """The Customer saw the Security Alerts on their Registered Device. Dismissing them also lifts
+        the voice pause, which only the Customer's own phone can do. Returns how many were dismissed."""
+        with self._db.session() as s:
+            self._check_device(s, customer_id, device_token)
+            alerts = s.scalars(select(DeviceMessageRow).where(
+                DeviceMessageRow.customer_id == customer_id,
+                DeviceMessageRow.kind == "security_alert",
+                DeviceMessageRow.resolved_at.is_(None),
+            )).all()
+            for msg in alerts:
+                msg.resolved_at = self._now()
+                call = s.get(CallRow, msg.call_id)
+                if call is not None:
+                    self._audit(s, call, "security_alert_dismissed", {})
+            return len(alerts)
+
     def hang_up(self, call_id: str) -> None:
         with self._db.session() as s:
             call = self._lock(s, call_id)
@@ -348,6 +365,10 @@ class Verifier:
             s, call, "risk_tier_set",
             {"request": request.value, "challenges": call.planned, "agent_review": plan.agent_review},
         )
+        if plan.challenges:  # after a blocked Call for this Customer, an impostor must not simply call again
+            paused = self._policy.voice_paused(self._minutes_since_block(s, call))
+            if paused is not None:
+                return self._block(s, call, paused)
         if not plan.challenges:
             call.verdict = Verdict.PASS.value
             call.reasons = ["No Challenges needed for this Request."]
@@ -492,6 +513,14 @@ class Verifier:
             call.liveness = None if decision.liveness is None else round(decision.liveness, 3)
             call.reasons = decision.reasons
             self._audit(s, call, "verdict", {"verdict": "BLOCK", "liveness": call.liveness, "reasons": decision.reasons})
+        now = self._now()
+        request = RequestKind(call.request) if call.request else None
+        s.add(DeviceMessageRow(  # tell the real Customer, on their own phone, that someone tried
+            customer_id=call.customer_id, call_id=call.id, kind="security_alert",
+            body={"request": call.request, "request_text": _REQUEST_NAMES.get(request, ""), "blocked_at": now.isoformat()},
+            created_at=now, expires_at=now + timedelta(hours=self._policy.alert_hours),
+        ))
+        self._audit(s, call, "security_alert_sent", {})
         return self._close(
             s, call, Outcome.BLOCKED,
             "We could not verify this call, so for your safety the request has been stopped. "
@@ -602,10 +631,20 @@ class Verifier:
         return Step.from_dict(call.pending_step)
 
     def _open_messages(self, s: Session, call: CallRow, kind: str | None = None) -> list[DeviceMessageRow]:
+        """Codes and approval prompts of this Call still showing. Security Alerts stay until the Customer
+        dismisses them, whatever happens to the Call."""
         q = select(DeviceMessageRow).where(DeviceMessageRow.call_id == call.id, DeviceMessageRow.resolved_at.is_(None))
-        if kind:
-            q = q.where(DeviceMessageRow.kind == kind)
+        q = q.where(DeviceMessageRow.kind == kind) if kind else q.where(DeviceMessageRow.kind != "security_alert")
         return list(s.scalars(q).all())
+
+    def _minutes_since_block(self, s: Session, call: CallRow) -> float | None:
+        """Minutes since this Customer's latest blocked Call whose Security Alert is still showing."""
+        last = s.scalar(select(func.max(DeviceMessageRow.created_at)).where(
+            DeviceMessageRow.customer_id == call.customer_id,
+            DeviceMessageRow.kind == "security_alert",
+            DeviceMessageRow.resolved_at.is_(None),
+        ))
+        return None if last is None else (self._now() - last).total_seconds() / 60
 
     def _open_approval(self, s: Session, call: CallRow) -> DeviceMessageRow | None:
         msgs = self._open_messages(s, call, kind="app_approval")
