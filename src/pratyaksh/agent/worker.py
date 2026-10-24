@@ -40,7 +40,7 @@ async def entrypoint(ctx: JobContext) -> None:
     log.info("caller %s joined %s as customer %s", caller.identity, ctx.room.name, customer_id)
 
     audio = await LiveKitCallAudio.open(ctx.room, caller, ctx.proc.userdata["vad"])
-    verifier = HttpVerifier(settings.verifier_url)
+    verifier = HttpVerifier(settings.verifier_url, settings.agent_key)
     try:
         await run_call(
             audio, verifier, customer_id, ctx.room.name,

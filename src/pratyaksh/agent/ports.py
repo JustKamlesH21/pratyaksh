@@ -45,8 +45,9 @@ class CallAudio(Protocol):
 
 
 class HttpVerifier:
-    def __init__(self, base_url: str, timeout_s: float = 120.0):  # first request may wait for models to load
-        self._http = httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout_s)
+    def __init__(self, base_url: str, agent_key: str = "", timeout_s: float = 120.0):  # first request may load models
+        headers = {"X-Agent-Key": agent_key} if agent_key else {}
+        self._http = httpx.AsyncClient(base_url=base_url.rstrip("/"), headers=headers, timeout=timeout_s)
 
     async def start_call(self, customer_id: str, room: str) -> Step:
         r = await self._http.post("/v1/calls", json={"customer_id": customer_id, "room": room})
