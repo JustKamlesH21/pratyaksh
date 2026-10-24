@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { ErrorNote } from "../components";
@@ -50,7 +50,7 @@ export default function BankAppPage() {
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
       {(!customer || !device) && (
-        <div className="rounded-xl bg-white p-5 text-sm shadow-sm">
+        <div className="rounded-xl border border-line bg-surface p-5 text-sm">
           <p className="font-bold">This phone is not paired.</p>
           <p className="mt-2 text-ink-soft">
             Open the pairing link for the Customer, printed by <code>pratyaksh-seed</code> and in the verifier log on the
@@ -59,22 +59,29 @@ export default function BankAppPage() {
         </div>
       )}
       {customer && device && (
-        <div className="overflow-hidden rounded-[2.2rem] border-8 border-ink bg-white shadow-xl">
-          <div className="bg-violet px-5 pb-5 pt-6 text-white">
-            <p className="text-xs uppercase tracking-widest text-white/70">Your bank</p>
+        // A device frame stays dark in both themes, like a real phone.
+        <div className="overflow-hidden rounded-[2.2rem] border-[10px] border-zinc-900 bg-surface ring-1 ring-line">
+          <div className="bg-accent px-5 pb-5 pt-6 text-on-color">
+            <p className="text-xs font-medium opacity-80">Your bank</p>
             <p className="text-lg font-bold">{inbox?.customer.name ?? "…"}</p>
-            <p className="text-sm text-white/70">{inbox?.customer.phone_masked}</p>
+            <p className="text-sm opacity-80">{inbox?.customer.phone_masked}</p>
           </div>
           <div className="flex min-h-80 flex-col gap-4 p-5">
             <ErrorNote error={error} />
+            {!inbox && !error && (
+              <div className="flex flex-col gap-3" aria-busy="true">
+                <div className="skeleton h-24" />
+                <div className="skeleton h-16" />
+              </div>
+            )}
             {inbox && inbox.messages.length === 0 && (
-              <p className="mt-10 text-center text-ink-soft/70">No requests right now.</p>
+              <p className="mt-10 text-center text-ink-soft">No requests right now.</p>
             )}
             {inbox?.messages.map((m) =>
               m.kind === "security_alert" ? (
-                <div key={m.id} className="rounded-2xl border-2 border-block bg-block/10 p-4">
+                <div key={m.id} className="motion-attention rounded-xl border-2 border-block bg-block/10 p-4">
                   <p className="font-bold text-block">Blocked call attempt</p>
-                  <p className="mt-1 text-sm text-ink-soft">
+                  <p className="mt-1 text-sm text-ink">
                     Someone called the bank as you
                     {m.body.blocked_at && <> at {new Date(m.body.blocked_at + "Z").toLocaleTimeString()}</>}
                     {m.body.request_text && <> and asked to <b>{m.body.request_text}</b></>}. We could not verify them, so
@@ -83,28 +90,34 @@ export default function BankAppPage() {
                   <p className="mt-1 text-xs text-ink-soft">
                     Voice requests on your account are paused until you dismiss this. Never share codes with anyone.
                   </p>
-                  <button className="mt-3 w-full rounded-xl bg-white py-3 font-bold ring-1 ring-block/40" onClick={dismissAlerts}>
+                  <button className="press mt-3 w-full rounded-lg bg-surface py-3 font-bold text-ink ring-1 ring-block/40" onClick={dismissAlerts}>
                     Dismiss
                   </button>
                 </div>
               ) : m.kind === "possession_code" ? (
-                <div key={m.id} className="rounded-2xl bg-paper p-4 text-center">
+                <div key={m.id} className="motion-enter rounded-xl bg-sunken p-4 text-center">
                   <p className="text-sm text-ink-soft">One-time code for your call with the bank</p>
-                  <p className="my-2 font-mono text-4xl font-semibold tracking-[0.3em] text-ink">{m.body.code}</p>
-                  <p className="text-xs text-ink-soft">Read it out on the call · expires in {m.seconds_left}s</p>
+                  <p className="my-2 font-mono text-4xl font-semibold tracking-[0.3em] text-ink" aria-label={m.body.code}>
+                    {(m.body.code ?? "").split("").map((d, i) => (
+                      <span key={i} className="motion-enter inline-block" style={{ "--i": i } as CSSProperties}>{d}</span>
+                    ))}
+                  </p>
+                  <TimeLeft message={m} />
+                  <p className="mt-2 text-xs text-ink-soft">Read it out on the call. Expires in {m.seconds_left}s</p>
                 </div>
               ) : (
-                <div key={m.id} className="rounded-2xl border-2 border-amber bg-amber/10 p-4">
+                <div key={m.id} className="motion-enter rounded-xl border-2 border-accent bg-accent/10 p-4">
                   <p className="font-bold">Approve this request?</p>
-                  <p className="mt-1 text-sm text-ink-soft">
+                  <p className="mt-1 text-sm text-ink">
                     Someone on a call with the bank asked to <b>{m.body.request_text}</b>.
                   </p>
-                  <p className="mt-1 text-xs text-ink-soft">Expires in {m.seconds_left}s</p>
+                  <TimeLeft message={m} />
+                  <p className="mt-2 text-xs text-ink-soft">Expires in {m.seconds_left}s</p>
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button className="rounded-xl bg-white py-3 font-bold text-block ring-1 ring-block/40" onClick={() => answer(m, false)}>
+                    <button className="press rounded-lg bg-surface py-3 font-bold text-block ring-1 ring-block/40" onClick={() => answer(m, false)}>
                       Decline
                     </button>
-                    <button className="rounded-xl bg-pass py-3 font-bold text-white" onClick={() => answer(m, true)}>
+                    <button className="press rounded-lg bg-pass py-3 font-bold text-on-color" onClick={() => answer(m, true)}>
                       Approve
                     </button>
                   </div>
@@ -114,6 +127,20 @@ export default function BankAppPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Drains as the code or prompt runs out, so the Customer sees how long they have. */
+function TimeLeft({ message }: { message: DeviceMessage }) {
+  const total = (Date.parse(message.expires_at) - Date.parse(message.created_at)) / 1000;
+  const share = total > 0 ? Math.max(0, Math.min(1, message.seconds_left / total)) : 0;
+  return (
+    <div className="mt-3 h-1 overflow-hidden rounded-full bg-line" role="presentation">
+      <div
+        className="h-full origin-left bg-accent motion-safe:transition-transform motion-safe:duration-1000 motion-safe:ease-linear"
+        style={{ transform: `scaleX(${share})` }}
+      />
     </div>
   );
 }
