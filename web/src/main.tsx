@@ -1,36 +1,40 @@
 import { StrictMode, Suspense, lazy, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { ChartBar, DeviceMobile, IconContext, Monitor, Moon, Phone, ShieldCheck, Sun } from "@phosphor-icons/react";
+import { Logo } from "./components";
 import "./index.css";
 
 // One chunk per page: the Bank App on a phone does not download the LiveKit client the Caller page needs.
+const LandingPage = lazy(() => import("./pages/LandingPage"));
 const ConsolePage = lazy(() => import("./pages/ConsolePage"));
 const CallerPage = lazy(() => import("./pages/CallerPage"));
 const BankAppPage = lazy(() => import("./pages/BankAppPage"));
 const EvalPage = lazy(() => import("./pages/EvalPage"));
 
 const tabs = [
-  { to: "/console", label: "Console" },
-  { to: "/call", label: "Caller" },
-  { to: "/bank", label: "Bank App" },
-  { to: "/eval", label: "Eval" },
+  { to: "/console", label: "Console", icon: ShieldCheck },
+  { to: "/call", label: "Caller", icon: Phone },
+  { to: "/bank", label: "Bank App", icon: DeviceMobile },
+  { to: "/eval", label: "Eval", icon: ChartBar },
 ];
 
-type Theme = "auto" | "light" | "dark";
-const NEXT: Record<Theme, Theme> = { auto: "light", light: "dark", dark: "auto" };
+type Theme = "dark" | "light" | "system";
+const NEXT: Record<Theme, Theme> = { dark: "light", light: "system", system: "dark" };
+const THEME_ICON = { dark: Moon, light: Sun, system: Monitor };
 
+/** Dark by default (index.html applies it before the first paint); light, or follow the system. */
 function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => {
     const t = document.documentElement.dataset.theme;
-    return t === "light" || t === "dark" ? t : "auto";
+    return t === "light" || t === "dark" ? t : "system";
   });
   const cycle = () => {
     const next = NEXT[theme];
-    if (next === "auto") delete document.documentElement.dataset.theme;
+    if (next === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = next;
     try {
-      if (next === "auto") localStorage.removeItem("theme");
-      else localStorage.setItem("theme", next);
+      localStorage.setItem("theme", next);
     } catch {
       /* storage blocked: the choice lasts for this page only */
     }
@@ -41,7 +45,7 @@ function useTheme(): [Theme, () => void] {
 
 function PageSkeleton() {
   return (
-    <div className="grid gap-6 lg:grid-cols-[20rem_1fr]" aria-busy="true" aria-label="Loading">
+    <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[20rem_1fr]" aria-busy="true" aria-label="Loading">
       <div className="skeleton h-72" />
       <div className="flex flex-col gap-4">
         <div className="skeleton h-28" />
@@ -53,47 +57,56 @@ function PageSkeleton() {
 
 function Shell() {
   const [theme, cycleTheme] = useTheme();
+  const ThemeIcon = THEME_ICON[theme];
+  const landing = useLocation().pathname === "/";
   return (
     <div className="min-h-[100dvh]">
-      <header className="border-b border-line bg-surface">
+      <header
+        className={`sticky top-0 z-30 border-b backdrop-blur-md ${
+          landing ? "border-transparent bg-canvas/70" : "border-line bg-surface/85"
+        }`}
+      >
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
-          <div className="flex items-baseline gap-2">
-            <span className="text-lg font-semibold tracking-tight">Pratyaksh</span>
-            <span className="hidden text-sm text-ink-soft md:inline">live-human verification for bank calls</span>
-          </div>
-          <nav className="ml-auto flex gap-1">
-            {tabs.map((t) => (
+          <Link to="/" className="press flex items-center gap-2 rounded-lg" aria-label="Pratyaksh home">
+            <Logo />
+            <span className="hidden font-display text-lg font-semibold tracking-tight sm:inline">Pratyaksh</span>
+          </Link>
+          <nav className="ml-auto flex gap-0.5 sm:gap-1">
+            {tabs.map(({ to, label, icon: Icon }) => (
               <NavLink
-                key={t.to}
-                to={t.to}
+                key={to}
+                to={to}
+                aria-label={label}
                 className={({ isActive }) =>
-                  `press whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium sm:px-3 ${
-                    isActive ? "bg-accent/10 text-accent" : "text-ink-soft hover:bg-sunken hover:text-ink"
+                  `press flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium ${
+                    isActive ? "bg-accent/12 text-accent" : "text-ink-soft hover:bg-sunken hover:text-ink"
                   }`
                 }
               >
-                {t.label}
+                <Icon size={17} aria-hidden />
+                <span className="hidden md:inline">{label}</span>
               </NavLink>
             ))}
           </nav>
           <button
-            className="press hidden rounded-lg px-2.5 py-1.5 text-sm font-medium text-ink-soft ring-1 ring-line hover:text-ink sm:block"
+            className="press grid size-9 place-items-center rounded-lg text-ink-soft ring-1 ring-line hover:text-ink"
             onClick={cycleTheme}
             aria-label={`Colour theme: ${theme}. Change`}
-            title="Colour theme"
+            title={`Theme: ${theme}`}
           >
-            {theme === "auto" ? "Auto" : theme === "light" ? "Light" : "Dark"}
+            <ThemeIcon size={18} aria-hidden />
           </button>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className={landing ? "" : "mx-auto max-w-7xl px-4 py-6"}>
         <Suspense fallback={<PageSkeleton />}>
           <Routes>
-            <Route path="/" element={<Navigate to="/console" replace />} />
+            <Route path="/" element={<LandingPage />} />
             <Route path="/console" element={<ConsolePage />} />
             <Route path="/call" element={<CallerPage />} />
             <Route path="/bank" element={<BankAppPage />} />
             <Route path="/eval" element={<EvalPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </main>
@@ -103,8 +116,10 @@ function Shell() {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
-      <Shell />
-    </BrowserRouter>
+    <IconContext.Provider value={{ weight: "duotone", size: 18 }}>
+      <BrowserRouter>
+        <Shell />
+      </BrowserRouter>
+    </IconContext.Provider>
   </StrictMode>,
 );

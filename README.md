@@ -24,7 +24,7 @@ src/pratyaksh/
   api/                 FastAPI verifier (HTTP + WebSocket)
   agent/               LiveKit Voice Agent worker (thin; ADR-0001)
   eval/                Eval Runs: export recordings, measure Catch Rate
-web/                   Vite + React + TS: Console, Caller app, Bank App, Eval page
+web/                   Vite + React + TS: landing page, Console, Caller app, Bank App, Eval page
 attacker/              red-team Clone tools (separate laptop, consent only)
 infra/                 docker-compose for MySQL + LiveKit
 tests/                 pytest, all through module interfaces
@@ -99,7 +99,8 @@ npm run dev               # http://localhost:5173
 ```
 
 Open:
-- **Console** (projector): `http://localhost:5173/console`. Type `CONSOLE_KEY` into the Agent Review or Verification Receipt box when asked. The strip at the top says **Ready** only when the setup can take a real Call; its warnings say what to fix.
+- **Landing page** (open first for the judges): `http://localhost:5173/`. The hero plays a labelled simulation of a real Customer and a Clone; the numbers below it are live from the verifier. Dark by default; the header button switches to light or the system setting.
+- **Console** (projector): `http://localhost:5173/console`. It asks for `CONSOLE_KEY` once per tab. The Transcript tab shows both sides of each Call with Signals and hearing times (Download .txt for a fraud case); the strip above each Call shows the Customer's risk and any Voice Pause. The strip at the top says **Ready** only when the setup can take a real Call; its warnings say what to fix.
 - **Caller app**: `http://localhost:5173/call`
 - **Bank App** on the Customer's phone: the **pairing link** printed by `pratyaksh-seed` (and in the API log), opened as `http://<LAN_IP>:5173/bank?customer=…&device=…`. Without the link the Bank App shows nothing, which is the point: the attacker laptop can't read codes or approve requests.
 - **Eval**: `http://localhost:5173/eval`

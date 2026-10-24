@@ -1,7 +1,30 @@
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import {
+  CheckCircle, CurrencyInr, GearSix, type Icon, Prohibit, SimCard, UserPlus, Wallet, Warning, Waveform,
+} from "@phosphor-icons/react";
 import { api } from "./api";
-import type { Customer, Outcome, Verdict } from "./types";
+import type { Customer, Outcome, RequestKind, Verdict } from "./types";
+
+export const REQUEST_ICON: Record<RequestKind, Icon> = {
+  balance_enquiry: Wallet,
+  add_payee: UserPlus,
+  sim_swap: SimCard,
+  high_value_transfer: CurrencyInr,
+  account_service: GearSix,
+};
+
+export function Logo({ size = 28 }: { size?: number }) {
+  return (
+    <span
+      className="inline-grid shrink-0 place-items-center rounded-lg bg-accent text-on-color"
+      style={{ width: size, height: size }}
+      aria-hidden
+    >
+      <Waveform size={size * 0.62} weight="bold" />
+    </span>
+  );
+}
 
 export function Card({ title, children, className = "" }: { title?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -12,17 +35,23 @@ export function Card({ title, children, className = "" }: { title?: ReactNode; c
   );
 }
 
-const verdictStyle: Record<Verdict, string> = {
-  PASS: "bg-pass/10 text-pass ring-pass/30",
-  STEP_UP: "bg-stepup/10 text-stepup ring-stepup/30",
-  BLOCK: "bg-block/10 text-block ring-block/30",
+const verdictStyle: Record<Verdict, [string, Icon]> = {
+  PASS: ["bg-pass/10 text-pass ring-pass/30", CheckCircle],
+  STEP_UP: ["bg-stepup/10 text-stepup ring-stepup/30", Warning],
+  BLOCK: ["bg-block/10 text-block ring-block/30", Prohibit],
 };
 
-export function VerdictBadge({ verdict }: { verdict: Verdict | null }) {
+export function VerdictBadge({ verdict, large = false }: { verdict: Verdict | null; large?: boolean }) {
   if (!verdict) return <span className="text-sm text-ink-soft">pending</span>;
+  const [cls, Glyph] = verdictStyle[verdict];
   // Pops in when the Policy decides: the one moment on the Console that matters most.
   return (
-    <span className={`motion-pop inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${verdictStyle[verdict]}`}>
+    <span
+      className={`motion-pop inline-flex items-center gap-1 rounded-full font-bold ring-1 ${cls} ${
+        large ? "px-3 py-1 text-sm" : "px-2.5 py-0.5 text-xs"
+      }`}
+    >
+      <Glyph size={large ? 16 : 13} weight="bold" aria-hidden />
       {verdict === "STEP_UP" ? "STEP-UP" : verdict}
     </span>
   );
@@ -117,6 +146,73 @@ export function CustomerPicker({ value, onChange, label = "Customer" }: {
       </select>
     </label>
   );
+}
+
+/** Fades its children up once they scroll into view. Visible at once under reduced motion (CSS). */
+export function Reveal({ children, className = "", i = 0, as: Tag = "div" }: {
+  children: ReactNode;
+  className?: string;
+  i?: number;
+  as?: "div" | "section" | "li";
+}) {
+  const ref = useRef<HTMLElement | null>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setSeen(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setSeen(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <Tag
+      ref={ref as never}
+      className={`reveal ${seen ? "is-visible" : ""} ${className}`}
+      style={{ "--i": i } as CSSProperties}
+    >
+      {children}
+    </Tag>
+  );
+}
+
+export function prefersReducedMotion(): boolean {
+  return typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/** Counts up to `value` when it first arrives or changes (straight to it under reduced motion). */
+export function CountUp({ value, decimals = 0, ms = 900 }: { value: number; decimals?: number; ms?: number }) {
+  const [shown, setShown] = useState(prefersReducedMotion() ? value : 0);
+  const from = useRef(0);
+  useEffect(() => {
+    if (prefersReducedMotion()) {
+      setShown(value);
+      return;
+    }
+    const start = performance.now();
+    const begin = from.current;
+    let raf = 0;
+    const step = (now: number) => {
+      const k = Math.min(1, (now - start) / ms);
+      const eased = 1 - Math.pow(1 - k, 4);
+      setShown(begin + (value - begin) * eased);
+      if (k < 1) raf = requestAnimationFrame(step);
+      else from.current = value;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, ms]);
+  return <>{shown.toFixed(decimals)}</>;
 }
 
 export function ErrorNote({ error }: { error: string | null }) {

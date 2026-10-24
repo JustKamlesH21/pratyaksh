@@ -1,5 +1,6 @@
 import { Room, RoomEvent, Track, type RemoteTrack } from "livekit-client";
 import { useEffect, useRef, useState } from "react";
+import { ChatText, PhoneCall, PhoneDisconnect, Waveform } from "@phosphor-icons/react";
 import { api } from "../api";
 import { Card, CustomerPicker, ErrorNote } from "../components";
 
@@ -68,23 +69,23 @@ export default function CallerPage() {
         <div className="flex flex-col gap-4">
           <CustomerPicker value={customer} onChange={setCustomer} label="Calling as" />
           {status === "in-call" || status === "connecting" ? (
-            <button className="press rounded-lg bg-block px-4 py-3 font-bold text-on-color" onClick={hangUp}>
-              Hang up
+            <button className="press inline-flex items-center justify-center gap-2 rounded-lg bg-block px-4 py-3 font-bold text-on-color" onClick={hangUp}>
+              <PhoneDisconnect size={20} /> Hang up
             </button>
           ) : (
             <button
-              className="press rounded-lg bg-accent px-4 py-3 font-bold text-on-color disabled:cursor-not-allowed disabled:opacity-40"
+              className="press inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-3 font-bold text-on-color disabled:cursor-not-allowed disabled:opacity-40"
               disabled={!customer}
               onClick={call}
             >
-              {status === "ended" ? "Call again" : "Call"}
+              <PhoneCall size={20} /> {status === "ended" ? "Call again" : "Call"}
             </button>
           )}
           <p className="flex items-center gap-2 text-sm text-ink-soft" aria-live="polite">
             {status === "in-call" ? (
               agentSpeaking ? (
                 <span className="inline-flex items-center gap-1.5 font-semibold text-accent">
-                  <span className="live-dot" aria-hidden /> The bank is speaking
+                  <Waveform size={17} aria-hidden /> The bank is speaking
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1.5 font-semibold text-pass">
@@ -109,7 +110,7 @@ export default function CallerPage() {
 
       <Card title="What the bank said">
         {captions.length === 0 ? (
-          <p className="text-ink-soft">Captions appear here during the call.</p>
+          <p className="flex items-center gap-2 text-ink-soft"><ChatText size={20} /> Captions appear here during the call.</p>
         ) : (
           <ol className="flex flex-col gap-3">
             {captions.map((c, i) => (

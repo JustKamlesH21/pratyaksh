@@ -1,1 +1,1 @@
-{"root":["./src/api.ts","./src/components.tsx","./src/main.tsx","./src/types.ts","./src/pages/BankAppPage.tsx","./src/pages/CallerPage.tsx","./src/pages/ConsolePage.tsx","./src/pages/EvalPage.tsx","./vite.config.ts"],"version":"5.9.3"}
+{"root":["./src/api.ts","./src/components.tsx","./src/main.tsx","./src/types.ts","./src/pages/BankAppPage.tsx","./src/pages/CallerPage.tsx","./src/pages/ConsolePage.tsx","./src/pages/EvalPage.tsx","./src/pages/LandingPage.tsx","./vite.config.ts"],"version":"5.9.3"}

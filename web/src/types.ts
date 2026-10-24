@@ -58,6 +58,37 @@ export interface CallView {
   updated_at: string;
   events?: AuditEvent[];
   audit?: AuditCheck;
+  transcript?: TranscriptLine[];
+}
+
+/** One line of a Call's Transcript (src/pratyaksh/verification/transcript.py). */
+export interface TranscriptLine {
+  seq: number;
+  at: string;
+  event: string;
+  speaker: "agent" | "caller" | "system";
+  text: string;
+  tone?: "pass" | "stepup" | "block" | null;
+  understood?: string | null;
+  language?: "en" | "hi" | "kn";
+  by_llm?: boolean;
+  note?: string;
+  challenge?: ChallengeKind;
+  liveness?: number | null;
+  signals?: Partial<Signals>;
+  timings_ms?: Record<string, number>;
+}
+
+export interface CustomerRisk {
+  customer: { id: string; name: string; phone_masked: string };
+  risk: "high" | "elevated" | "normal";
+  calls_7d: number;
+  by_outcome_7d: Record<string, number>;
+  blocked_24h: number;
+  open_security_alerts: number;
+  voice_pause: { active: boolean; minutes_left: number | null };
+  last_blocked_call: string | null;
+  recent: { id: string; request: RequestKind | null; outcome: Outcome | null; created_at: string }[];
 }
 
 /** The Audit Trail's hash chain, recomputed by the verifier. */
@@ -90,6 +121,7 @@ export interface ReceiptCheck {
   valid: boolean;
   reason: string;
   claims: ReceiptClaims | null;
+  redeemed?: boolean;
 }
 
 export interface Status {
@@ -105,6 +137,8 @@ export interface Stats {
   by_outcome: Record<string, number>;
   blocked: number;
   avg_added_seconds: number | null;
+  hearing_ms: { responses: number; p50: number | null; p95: number | null };
+  attack_wave: { active: boolean; blocked: number; customers: number; minutes: number; threshold: number };
 }
 
 export interface DeviceMessage {

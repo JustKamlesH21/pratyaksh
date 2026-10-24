@@ -6,12 +6,15 @@
     <meta name="color-scheme" content="light dark" />
     <title>Pratyaksh</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%228%22 fill=%22%232b54cc%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%226%22 fill=%22%23fcfcfd%22/%3E%3C/svg%3E" />
+    <meta name="description" content="Pratyaksh checks that a bank caller is a live person, not an AI voice clone, before a risky Request goes through." />
     <script>
-      // Apply a theme chosen in the header before the first paint (no flash). Storage may be blocked.
+      // Dark by default; the header toggle can choose light or the system setting. Applied before the
+      // first paint so there is no flash. Storage may be blocked.
+      var t = "dark";
       try {
-        var t = localStorage.getItem("theme");
-        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+        t = localStorage.getItem("theme") || "dark";
       } catch (e) {}
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
     </script>
   </head>
   <body>
