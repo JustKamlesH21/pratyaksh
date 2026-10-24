@@ -46,6 +46,7 @@ class Policy:
             self._machine_ms = float(s["reply_latency"]["machine_ms"])
             self._spoof_mode = str(s["spoof_score"]["mode"])
             self._spoof_block_at = float(s["spoof_score"]["block_at"])
+            self.max_code_digits = int(s.get("code_match", {}).get("max_digits", 8))
             self._weights = {k: float(v) for k, v in raw["weights"].items()}
             v = raw["verdict"]
             self._pass_at = float(v["pass_at"])
@@ -62,6 +63,8 @@ class Policy:
             raise PolicyError("verdict.block_at must be lower than verdict.pass_at")
         if self._machine_ms <= self._human_ms:
             raise PolicyError("reply_latency.machine_ms must exceed human_ms")
+        if self.max_code_digits < 6:
+            raise PolicyError("code_match.max_digits must be at least 6, the length of a Possession Code")
 
     @classmethod
     def load(cls, path: str | Path | None = None) -> "Policy":

@@ -556,6 +556,8 @@ class Verifier:
         now = self._now()
         if not spoken:
             match: bool | None = None
+        elif len(spoken) > self._policy.max_code_digits:
+            match = False  # reading out a long run of digits would try dozens of codes at once
         else:
             # Accept the code anywhere in what was said ("my code is 4 8 1 9 2 7").
             candidates = {spoken[i : i + 6] for i in range(max(1, len(spoken) - 5))}

@@ -219,3 +219,26 @@ def test_a_misread_code_gets_one_retry(harness):
     assert step.listen and step.long_reply
     step = h.say(call_id, f"{code[:3]} {code[3:]}", voiced(), 900)
     assert step.outcome is Outcome.PASSED
+
+
+def test_reading_out_a_long_run_of_digits_cannot_guess_the_code(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    code = h.code_on_device(C)
+    # 27 digits hold 22 six-digit windows; one of them is the real code.
+    spray = " ".join("1234567890" + code + "09876543210"[:14])
+    step = h.say(call_id, spray, voiced(), 900)
+    assert "didn't match" in step.say
+    step = h.say(call_id, spray, voiced(), 900)
+    assert step.outcome is Outcome.BLOCKED
+
+
+def test_a_stray_digit_around_the_code_still_matches(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    step = h.say(call_id, f"my code is {' '.join(h.code_on_device(C))} 2", voiced(), 900)
+    assert step.outcome is Outcome.PASSED
