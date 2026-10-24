@@ -68,24 +68,35 @@ export default function CallerPage() {
         <div className="flex flex-col gap-4">
           <CustomerPicker value={customer} onChange={setCustomer} label="Calling as" />
           {status === "in-call" || status === "connecting" ? (
-            <button className="rounded-lg bg-block px-4 py-3 font-bold text-white" onClick={hangUp}>
+            <button className="press rounded-lg bg-block px-4 py-3 font-bold text-on-color" onClick={hangUp}>
               Hang up
             </button>
           ) : (
             <button
-              className="rounded-lg bg-violet px-4 py-3 font-bold text-white disabled:opacity-40"
+              className="press rounded-lg bg-accent px-4 py-3 font-bold text-on-color disabled:cursor-not-allowed disabled:opacity-40"
               disabled={!customer}
               onClick={call}
             >
               {status === "ended" ? "Call again" : "Call"}
             </button>
           )}
-          <p className="text-sm text-ink-soft">
-            Status: <b>{status}</b>
-            {status === "in-call" && (agentSpeaking ? " · bank is speaking" : " · your turn")}
+          <p className="flex items-center gap-2 text-sm text-ink-soft" aria-live="polite">
+            {status === "in-call" ? (
+              agentSpeaking ? (
+                <span className="inline-flex items-center gap-1.5 font-semibold text-accent">
+                  <span className="live-dot" aria-hidden /> The bank is speaking
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 font-semibold text-pass">
+                  <span className="live-dot" aria-hidden /> Your turn
+                </span>
+              )
+            ) : (
+              <>Status: <b className="text-ink">{status === "connecting" ? "connecting…" : status}</b></>
+            )}
           </p>
           <ErrorNote error={error} />
-          <details className="text-xs text-ink-soft/80">
+          <details className="text-xs text-ink-soft">
             <summary className="cursor-pointer font-semibold">Red-team mode</summary>
             <p className="mt-2">
               On the attacker laptop, choose the victim here and set this browser's microphone to the virtual cable
@@ -98,13 +109,15 @@ export default function CallerPage() {
 
       <Card title="What the bank said">
         {captions.length === 0 ? (
-          <p className="text-ink-soft/70">Captions appear here during the call.</p>
+          <p className="text-ink-soft">Captions appear here during the call.</p>
         ) : (
           <ol className="flex flex-col gap-3">
             {captions.map((c, i) => (
               <li
                 key={c.at + i}
-                className={`rounded-lg px-4 py-3 text-lg ${i === captions.length - 1 ? "bg-ink text-white" : "bg-paper"}`}
+                className={`motion-enter rounded-lg px-4 py-3 text-lg ${
+                  i === captions.length - 1 ? "bg-accent/10 text-ink ring-1 ring-accent/30" : "bg-sunken text-ink-soft"
+                }`}
               >
                 {c.text}
               </li>

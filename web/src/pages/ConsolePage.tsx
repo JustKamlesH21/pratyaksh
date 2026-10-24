@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { api, eventsUrl } from "../api";
 import { Card, ErrorNote, Meter, OutcomeLabel, VerdictBadge } from "../components";
 import type { AuditCheck, CallView, ReceiptCheck, Signals, Stats, Status } from "../types";
@@ -10,6 +10,7 @@ const T = { task: 0.7, whisper: 0.6, humanMs: 1200, machineMs: 3000, spoof: 0.85
 function useLiveCalls() {
   const [calls, setCalls] = useState<Record<string, CallView>>({});
   const [connected, setConnected] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -26,6 +27,7 @@ function useLiveCalls() {
         const msg = JSON.parse(e.data);
         if (msg.type === "snapshot") {
           setCalls(Object.fromEntries((msg.calls as CallView[]).map((c) => [c.id, c])));
+          setLoaded(true);
         } else if (msg.type === "call") {
           const c = msg.call as CallView;
           // Updates can arrive out of order across server threads; keep the newest.
@@ -45,11 +47,11 @@ function useLiveCalls() {
     () => Object.values(calls).sort((a, b) => b.created_at.localeCompare(a.created_at)),
     [calls],
   );
-  return { list, connected, setCalls };
+  return { list, connected, loaded, setCalls };
 }
 
 export default function ConsolePage() {
-  const { list, connected, setCalls } = useLiveCalls();
+  const { list, connected, loaded, setCalls } = useLiveCalls();
   const [selected, setSelected] = useState<string | null>(null);
   const call = list.find((c) => c.id === selected) ?? list[0];
 
@@ -57,20 +59,40 @@ export default function ConsolePage() {
     <div className="flex flex-col gap-6">
       <StatusBar />
       <div className="grid gap-6 lg:grid-cols-[20rem_1fr]">
-        <Card title={<span>Calls <span className={connected ? "text-pass" : "text-block"}>{connected ? "● live" : "● offline"}</span></span>}>
-          {list.length === 0 && <p className="text-sm text-ink-soft/70">No calls yet. Place one from the Caller tab.</p>}
+        <Card
+          title={
+            <span className="flex items-center justify-between">
+              Calls
+              {connected ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-pass">
+                  <span className="live-dot" aria-hidden /> Live
+                </span>
+              ) : (
+                <span className="text-xs font-medium text-block">Reconnecting</span>
+              )}
+            </span>
+          }
+        >
+          {!loaded && (
+            <div className="flex flex-col gap-2" aria-busy="true">
+              {[0, 1, 2].map((i) => <div key={i} className="skeleton h-12" />)}
+            </div>
+          )}
+          {loaded && list.length === 0 && <p className="text-sm text-ink-soft">No calls yet. Place one from the Caller tab.</p>}
           <ul className="flex flex-col gap-1">
-            {list.map((c) => (
-              <li key={c.id}>
+            {list.map((c, i) => (
+              <li key={c.id} className="motion-enter" style={{ "--i": i } as CSSProperties}>
                 <button
                   onClick={() => setSelected(c.id)}
-                  className={`w-full rounded-lg px-3 py-2 text-left ${call?.id === c.id ? "bg-ink text-white" : "hover:bg-paper"}`}
+                  className={`press w-full rounded-lg px-3 py-2 text-left ${
+                    call?.id === c.id ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-sunken"
+                  }`}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold">{c.customer.name}</span>
                     <VerdictBadge verdict={c.verdict} />
                   </div>
-                  <div className="flex items-center justify-between text-xs opacity-80">
+                  <div className="flex items-center justify-between text-xs text-ink-soft">
                     <span>{c.request ? REQUEST_LABEL[c.request] : "listening…"}</span>
                     <span>{new Date(c.created_at + "Z").toLocaleTimeString()}</span>
                   </div>
@@ -105,26 +127,33 @@ function StatusBar() {
   const passed = (stats?.by_outcome.passed ?? 0) + (stats?.by_outcome.passed_pending_review ?? 0);
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl bg-white px-4 py-3 text-sm shadow-sm">
-        <span className={`font-bold ${status?.ready ? "text-pass" : "text-stepup"}`}>
-          {status ? (status.ready ? "● Ready" : "● Not ready") : "● Verifier unreachable"}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-line bg-surface px-4 py-3 text-sm">
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${
+            !status ? "bg-block/10 text-block ring-block/30"
+            : status.ready ? "bg-pass/10 text-pass ring-pass/30" : "bg-stepup/10 text-stepup ring-stepup/30"
+          }`}
+        >
+          {status ? (status.ready ? "Ready" : "Not ready") : "Verifier unreachable"}
         </span>
         {stats && (
           <>
             <span><b>{stats.calls}</b> Calls</span>
             <span className="text-pass"><b>{passed}</b> passed</span>
             <span className="text-block"><b>{stats.blocked}</b> blocked</span>
-            <span>Added Time <b>{stats.avg_added_seconds === null ? "—" : `${stats.avg_added_seconds.toFixed(1)} s`}</b></span>
+            <span>Added Time <b>{stats.avg_added_seconds === null ? "-" : `${stats.avg_added_seconds.toFixed(1)} s`}</b></span>
           </>
         )}
         {status && (
-          <span className="ml-auto text-xs text-ink-soft">
-            {status.database.dialect} · {status.speech.backend} {status.speech.whisper_model} · LLM {status.llm.model ?? "off"}
+          <span className="ml-auto flex gap-4 text-xs text-ink-soft">
+            <span>{status.database.dialect}</span>
+            <span>{status.speech.backend} {status.speech.whisper_model}</span>
+            <span>LLM {status.llm.model ?? "off"}</span>
           </span>
         )}
       </div>
       {status && status.warnings.length > 0 && (
-        <ul className="list-disc rounded-xl bg-amber/15 px-8 py-2 text-sm">
+        <ul className="motion-enter list-disc rounded-xl border border-stepup/25 bg-stepup/[0.06] px-8 py-2 text-sm">
           {status.warnings.map((w) => <li key={w}>{w}</li>)}
         </ul>
       )}
@@ -136,11 +165,12 @@ function AuditBadge({ audit }: { audit?: AuditCheck }) {
   if (!audit) return null;
   return audit.intact ? (
     <p className="mt-3 text-sm">
-      <b className="text-pass">✓ Audit Trail intact</b>{" "}
-      <span className="text-ink-soft">· {audit.events} events, hash-chained · head <span className="font-mono">{audit.head?.slice(0, 12)}…</span></span>
+      <b className="text-pass">Audit Trail intact</b>{" "}
+      <span className="ml-2 text-ink-soft">{audit.events} events, hash-chained</span>
+      <span className="ml-3 font-mono text-xs text-ink-soft">head {audit.head?.slice(0, 12)}…</span>
     </p>
   ) : (
-    <p className="mt-3 text-sm font-bold text-block">✗ Audit Trail altered at event #{audit.broken_at}</p>
+    <p className="motion-pop mt-3 text-sm font-bold text-block">Audit Trail altered at event #{audit.broken_at}</p>
   );
 }
 
@@ -166,27 +196,28 @@ function ReceiptPanel({ callId, consoleKey, onKey }: { callId: string; consoleKe
   }
   const c = check?.claims;
   return (
-    <div className="mt-4 rounded-lg bg-paper p-3 text-sm">
+    <div className="mt-4 rounded-lg bg-sunken p-3 text-sm">
       <div className="flex flex-wrap items-center gap-3">
         <span className="font-semibold">Verification Receipt</span>
         <input
           type="password"
           placeholder="console key"
-          className="ml-auto w-36 rounded-md border border-ink/20 bg-white px-2 py-1 text-sm"
+          aria-label="Console key"
+          className="ml-auto w-36 rounded-lg border border-line bg-surface px-2 py-1 text-sm"
           value={consoleKey}
           onChange={(e) => onKey(e.target.value)}
         />
-        <button className="rounded-md bg-violet px-3 py-1.5 text-sm font-bold text-white" onClick={fetchReceipt}>
+        <button className="press rounded-lg bg-accent px-3 py-1.5 text-sm font-bold text-on-color" onClick={fetchReceipt}>
           {check ? "Refresh" : "Issue & verify"}
         </button>
       </div>
       {check && (
-        <p className="mt-2">
-          {check.valid ? <b className="text-pass">✓ Signature valid (Ed25519)</b> : <b className="text-block">✗ {check.reason}</b>}
+        <p className="motion-enter mt-2 flex flex-wrap gap-x-4 gap-y-1">
+          {check.valid ? <b className="text-pass">Signature valid (Ed25519)</b> : <b className="text-block">Invalid: {check.reason}</b>}
           {c && (
             <>
-              {" · "}core banking may act: <b className={c.executable ? "text-pass" : "text-block"}>{c.executable ? "yes" : "no"}</b>
-              {" · "}expires {new Date(c.exp * 1000).toLocaleTimeString()}
+              <span>Core banking may act: <b className={c.executable ? "text-pass" : "text-block"}>{c.executable ? "yes" : "no"}</b></span>
+              <span className="text-ink-soft">Expires {new Date(c.exp * 1000).toLocaleTimeString()}</span>
             </>
           )}
         </p>
@@ -254,16 +285,16 @@ function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView
       <Card>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
           <div>
-            <p className="text-xs uppercase tracking-wide text-ink-soft">Caller claims to be</p>
+            <p className="text-xs font-medium text-ink-soft">Caller claims to be</p>
             <p className="text-xl font-bold">{call.customer.name}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-ink-soft">Request</p>
-            <p className="font-semibold">{call.request ? REQUEST_LABEL[call.request] : "—"}</p>
+            <p className="text-xs font-medium text-ink-soft">Request</p>
+            <p className="font-semibold">{call.request ? REQUEST_LABEL[call.request] : "-"}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-ink-soft">Liveness</p>
-            <p className="font-mono text-xl">{call.liveness?.toFixed(2) ?? "—"}</p>
+            <p className="text-xs font-medium text-ink-soft">Liveness</p>
+            <p className="font-mono text-xl">{call.liveness?.toFixed(2) ?? "-"}</p>
           </div>
           <div className="ml-auto flex flex-col items-end gap-1">
             <VerdictBadge verdict={call.verdict} />
@@ -271,26 +302,27 @@ function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView
           </div>
         </div>
         {call.reasons.length > 0 && (
-          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm">
+          <ul className="motion-enter mt-4 list-disc space-y-1 pl-5 text-sm">
             {call.reasons.map((r, i) => (
               <li key={i} className={i === 0 ? "font-semibold" : ""}>{r}</li>
             ))}
           </ul>
         )}
         {call.review_status === "pending" && (
-          <div className="mt-4 flex items-center gap-3 rounded-lg bg-amber/15 p-3">
+          <div className="motion-enter mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-stepup/30 bg-stepup/10 p-3">
             <span className="text-sm font-semibold">Agent Review needed for this high-value request.</span>
             <input
               type="password"
               placeholder="console key"
-              className="ml-auto w-36 rounded-md border border-ink/20 px-2 py-1 text-sm"
+              aria-label="Console key"
+              className="ml-auto w-36 rounded-lg border border-line bg-surface px-2 py-1 text-sm"
               value={consoleKey}
               onChange={(e) => saveKey(e.target.value)}
             />
-            <button className="rounded-md bg-white px-3 py-1.5 text-sm font-bold text-block ring-1 ring-block/40" onClick={() => review(false)}>
+            <button className="press rounded-lg bg-surface px-3 py-1.5 text-sm font-bold text-block ring-1 ring-block/40" onClick={() => review(false)}>
               Reject
             </button>
-            <button className="rounded-md bg-pass px-3 py-1.5 text-sm font-bold text-white" onClick={() => review(true)}>
+            <button className="press rounded-lg bg-pass px-3 py-1.5 text-sm font-bold text-on-color" onClick={() => review(true)}>
               Approve
             </button>
           </div>
@@ -308,7 +340,9 @@ function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`rounded-md px-3 py-1.5 text-sm font-semibold ${tab === t ? "bg-violet text-white" : "bg-white text-ink-soft"}`}
+            className={`press rounded-lg px-3 py-1.5 text-sm font-semibold ${
+              tab === t ? "bg-accent/10 text-accent" : "text-ink-soft hover:bg-sunken hover:text-ink"
+            }`}
           >
             {t === "evidence" ? "Challenges & Signals" : "Audit Trail"}
           </button>
@@ -317,12 +351,13 @@ function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView
 
       {tab === "evidence" ? (
         <div className="grid gap-4 xl:grid-cols-2">
-          {call.challenges.length === 0 && <p className="text-sm text-ink-soft/70">No Challenges yet.</p>}
+          {call.challenges.length === 0 && <p className="text-sm text-ink-soft">No Challenges yet.</p>}
           {call.challenges.map((ch, i) => {
             const ev = call.evidence[i];
             return (
               <Card
                 key={i}
+                className="motion-enter"
                 title={
                   <span className="flex items-center justify-between">
                     <span>{i + 1}. {ch.kind === "whisper_phrase" ? "Whisper Phrase" : "Possession Code"}</span>
@@ -331,7 +366,14 @@ function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView
                 }
               >
                 {ch.phrase && <p className="mb-2 font-mono text-sm">expected: “{ch.phrase}”</p>}
-                {ev ? <SignalView kind={ch.kind} s={ev.signals} /> : <p className="text-sm text-violet">waiting for the Caller…</p>}
+                {ev ? (
+                  <SignalView kind={ch.kind} s={ev.signals} />
+                ) : (
+                  <div className="flex flex-col gap-2.5" aria-busy="true">
+                    <p className="text-sm text-accent">Waiting for the Caller…</p>
+                    {[0, 1, 2].map((k) => <div key={k} className="skeleton h-2" />)}
+                  </div>
+                )}
               </Card>
             );
           })}
@@ -340,7 +382,7 @@ function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView
         <Card>
           <ol className="flex flex-col gap-2 font-mono text-xs">
             {events.map((e) => (
-              <li key={e.seq} className="grid grid-cols-[2.5rem_6rem_10rem_1fr] gap-2 border-b border-ink/5 pb-2">
+              <li key={e.seq} className="grid grid-cols-[2.5rem_6rem_10rem_1fr] gap-2 border-b border-line pb-2 last:border-b-0">
                 <span className="text-ink-soft">#{e.seq}</span>
                 <span className="text-ink-soft">{new Date(e.at + "Z").toLocaleTimeString()}</span>
                 <span className="font-semibold">{e.kind}</span>
@@ -370,7 +412,7 @@ function SignalView({ kind, s }: { kind: string; s: Signals }) {
       <Meter label="Spoof Score" value={s.spoof_score} good={false} threshold={T.spoof} />
       {kind === "possession_code" && (
         <p className="text-sm">
-          code read out: <span className="font-mono">{s.spoken_digits ?? "—"}</span>{" "}
+          code read out: <span className="font-mono">{s.spoken_digits ?? "-"}</span>{" "}
           {s.code_match === true && <b className="text-pass">matches the device</b>}
           {s.code_match === false && <b className="text-block">does not match</b>}
         </p>
