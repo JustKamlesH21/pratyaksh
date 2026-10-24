@@ -5,6 +5,7 @@ import hmac
 import logging
 import random
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -29,7 +30,7 @@ from ..signals import SignalExtractor
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
 from .receipts import InvalidReceipt, ReceiptSigner
-from .interpreter import Context, Interpreter, TurnKind
+from .interpreter import Context, Interpreter, TurnKind, Understanding
 from .store import (
     GENESIS, AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow, chain_hash,
 )
@@ -90,6 +91,28 @@ def _hash_code(call_id: str, code: str) -> str:
     return hashlib.sha256(f"{call_id}:{code}".encode()).hexdigest()
 
 
+@dataclass(frozen=True)
+class _Turn:
+    """What a Call is waiting for, read before the slow work (speech models, LLM) so that no
+    transaction or row lock is held during it."""
+
+    version: int  # Audit Trail events so far: every change to a Call adds one
+    state: CallState
+    challenge: Challenge | None  # the Challenge being answered, if any
+    repeated: bool  # the Challenge was already repeated once after silence
+    context: Context
+
+
+@dataclass(frozen=True)
+class _Heard:
+    """What a Response said, worked out outside any transaction."""
+
+    transcript: str = ""
+    understanding: Understanding | None = None  # before a Request
+    signals: Signals | None = None  # during a Challenge
+    off_script: Understanding | None = None  # during a Challenge: a question, "hold on"… not an answer
+
+
 class Verifier:
     def __init__(
         self,
@@ -147,12 +170,20 @@ class Verifier:
 
     def respond(self, call_id: str, response: Response) -> Step:
         try:
-            with self._db.session() as s:
+            with self._db.session() as s:  # 1. what the Call is waiting for (short read, no lock)
+                call = s.get(CallRow, call_id)
+                if call is None:
+                    raise CallNotFound(call_id)
+                turn = self._turn(s, call)
+            heard = self._hear(turn, response)  # 2. speech models and the LLM: seconds, no transaction
+            with self._db.session() as s:  # 3. apply under the row lock
                 call = self._lock(s, call_id)
-                if call.state == CallState.AWAITING_REQUEST:
-                    step = self._on_request(s, call, response)
+                if self._turn(s, call) != turn:  # the Caller hung up or approved in the app meanwhile
+                    step = self._pending(call)
+                elif call.state == CallState.AWAITING_REQUEST:
+                    step = self._on_request(s, call, heard)
                 elif call.state == CallState.CHALLENGING:
-                    step = self._on_challenge_response(s, call, response)
+                    step = self._on_challenge_response(s, call, response, heard)
                 else:  # Responses after close or while waiting for the app are ignored
                     step = self._pending(call)
         except CallNotFound:
@@ -163,6 +194,26 @@ class Verifier:
             step = self._recover(call_id)
         self._publish_after(call_id)
         return step
+
+    def _turn(self, s: Session, call: CallRow) -> _Turn:
+        version = s.scalar(select(func.max(AuditEventRow.seq)).where(AuditEventRow.call_id == call.id)) or 0
+        issued = call.challenges[-1] if call.state == CallState.CHALLENGING and call.challenges else None
+        challenge = Challenge(ChallengeKind(issued["kind"]), issued["prompt"], issued.get("phrase", "")) if issued else None
+        request = RequestKind(call.request) if call.request else None
+        return _Turn(
+            version, CallState(call.state), challenge, bool(issued and issued.get("repeated")),
+            Context(challenge.kind if challenge else None, request, self._pending(call).say),
+        )
+
+    def _hear(self, turn: _Turn, response: Response) -> _Heard:
+        speech = response.reply_latency_ms is not None
+        if turn.state is CallState.AWAITING_REQUEST:
+            transcript = self._signals.transcribe(response.audio) if speech else ""
+            return _Heard(transcript, understanding=self._interpreter.understand(transcript, turn.context))
+        if turn.state is CallState.CHALLENGING and turn.challenge and (speech or turn.repeated):
+            signals = self._signals.extract(turn.challenge, response)
+            return _Heard(signals.transcript, signals=signals, off_script=self._off_script(turn, signals))
+        return _Heard()  # silence the first time (the Challenge is repeated), or nothing to hear
 
     def _recover(self, call_id: str) -> Step:
         with self._db.session() as s:
@@ -413,9 +464,9 @@ class Verifier:
 
     # ------------------------------------------------------------------ state machine
 
-    def _on_request(self, s: Session, call: CallRow, response: Response) -> Step:
-        transcript = self._signals.transcribe(response.audio) if response.reply_latency_ms is not None else ""
-        heard = self._interpreter.understand(transcript, Context(last_said=self._pending(call).say))
+    def _on_request(self, s: Session, call: CallRow, said: _Heard) -> Step:
+        transcript, heard = said.transcript, said.understanding
+        assert heard is not None
         self._audit(
             s, call, "caller_said",
             {"transcript": transcript, "kind": heard.kind.value, "request": heard.request,
@@ -490,7 +541,7 @@ class Verifier:
         self._audit(s, call, "handed_to_agent", {})
         return self._close(s, call, Outcome.HANDED_TO_AGENT, f"{lead_in} {HANDOFF}")
 
-    def _on_challenge_response(self, s: Session, call: CallRow, response: Response) -> Step:
+    def _on_challenge_response(self, s: Session, call: CallRow, response: Response, said: _Heard) -> Step:
         issued = call.challenges[-1]
         challenge = Challenge(ChallengeKind(issued["kind"]), issued["prompt"], issued.get("phrase", ""))
         if response.reply_latency_ms is None and not issued.get("repeated"):
@@ -501,9 +552,9 @@ class Verifier:
                 call, Step(call.id, f"Sorry, I didn't hear you. {challenge.prompt}", listen=True,
                            long_reply=challenge.kind is ChallengeKind.POSSESSION_CODE, state=CallState.CHALLENGING),
             )
-        signals = self._signals.extract(challenge, response)
-
-        off_script = self._off_script(call, challenge, signals)
+        signals = said.signals
+        assert signals is not None
+        off_script = said.off_script
         if off_script is not None:
             heard = off_script
             if heard.kind is TurnKind.APP_APPROVAL:
@@ -583,13 +634,14 @@ class Verifier:
             return self._issue_next(s, call, "Thank you. I need one more check.")
         return self._start_app_approval(s, call, "I need one more confirmation.")
 
-    def _off_script(self, call: CallRow, challenge: Challenge, signals: Signals):
+    def _off_script(self, turn: _Turn, signals: Signals) -> Understanding | None:
         """The Caller said something other than an answer (a question, "repeat", "hold on",
         "use the app", "a person please"). Returns the Understanding, or None to score it as the Response."""
         if not signals.transcript:
             return None
-        context = Context(challenge.kind, RequestKind(call.request) if call.request else None, self._pending(call).say)
-        heard = self._interpreter.understand(signals.transcript, context)
+        challenge = turn.challenge
+        assert challenge is not None
+        heard = self._interpreter.understand(signals.transcript, turn.context)
         if heard.kind in (TurnKind.APP_APPROVAL, TurnKind.HUMAN):
             return heard  # explicit asks win
         if heard.kind is TurnKind.UNCLEAR:

@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from conftest import Harness, voiced, whispered
 
-from pratyaksh.domain import CallState, Outcome
+from pratyaksh.domain import CallState, Outcome, Response
 from pratyaksh.verification import CallNotFound, Database, DeviceNotPaired, NotAllowed, UnknownCustomer
 
 C = "cust-ananya"
@@ -396,3 +396,21 @@ def test_a_forged_expired_or_out_of_date_receipt_is_rejected(harness):
         conn.execute(text("DROP TRIGGER audit_events_no_update"))
         conn.execute(text("UPDATE audit_events SET kind = 'x' WHERE call_id = :c AND seq = 3"), {"c": call_id})
     assert "Audit Trail" in h.verifier.verify_receipt(fresh)["reason"]
+
+
+def test_the_database_is_free_while_a_response_is_heard_and_a_late_one_is_ignored(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+
+    def slow_model(_audio):
+        # While speech-to-text runs, no transaction or row lock is held: the Console can read the
+        # Call and the Caller can hang up.
+        assert h.verifier.call(call_id)["state"] == "awaiting_request"
+        h.verifier.hang_up(call_id)
+        return "add a payee"
+
+    h.models._transcribe = slow_model
+    step = h.verifier.respond(call_id, Response(voiced(), 700))
+    call = h.verifier.call(call_id)
+    assert step.end and call["outcome"] == "abandoned" and call["request"] is None
+    assert "caller_said" not in [e["kind"] for e in call["events"]]
