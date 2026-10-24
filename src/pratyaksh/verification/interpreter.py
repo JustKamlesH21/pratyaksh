@@ -49,6 +49,7 @@ class Understanding:
     reply: str | None = None  # what to say back (answers to questions, clarifications)
     wants_app_approval: bool = False
     language: str = "en"  # what the Caller spoke (en, hi, kn); replies are in it
+    by_llm: bool = False  # the LLM understood it (keyword rules did not); shown in the transcript
 
 
 @dataclass(frozen=True)
@@ -332,7 +333,7 @@ class Interpreter:
         if self._llm is not None:  # only Questions, Repeats and Waits: keywords alone change the Call's path
             u = self._ask_llm(text, context, language)
             if u.kind in (TurnKind.REPEAT, TurnKind.WAIT):
-                return Understanding(u.kind)
+                return Understanding(u.kind, by_llm=True)
             if u.kind is TurnKind.QUESTION and u.reply:
                 return u
         return Understanding(TurnKind.QUESTION, reply=_NO_ANSWER_IN.get(language, NO_ANSWER))
@@ -370,7 +371,7 @@ class Interpreter:
                 kind = TurnKind.UNCLEAR
             if kind in (TurnKind.QUESTION, TurnKind.CHAT) and not reply:
                 kind, reply = TurnKind.QUESTION, _NO_ANSWER_IN.get(language, NO_ANSWER)
-            return Understanding(kind, request if kind is TurnKind.REQUEST else None, reply)
+            return Understanding(kind, request if kind is TurnKind.REQUEST else None, reply, by_llm=True)
         except Exception as e:  # the LLM is optional; never let it break a Call
             log.warning("LLM interpretation failed: %r", e)
             return Understanding(TurnKind.UNCLEAR)

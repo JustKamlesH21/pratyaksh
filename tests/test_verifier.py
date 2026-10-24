@@ -171,7 +171,8 @@ def test_audit_trail_is_ordered_and_events_reach_consoles(harness):
     assert got and got[-1]["call"]["outcome"] == "passed"
     events = h.verifier.call(call_id)["events"]
     assert [e["seq"] for e in events] == list(range(1, len(events) + 1))
-    assert [e["kind"] for e in events] == ["call_started", "caller_said", "risk_tier_set", "verdict", "call_closed"]
+    assert [e["kind"] for e in events] == [
+        "call_started", "agent_said", "caller_said", "risk_tier_set", "verdict", "call_closed", "agent_said"]
 
 
 def test_hang_up_and_errors(harness):
@@ -254,9 +255,9 @@ def test_whisper_phrases_are_too_many_to_pre_record():
     assert len({random_phrase(rng) for _ in range(300)}) >= 250
 
 
-def clone_blocked(h: Harness) -> str:
+def clone_blocked(h: Harness, customer: str = C) -> str:
     """An impostor without the Registered Device: right phrase, wrong code twice."""
-    call_id = h.verifier.start_call(C, "r").call_id
+    call_id = h.verifier.start_call(customer, "r").call_id
     h.say(call_id, "add a payee")
     whisper_back(h, call_id)
     for _ in range(2):
@@ -337,12 +338,12 @@ def test_an_old_database_is_refused_with_the_fix_named():
     assert db.create_schema() == []
 
 
-def passed_call(h: Harness, request: str = "add a payee") -> str:
-    call_id = h.verifier.start_call(C, "r").call_id
+def passed_call(h: Harness, request: str = "add a payee", customer: str = C) -> str:
+    call_id = h.verifier.start_call(customer, "r").call_id
     h.say(call_id, request)
     while h.verifier.call(call_id)["state"] != "closed":
         if h.verifier.call(call_id)["challenges"][-1]["kind"] == "possession_code":
-            h.say(call_id, " ".join(h.code_on_device(C)), voiced(), 900)
+            h.say(call_id, " ".join(h.code_on_device(customer)), voiced(), 900)
         else:
             whisper_back(h, call_id)
     return call_id
@@ -415,3 +416,92 @@ def test_the_database_is_free_while_a_response_is_heard_and_a_late_one_is_ignore
     assert step.end and call["outcome"] == "abandoned" and call["request"] is None
     kinds = [e["kind"] for e in call["events"]]
     assert "caller_said" not in kinds and kinds[-1] == "response_ignored"
+
+
+def test_the_transcript_is_the_whole_conversation_in_order(harness):
+    h = harness
+    call_id = passed_call(h, "mujhe 6 lakh transfer karna hai")
+    call = h.verifier.call(call_id)
+    lines = call["transcript"]
+    assert [ln["seq"] for ln in lines] == sorted(ln["seq"] for ln in lines)
+    assert lines[0]["text"] == "Call started." and "How can I help" in lines[1]["text"]
+    assert lines[-1]["speaker"] == "agent" and "Goodbye" in lines[-1]["text"]
+
+    request = next(ln for ln in lines if ln["speaker"] == "caller")
+    assert request["text"] == "mujhe 6 lakh transfer karna hai"
+    assert (request["understood"], request["language"]) == ("request", "hi")
+    assert request["timings_ms"]["total"] >= 0
+
+    scored = [ln for ln in lines if ln.get("challenge")]
+    assert [ln["challenge"] for ln in scored] == [c["kind"] for c in call["challenges"]]
+    assert all(ln["liveness"] == s for ln, s in zip(scored, call["scores"], strict=True))
+    assert scored[0]["text"] == call["challenges"][0]["phrase"] and "whisper_score" in scored[0]["signals"]
+
+    # The Verifier's steps sit between the turns: the Risk Tier, each Challenge, the Verdict.
+    system = [ln["text"] for ln in lines if ln["speaker"] == "system"]
+    assert "Risk Tier: High-value transfer needs 2 Whisper Phrases + Possession Code, then Agent Review." in system
+    assert any(call["challenges"][0]["phrase"] in s for s in system)
+    assert next(ln for ln in lines if ln["event"] == "verdict")["tone"] == "pass"
+
+    # Every agent line is something the Voice Agent was told to say.
+    said = [e["data"]["say"] for e in call["events"] if e["kind"] == "agent_said"]
+    assert [ln["text"] for ln in lines if ln["speaker"] == "agent"] == said
+
+
+def test_a_transcript_downloads_as_text_with_its_audit_head(harness):
+    h = harness
+    call_id = clone_blocked(h)
+    text = h.verifier.transcript(call_id)
+    head = h.verifier.audit_check(call_id)["head"]
+    assert text.startswith("Pratyaksh Call transcript") and head in text
+    assert "Verdict    BLOCK" in text and "Caller  9 9 9 9 9 9" in text
+    assert "Security Alert sent to the Registered Device" in text
+
+
+def test_an_attack_wave_puts_a_person_on_every_risky_request(harness):
+    h = harness
+    clone_blocked(h)  # one Customer called again and again is Voice Pause's job, not a wave
+    h.say(h.verifier.start_call(C, "r").call_id, "add a payee")
+    assert h.verifier.attack_wave()["blocked"] == 2 and not h.verifier.attack_wave()["active"]
+    h.clock.advance(16 * 60)
+
+    customers = ["cust-ananya", "cust-rahul", "cust-meera"]
+    for i, customer in enumerate(customers):
+        h.verifier.dismiss_alerts(customer, h.verifier.pairing(customer))
+        clone_blocked(h, customer)
+        assert h.verifier.attack_wave()["active"] is (i == 2)
+    wave = h.verifier.stats()["attack_wave"]
+    assert (wave["blocked"], wave["customers"]) == (3, 3)
+
+    # Rahul really calls, after dismissing the alert. Adding a payee normally needs no Agent Review.
+    h.verifier.dismiss_alerts("cust-rahul", h.verifier.pairing("cust-rahul"))
+    during = passed_call(h, "add a payee", "cust-rahul")
+    call = h.verifier.call(during)
+    assert call["outcome"] == "passed_pending_review" and call["agent_review"] is True
+    assert any("Attack Wave" in ln["text"] for ln in call["transcript"])
+    assert not h.verifier.receipt(during)["claims"]["executable"]
+    assert h.verifier.calls(outcome="blocked") and all(
+        c["outcome"] == "blocked" for c in h.verifier.calls(outcome="blocked"))
+
+    h.clock.advance(16 * 60)  # the wave passes
+    assert not h.verifier.attack_wave()["active"]
+    after = passed_call(h, "add a payee", "cust-rahul")
+    assert h.verifier.call(after)["outcome"] == "passed"
+
+
+def test_customer_risk_shows_alerts_voice_pause_and_history(harness):
+    h = harness
+    assert h.verifier.customer_risk(C)["risk"] == "normal"
+    blocked = clone_blocked(h)
+    risk = h.verifier.customer_risk(C)
+    assert (risk["risk"], risk["open_security_alerts"], risk["blocked_24h"]) == ("high", 1, 1)
+    assert risk["voice_pause"]["active"] and 29 <= risk["voice_pause"]["minutes_left"] <= 30
+    assert risk["last_blocked_call"] == blocked and risk["recent"][0]["id"] == blocked
+    assert risk["by_outcome_7d"] == {"blocked": 1} and risk["customer"]["phone_masked"]
+
+    h.verifier.dismiss_alerts(C, h.verifier.pairing(C))
+    risk = h.verifier.customer_risk(C)
+    assert risk["risk"] == "elevated" and not risk["voice_pause"]["active"]
+    assert [c["id"] for c in h.verifier.calls(customer_id=C)] == [blocked]
+    with pytest.raises(UnknownCustomer):
+        h.verifier.customer_risk("nobody")

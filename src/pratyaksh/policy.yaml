@@ -43,3 +43,6 @@ protection:              # after a BLOCK, an impostor must not simply call again
   pause_minutes: 30      # risky Requests for that Customer are refused on voice until the Customer dismisses
                          # the Security Alert on their Registered Device, or this long has passed; 0 = off
   alert_hours: 24        # how long the Registered Device shows the Security Alert
+  wave_customers: 3      # blocked Calls for this many different Customers within wave_minutes is an Attack
+  wave_minutes: 15       # Wave (a Clone campaign): the Console warns, and every risky Request also needs Agent
+                         # Review until it passes; 0 = off. (One Customer called again and again is Voice Pause's job.)

@@ -69,6 +69,9 @@ Pratyaksh is a Voice Agent that sits in front of risky Requests on a bank call. 
 | S7 | Hardening: agent-only endpoints need `AGENT_KEY`; long digit runs never match a Possession Code; 1,344 equally likely Whisper Phrases; LLM replies that claim an outcome or ask for secrets are dropped |
 | S8 | Questions answered in the Caller's language (English, Hindi, Kannada) and to fit the moment (before a Request, during a Whisper Phrase, during a Possession Code) |
 | S9 | Readiness: `GET /v1/status` (what to fix before the demo) and `GET /v1/stats` (live numbers) on the Console |
+| S10 | Transcript of every Call: both sides, language, Signals and per-stage hearing times, from the Audit Trail; downloadable as text with the Audit head (`GET /v1/calls/{id}/transcript?format=text`) |
+| S11 | Attack Wave: blocked Calls for `wave_customers` different Customers within `wave_minutes` put Agent Review on every risky Request until it passes; the Console warns |
+| S12 | Customer risk view (`GET /v1/customers/{id}/risk`): 7 days of Calls, open Security Alerts, Voice Pause time left; Console filters by Outcome and Customer |
 
 ### Stretch
 - SIP phone line into LiveKit (judges dial in).
@@ -203,7 +206,9 @@ GPU budget on a 6–8 GB laptop: Whisper turbo ≈ 1.6 GB, Parler-TTS ≈ 2 GB (
 | GET | `/v1/calls/{id}/audit` → `{intact, events, broken_at, head}` | Console |
 | GET | `/v1/calls/{id}/receipt` (console key) → `{receipt, claims}` | Core banking, Console |
 | POST | `/v1/receipts/verify` `{receipt}`, GET `/v1/receipts/key` (JWK) | Core banking, anyone |
-| GET | `/v1/status`, `/v1/stats` | Console, operator |
+| GET | `/v1/status`, `/v1/stats` (outcomes, Added Time, hearing p50/p95, Attack Wave) | Console, operator |
+| GET | `/v1/calls/{id}/transcript` (`?format=text` downloads) | Console, fraud team |
+| GET | `/v1/calls?outcome=&customer_id=`, `/v1/customers/{id}/risk` | Console |
 
 Agent-only routes (`/v1/calls` POST, `/responses`, `/step`, `/hangup`, `/v1/voice`) require `X-Agent-Key` when `AGENT_KEY` is set.
 

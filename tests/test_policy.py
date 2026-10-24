@@ -85,3 +85,13 @@ def test_advisory_mode_reports_but_does_not_block(policy):
 def test_bad_policy_is_rejected():
     with pytest.raises(PolicyError):
         Policy({"requests": {}, "signals": {}, "weights": {}, "verdict": {}})
+
+
+def test_an_attack_wave_is_several_blocks_in_a_short_time(policy):
+    assert (policy.wave_customers, policy.wave_minutes) == (3, 15)
+    assert not policy.attack_wave(2) and policy.attack_wave(3)
+    import yaml
+    from importlib import resources
+    raw = yaml.safe_load(resources.files("pratyaksh").joinpath("policy.yaml").read_text())
+    raw["protection"]["wave_customers"] = 0
+    assert not Policy(raw).attack_wave(100)  # 0 turns it off
