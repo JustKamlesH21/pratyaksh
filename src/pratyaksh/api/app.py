@@ -13,7 +13,9 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response as HTTPResponse
 from pydantic import BaseModel, Field
@@ -55,6 +57,8 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         app.state.c = c
         if not settings.console_key:
             log.warning("CONSOLE_KEY is empty: anyone on the network can decide Agent Reviews")
+        if not settings.agent_key:
+            log.warning("AGENT_KEY is empty: any laptop on the network can post Responses and forge Reply Latency")
         for cust in c.verifier.customers():
             log.info("Bank App pairing for %s: /bank?customer=%s&device=%s",
                      cust["name"], cust["id"], c.verifier.pairing(cust["id"]))
@@ -86,44 +90,56 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     def c(request: Request) -> Container:
         return request.app.state.c
 
+    def agent_only(request: Request, x_agent_key: str = Header(default="")) -> None:
+        key = c(request).settings.agent_key
+        if key and not hmac.compare_digest(key, x_agent_key):
+            raise HTTPException(401, "this endpoint is for the Voice Agent only")
+
+    agent = [Depends(agent_only)]
+
     @app.get("/healthz")
     def healthz():
         return {"ok": True}
 
     # -- Voice Agent ---------------------------------------------------------------
 
-    @app.post("/v1/calls")
+    @app.post("/v1/calls", dependencies=agent)
     def start_call(body: StartCall, request: Request):
         return c(request).verifier.start_call(body.customer_id, body.room).to_dict()
 
-    @app.post("/v1/calls/{call_id}/responses")
+    @app.post("/v1/calls/{call_id}/responses", dependencies=agent)
     async def respond(
         call_id: str,
         request: Request,
         audio: UploadFile = File(..., description="WAV of the Caller's reply"),
-        reply_latency_ms: int | None = Form(default=None),
+        reply_latency_ms: int | None = Form(default=None, ge=0),
     ):
-        data = await audio.read()
+        cont = c(request)
+        limit = int(cont.settings.max_upload_mb * 1024 * 1024)
+        data = await audio.read(limit + 1)
+        if len(data) > limit:
+            raise HTTPException(413, f"audio is larger than {cont.settings.max_upload_mb:g} MB")
         try:
             clip = Audio.from_wav(data) if data else Audio.silence()
         except Exception as e:
             raise HTTPException(422, f"audio must be WAV: {e}") from e
-        cont = c(request)
+        if clip.seconds > cont.settings.max_response_s:
+            raise HTTPException(413, f"audio is longer than {cont.settings.max_response_s:g} s")
         if cont.settings.retain_audio:
             _keep(cont.settings.audio_dir, call_id, data)
         step = await asyncio.to_thread(cont.verifier.respond, call_id, Response(clip, reply_latency_ms))
         return step.to_dict()
 
-    @app.get("/v1/calls/{call_id}/step")
+    @app.get("/v1/calls/{call_id}/step", dependencies=agent)
     def current_step(call_id: str, request: Request):
         return c(request).verifier.current_step(call_id).to_dict()
 
-    @app.post("/v1/calls/{call_id}/hangup")
+    @app.post("/v1/calls/{call_id}/hangup", dependencies=agent)
     def hang_up(call_id: str, request: Request):
         c(request).verifier.hang_up(call_id)
         return {"ok": True}
 
-    @app.get("/v1/voice", response_class=HTTPResponse)
+    @app.get("/v1/voice", response_class=HTTPResponse, dependencies=agent)
     async def voice(request: Request, text: str = Query(..., max_length=600)):
         wav = await asyncio.to_thread(c(request).voice.render, text)
         return HTTPResponse(wav, media_type="audio/wav")

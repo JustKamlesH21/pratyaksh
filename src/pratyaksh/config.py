@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     api_port: int = 8000
     cors_origins: str = "http://localhost:5173"
     console_key: str = ""  # required in X-Console-Key to decide Agent Reviews; set it for the demo
+    # Required in X-Agent-Key on the Voice Agent's endpoints, so no other laptop can post Responses
+    # (and forge Reply Latency) or start Calls directly. Set it for the demo; the agent sends it.
+    agent_key: str = ""
+    max_upload_mb: float = 8.0  # largest Response upload accepted
+    max_response_s: float = 60.0  # longest Response audio accepted
 
     # Storage (ADR-0004). SQLite works for a quick look; use MySQL for the demo.
     database_url: str = "sqlite:///./pratyaksh.db"

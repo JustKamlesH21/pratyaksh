@@ -124,3 +124,35 @@ def test_errors(api):
     call_id = api.post("/v1/calls", json={"customer_id": C}).json()["call_id"]
     r = api.post(f"/v1/calls/{call_id}/responses", files={"audio": ("x.wav", b"not audio", "audio/wav")})
     assert r.status_code == 422
+
+
+def test_only_the_voice_agent_can_start_calls_and_post_responses(tmp_path):
+    settings = Settings(
+        _env_file=None, database_url=database_url(), speech_backend="scripted", tts_backend="tone",
+        tts_cache_dir=str(tmp_path / "tts"), warm_up_models=False, agent_key="agent-secret",
+    )
+    agent = {"X-Agent-Key": "agent-secret"}
+    reply = {"files": {"audio": ("r.wav", voiced().to_wav(), "audio/wav")}, "data": {"reply_latency_ms": "300"}}
+    with TestClient(create_app(container=build(settings, speech=ScriptedSpeechModels(spoof=0.05)))) as client:
+        assert client.post("/v1/calls", json={"customer_id": C}).status_code == 401
+        call_id = client.post("/v1/calls", json={"customer_id": C}, headers=agent).json()["call_id"]
+        # The attacker's laptop cannot post a Response with a forged Reply Latency, poll, hang up or render audio.
+        assert client.post(f"/v1/calls/{call_id}/responses", **reply).status_code == 401
+        assert client.get(f"/v1/calls/{call_id}/step").status_code == 401
+        assert client.post(f"/v1/calls/{call_id}/hangup").status_code == 401
+        assert client.get("/v1/voice", params={"text": "hello"}).status_code == 401
+        assert client.post(f"/v1/calls/{call_id}/responses", headers={"X-Agent-Key": "guess"}, **reply).status_code == 401
+        # The Voice Agent, the Caller app and the Console carry on as before.
+        assert client.post(f"/v1/calls/{call_id}/responses", headers=agent, **reply).status_code == 200
+        assert client.get("/v1/customers").status_code == 200
+        assert client.get(f"/v1/calls/{call_id}").json()["events"][0]["kind"] == "call_started"
+
+
+def test_oversized_or_overlong_audio_is_refused(api):
+    call_id = api.post("/v1/calls", json={"customer_id": C}).json()["call_id"]
+    huge = api.post(f"/v1/calls/{call_id}/responses", files={"audio": ("r.wav", b"0" * (9 * 1024 * 1024), "audio/wav")})
+    assert huge.status_code == 413
+    from pratyaksh.domain import Audio
+
+    long = Audio.silence(61).to_wav()
+    assert api.post(f"/v1/calls/{call_id}/responses", files={"audio": ("r.wav", long, "audio/wav")}).status_code == 413
