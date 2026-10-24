@@ -95,11 +95,33 @@ def phrase_match(expected: str, transcript: str) -> float:
     return round(score, 3)
 
 
+_dsp_lock = threading.Lock()
+_dsp_ready = False
+
+
+def warm_up_dsp() -> None:
+    """Import and compile the whisper DSP (librosa + numba, ~1 s) once. Callers that arrive meanwhile
+    wait for it rather than compiling the same code again in parallel."""
+    global _dsp_ready
+    if _dsp_ready:
+        return
+    with _dsp_lock:
+        if not _dsp_ready:
+            rng = np.random.default_rng(0)
+            _whisper_score(Audio((0.1 * rng.standard_normal(SAMPLE_RATE)).astype(np.float32)))
+            _dsp_ready = True
+
+
 def whisper_score(audio: Audio) -> float | None:
     """Share of speech frames with no voicing (vocal folds not vibrating). Whispers score high.
 
     None when no speech energy is found.
     """
+    warm_up_dsp()
+    return _whisper_score(audio)
+
+
+def _whisper_score(audio: Audio) -> float | None:
     import librosa
 
     y = audio.samples

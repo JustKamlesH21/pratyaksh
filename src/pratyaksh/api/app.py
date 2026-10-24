@@ -13,7 +13,6 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import numpy as np
 from fastapi import (
     Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect,
 )
@@ -23,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from ..config import Settings
 from ..domain import Audio, Response
-from ..signals import whisper_score
+from ..signals import warm_up_dsp
 from ..verification import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .container import FIXED_PROMPTS, Container, build, llm_configured
 
@@ -69,7 +68,8 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             log.info("Bank App pairing for %s: /bank?customer=%s&device=%s",
                      cust["name"], cust["id"], c.verifier.pairing(cust["id"]))
         if settings.warm_up_models:
-            asyncio.get_running_loop().run_in_executor(None, _warm_up, c)
+            await asyncio.to_thread(warm_up_dsp)  # ~1 s, before serving: no Caller ever pays for it
+            asyncio.get_running_loop().run_in_executor(None, _warm_up, c)  # models: slow, in the background
         yield
 
     app = FastAPI(title="Pratyaksh verifier", version="0.1.0", lifespan=lifespan)
@@ -306,9 +306,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
 
 def _warm_up(c: Container) -> None:
     try:
-        # The whisper DSP compiles on first use (~1 s); do it now, not on the first Caller's whisper.
-        rng = np.random.default_rng(0)
-        whisper_score(Audio((0.1 * rng.standard_normal(16_000)).astype(np.float32)))
+        warm_up_dsp()
         warm = getattr(c.speech, "warm_up", None)
         if warm:
             warm()
