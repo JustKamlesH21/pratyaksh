@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     code_ttl_seconds: int = 120
     approval_ttl_seconds: int = 120
 
+    # Verification Receipts: signed with this Ed25519 key (created on first start; keep it private)
+    receipt_key_path: str = "./data/keys/receipt-ed25519.pem"
+    receipt_ttl_seconds: int = 600  # how long core banking may act on a receipt
+
     # Privacy (ADR-0003): keep Response audio only when collecting Eval Run data with consent.
     retain_audio: bool = False
     audio_dir: str = "./data/recordings"

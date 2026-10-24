@@ -39,7 +39,7 @@ def test_record_export_and_evaluate(tmp_path, monkeypatch):
     db_url = database_url(f"sqlite:///{tmp_path / 'eval.db'}")
     settings = Settings(
         _env_file=None, database_url=db_url, speech_backend="scripted", tts_backend="tone",
-        tts_cache_dir=str(tmp_path / "tts"), warm_up_models=False, retain_audio=True,
+        tts_cache_dir=str(tmp_path / "tts"), receipt_key_path=str(tmp_path / "key.pem"), warm_up_models=False, retain_audio=True,
         audio_dir=str(tmp_path / "rec"),
     )
     models = ScriptedSpeechModels(spoof=0.05)

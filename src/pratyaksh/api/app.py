@@ -43,6 +43,10 @@ class Review(BaseModel):
     reviewer: str = Field(default="bank-agent", max_length=64)
 
 
+class ReceiptCheck(BaseModel):
+    receipt: str = Field(max_length=8192)
+
+
 class TokenRequest(BaseModel):
     customer_id: str
     identity: str | None = None  # defaults to the customer id
@@ -175,6 +179,25 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @app.get("/v1/calls/{call_id}/audit")
     def audit_check(call_id: str, request: Request):
         return c(request).verifier.audit_check(call_id)
+
+    def console_only(request: Request, x_console_key: str = Header(default="")) -> None:
+        key = c(request).settings.console_key
+        if key and not hmac.compare_digest(key, x_console_key):
+            raise HTTPException(403, "wrong console key")
+
+    # -- Core banking: Verification Receipts ----------------------------------------------
+
+    @app.get("/v1/calls/{call_id}/receipt", dependencies=[Depends(console_only)])
+    def receipt(call_id: str, request: Request):
+        return c(request).verifier.receipt(call_id)
+
+    @app.post("/v1/receipts/verify")
+    def verify_receipt(body: ReceiptCheck, request: Request):
+        return c(request).verifier.verify_receipt(body.receipt)
+
+    @app.get("/v1/receipts/key")
+    def receipt_key(request: Request):
+        return {"keys": [c(request).verifier.receipt_key()]}
 
     @app.post("/v1/calls/{call_id}/review")
     def review(call_id: str, body: Review, request: Request, x_console_key: str = Header(default="")):

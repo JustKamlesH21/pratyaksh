@@ -28,6 +28,7 @@ from ..policy import Policy
 from ..signals import SignalExtractor
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
+from .receipts import InvalidReceipt, ReceiptSigner
 from .interpreter import Context, Interpreter, TurnKind
 from .store import (
     GENESIS, AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow, chain_hash,
@@ -101,6 +102,8 @@ class Verifier:
         clock: Callable[[], datetime] = _utcnow,
         code_ttl_s: int = 120,
         approval_ttl_s: int = 120,
+        signer: ReceiptSigner | None = None,
+        receipt_ttl_s: int = 600,
     ):
         self._db = db
         self._policy = policy
@@ -111,6 +114,8 @@ class Verifier:
         self._now = clock
         self._code_ttl = timedelta(seconds=code_ttl_s)
         self._approval_ttl = timedelta(seconds=approval_ttl_s)
+        self._signer = signer or ReceiptSigner.generate()
+        self._receipt_ttl = receipt_ttl_s
 
     # ------------------------------------------------------------------ commands
 
@@ -278,6 +283,64 @@ class Verifier:
             if s.get(CallRow, call_id) is None:
                 raise CallNotFound(call_id)
             return self._check_chain(s, call_id)
+
+    def receipt(self, call_id: str) -> dict:
+        """A signed Verification Receipt for a closed Call: what core banking checks before it acts
+        on the Request. Returns {"receipt": compact JWS, "claims": what it says}."""
+        with self._db.session() as s:
+            call = s.get(CallRow, call_id)
+            if call is None:
+                raise CallNotFound(call_id)
+            if call.state != CallState.CLOSED:
+                raise NotAllowed("the Call is still in progress; a receipt is issued once it closes")
+            chain = self._check_chain(s, call.id)
+            if not chain["intact"]:
+                raise NotAllowed(f"the Audit Trail of this Call was altered at event {chain['broken_at']}")
+            now = int(self._now().replace(tzinfo=timezone.utc).timestamp())
+            reviewed = not call.agent_review or call.review_status == "approved"
+            claims = {
+                "iss": "pratyaksh",
+                "sub": call.customer_id,
+                "call_id": call.id,
+                "request": call.request,
+                "verdict": call.verdict,
+                "outcome": call.outcome,
+                "liveness": call.liveness,
+                "reasons": call.reasons,
+                "challenges": [e["kind"] for e in call.evidence],
+                "agent_review": call.agent_review,
+                "review_status": call.review_status,
+                # The Request may be carried out: verified live (or approved on the Registered Device),
+                # and confirmed by a Bank Agent where the Policy asks for Agent Review.
+                "executable": bool(call.request) and reviewed and call.outcome in (
+                    Outcome.PASSED.value, Outcome.PASSED_PENDING_REVIEW.value, Outcome.APPROVED_IN_APP.value),
+                "audit_events": chain["events"],
+                "audit_head": chain["head"],
+                "iat": now,
+                "exp": now + self._receipt_ttl,
+            }
+        return {"receipt": self._signer.sign(claims), "claims": claims}
+
+    def verify_receipt(self, receipt: str) -> dict:
+        """Is this receipt ours, unexpired, and is the Audit Trail it signed still unchanged?
+        Returns {"valid", "reason", "claims"}."""
+        try:
+            claims = self._signer.verify(receipt)
+        except InvalidReceipt as e:
+            return {"valid": False, "reason": str(e), "claims": None}
+        now = int(self._now().replace(tzinfo=timezone.utc).timestamp())
+        if int(claims.get("exp", 0)) < now:
+            return {"valid": False, "reason": "the receipt has expired", "claims": claims}
+        with self._db.session() as s:
+            hashes, _, broken_at = self._walk_chain(s, str(claims.get("call_id")))
+        n = int(claims.get("audit_events", 0))
+        if broken_at is not None or n > len(hashes) or (n and hashes[n - 1] != claims.get("audit_head")):
+            return {"valid": False, "reason": "the Call's Audit Trail no longer matches the receipt", "claims": claims}
+        return {"valid": True, "reason": "", "claims": claims}
+
+    def receipt_key(self) -> dict:
+        """The public key (JWK) that checks Verification Receipts."""
+        return self._signer.public_jwk()
 
     def calls(self, limit: int = 50) -> list[dict]:
         with self._db.session() as s:
@@ -674,14 +737,23 @@ class Verifier:
         s.flush()
 
     @staticmethod
-    def _check_chain(s: Session, call_id: str) -> dict:
+    def _walk_chain(s: Session, call_id: str) -> tuple[list[str], int, int | None]:
+        """Hashes of the intact events in order, how many events there are, and the first bad one."""
         rows = s.scalars(select(AuditEventRow).where(AuditEventRow.call_id == call_id).order_by(AuditEventRow.seq)).all()
+        hashes: list[str] = []
         prev = GENESIS
         for n, e in enumerate(rows, start=1):
             if e.seq != n or e.prev_hash != prev or e.hash != chain_hash(prev, e.call_id, e.seq, e.kind, e.data, e.created_at):
-                return {"intact": False, "events": len(rows), "broken_at": n, "head": None}
+                return hashes, len(rows), n
+            hashes.append(e.hash)
             prev = e.hash
-        return {"intact": True, "events": len(rows), "broken_at": None, "head": prev}
+        return hashes, len(rows), None
+
+    def _check_chain(self, s: Session, call_id: str) -> dict:
+        hashes, events, broken_at = self._walk_chain(s, call_id)
+        if broken_at is not None:
+            return {"intact": False, "events": events, "broken_at": broken_at, "head": None}
+        return {"intact": True, "events": events, "broken_at": None, "head": hashes[-1] if hashes else GENESIS}
 
     def _publish_after(self, call_id: str) -> None:
         """Push the Call's latest state to live Consoles. Call only after the session commits."""
