@@ -1,4 +1,5 @@
 import { type CSSProperties, useEffect, useState } from "react";
+import { ChartBar } from "@phosphor-icons/react";
 import { api } from "../api";
 import { Card, VerdictBadge } from "../components";
 import type { EvalRun } from "../types";
@@ -17,7 +18,10 @@ export default function EvalPage() {
   if (error)
     return (
       <Card title="Eval Run">
-        <p className="text-ink-soft">No Eval Run yet. Record labelled calls, then run <code>pratyaksh-eval data/eval/manifest.csv</code>.</p>
+        <p className="flex items-start gap-2 text-ink-soft">
+          <ChartBar size={20} className="mt-0.5 shrink-0" />
+          <span>No Eval Run yet. Record labelled calls, then run <code>pratyaksh-eval data/eval/manifest.csv</code>.</span>
+        </p>
       </Card>
     );
   if (!run)
@@ -31,7 +35,7 @@ export default function EvalPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-baseline gap-3">
-        <h1 className="text-2xl font-bold">Eval Run #{run.id}</h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight">Eval Run #{run.id}</h1>
         <span className="text-ink-soft">{run.label} · {new Date(run.created_at + "Z").toLocaleString()}</span>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

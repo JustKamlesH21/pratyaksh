@@ -69,6 +69,7 @@ def as_text(call: dict) -> str:
         if line.get("timings_ms"):
             tags.append(f"{line['timings_ms'].get('total', 0)} ms")
         out.append(f"{at}  {who:<6}  {text}" + (f"   [{' · '.join(tags)}]" if tags else ""))
+        out.extend(f"{'':18}- {r}" for r in line.get("reasons", [])[1:])
     return "\n".join(out) + "\n"
 
 
@@ -84,6 +85,7 @@ def _line(kind: str, d: dict) -> dict | None:
     line: dict = {"speaker": "system", "text": text}
     if kind == "verdict":
         line["tone"] = _TONES.get(d.get("verdict", ""))
+        line["reasons"] = d.get("reasons") or []
     elif kind in ("security_alert_sent",) or (kind == "call_closed" and d.get("outcome") == "blocked"):
         line["tone"] = "block"
     return line
@@ -131,7 +133,8 @@ def _system(kind: str, d: dict) -> str | None:
         return f"{name} issued: “{d.get('phrase', '')}”."
     if kind == "verdict":
         liveness = "" if d.get("liveness") is None else f" (liveness {d['liveness']:.2f})"
-        return f"Verdict {d.get('verdict')}{liveness}. " + " ".join(d.get("reasons") or [])
+        head = (d.get("reasons") or [""])[0]  # the deciding Reason; all of them are in line["reasons"]
+        return f"Verdict {d.get('verdict')}{liveness}. {head}".strip()
     if kind == "app_approval_requested":
         return "App Approval request sent to the Registered Device."
     if kind == "app_approval_answered":

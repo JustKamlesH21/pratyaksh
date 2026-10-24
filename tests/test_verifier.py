@@ -459,6 +459,8 @@ def test_a_transcript_downloads_as_text_with_its_audit_head(harness):
     assert text.startswith("Pratyaksh Call transcript") and head in text
     assert "Verdict    BLOCK" in text and "Caller  9 9 9 9 9 9" in text
     assert "Security Alert sent to the Registered Device" in text
+    reasons = h.verifier.call(call_id)["reasons"]
+    assert reasons[0] in text and all(f"- {r}" in text for r in reasons[1:])  # every Reason, once
 
 
 def test_an_attack_wave_puts_a_person_on_every_risky_request(harness):

@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Bank, Password, ShieldCheck, Siren } from "@phosphor-icons/react";
 import { api } from "../api";
 import { ErrorNote } from "../components";
 import type { DeviceMessage, Inbox } from "../types";
@@ -12,6 +13,7 @@ export default function BankAppPage() {
   const device = params.get("device") ?? "";
   const [inbox, setInbox] = useState<Inbox | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false); // one tap at a time: a double tap must not answer twice
 
   useEffect(() => {
     if (!customer || !device) return;
@@ -29,23 +31,29 @@ export default function BankAppPage() {
     };
   }, [customer, device]);
 
-  async function answer(m: DeviceMessage, approve: boolean) {
+  async function once(action: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
     try {
-      await api.appApproval(m.call_id, customer, device, approve);
-      setInbox((i) => (i ? { ...i, messages: i.messages.filter((x) => x.id !== m.id) } : i));
+      await action();
     } catch (e) {
       setError(String(e));
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function dismissAlerts() {
-    try {
+  const answer = (m: DeviceMessage, approve: boolean) =>
+    once(async () => {
+      await api.appApproval(m.call_id, customer, device, approve);
+      setInbox((i) => (i ? { ...i, messages: i.messages.filter((x) => x.id !== m.id) } : i));
+    });
+
+  const dismissAlerts = () =>
+    once(async () => {
       await api.dismissAlerts(customer, device);
       setInbox((i) => (i ? { ...i, messages: i.messages.filter((x) => x.kind !== "security_alert") } : i));
-    } catch (e) {
-      setError(String(e));
-    }
-  }
+    });
 
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
@@ -62,7 +70,7 @@ export default function BankAppPage() {
         // A device frame stays dark in both themes, like a real phone.
         <div className="overflow-hidden rounded-[2.2rem] border-[10px] border-zinc-900 bg-surface ring-1 ring-line">
           <div className="bg-accent px-5 pb-5 pt-6 text-on-color">
-            <p className="text-xs font-medium opacity-80">Your bank</p>
+            <p className="flex items-center gap-1.5 text-xs font-medium opacity-80"><Bank size={15} /> Your bank</p>
             <p className="text-lg font-bold">{inbox?.customer.name ?? "…"}</p>
             <p className="text-sm opacity-80">{inbox?.customer.phone_masked}</p>
           </div>
@@ -80,7 +88,7 @@ export default function BankAppPage() {
             {inbox?.messages.map((m) =>
               m.kind === "security_alert" ? (
                 <div key={m.id} className="motion-attention rounded-xl border-2 border-block bg-block/10 p-4">
-                  <p className="font-bold text-block">Blocked call attempt</p>
+                  <p className="flex items-center gap-2 font-bold text-block"><Siren size={20} /> Blocked call attempt</p>
                   <p className="mt-1 text-sm text-ink">
                     Someone called the bank as you
                     {m.body.blocked_at && <> at {new Date(m.body.blocked_at + "Z").toLocaleTimeString()}</>}
@@ -90,13 +98,13 @@ export default function BankAppPage() {
                   <p className="mt-1 text-xs text-ink-soft">
                     Voice requests on your account are paused until you dismiss this. Never share codes with anyone.
                   </p>
-                  <button className="press mt-3 w-full rounded-lg bg-surface py-3 font-bold text-ink ring-1 ring-block/40" onClick={dismissAlerts}>
+                  <button className="press mt-3 w-full rounded-lg bg-surface py-3 font-bold text-ink ring-1 ring-block/40 disabled:opacity-50" disabled={busy} onClick={dismissAlerts}>
                     Dismiss
                   </button>
                 </div>
               ) : m.kind === "possession_code" ? (
                 <div key={m.id} className="motion-enter rounded-xl bg-sunken p-4 text-center">
-                  <p className="text-sm text-ink-soft">One-time code for your call with the bank</p>
+                  <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft"><Password size={17} /> One-time code for your call with the bank</p>
                   <p className="my-2 font-mono text-4xl font-semibold tracking-[0.3em] text-ink" aria-label={m.body.code}>
                     {(m.body.code ?? "").split("").map((d, i) => (
                       <span key={i} className="motion-enter inline-block" style={{ "--i": i } as CSSProperties}>{d}</span>
@@ -107,17 +115,17 @@ export default function BankAppPage() {
                 </div>
               ) : (
                 <div key={m.id} className="motion-enter rounded-xl border-2 border-accent bg-accent/10 p-4">
-                  <p className="font-bold">Approve this request?</p>
+                  <p className="flex items-center gap-2 font-bold"><ShieldCheck size={20} className="text-accent" /> Approve this request?</p>
                   <p className="mt-1 text-sm text-ink">
                     Someone on a call with the bank asked to <b>{m.body.request_text}</b>.
                   </p>
                   <TimeLeft message={m} />
                   <p className="mt-2 text-xs text-ink-soft">Expires in {m.seconds_left}s</p>
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button className="press rounded-lg bg-surface py-3 font-bold text-block ring-1 ring-block/40" onClick={() => answer(m, false)}>
+                    <button className="press rounded-lg bg-surface py-3 font-bold text-block ring-1 ring-block/40 disabled:opacity-50" disabled={busy} onClick={() => answer(m, false)}>
                       Decline
                     </button>
-                    <button className="press rounded-lg bg-pass py-3 font-bold text-on-color" onClick={() => answer(m, true)}>
+                    <button className="press rounded-lg bg-pass py-3 font-bold text-on-color disabled:opacity-50" disabled={busy} onClick={() => answer(m, true)}>
                       Approve
                     </button>
                   </div>

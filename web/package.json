@@ -10,8 +10,12 @@
     "preview": "vite preview --host"
   },
   "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
+    "@fontsource-variable/noto-sans-devanagari": "^5.3.0",
+    "@fontsource-variable/noto-sans-kannada": "^5.3.0",
+    "@phosphor-icons/react": "^2.1.10",
     "livekit-client": "^2.23.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
