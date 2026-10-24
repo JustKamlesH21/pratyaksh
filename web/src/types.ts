@@ -62,8 +62,8 @@ export interface CallView {
 export interface DeviceMessage {
   id: number;
   call_id: string;
-  kind: "possession_code" | "app_approval";
-  body: { code?: string; request?: RequestKind; request_text?: string };
+  kind: "possession_code" | "app_approval" | "security_alert";
+  body: { code?: string; request?: RequestKind; request_text?: string; blocked_at?: string };
   created_at: string;
   expires_at: string;
   seconds_left: number;

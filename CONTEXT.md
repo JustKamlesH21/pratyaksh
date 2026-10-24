@@ -100,6 +100,14 @@ _Avoid_: in-app confirm, push approval
 A hold placed on a PASSed high-value Request until a Bank Agent confirms it.
 _Avoid_: manual check, escalation
 
+**Security Alert**:
+A message on the Customer's Registered Device saying a Call as them was blocked and nothing was changed. Only that device can dismiss it.
+_Avoid_: notification, warning
+
+**Voice Pause**:
+After a BLOCK, risky Requests for that Customer are refused on voice until the Customer dismisses the Security Alert or the Policy's pause runs out, so an impostor cannot simply call again. Balance enquiries and Questions are not paused.
+_Avoid_: lockout, cooldown
+
 **Policy**:
 The bank-configurable rules that map Requests to Risk Tiers and Signals to a Verdict.
 _Avoid_: config, rules engine

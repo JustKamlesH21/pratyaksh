@@ -6,6 +6,7 @@ Interface (commands; each returns the Step the Voice Agent must do next):
     current_step(call_id)                  -> Step   (poll while App Approval is pending)
     app_approval(call_id, customer_id, device_token, ok) -> Step   (from the Bank App)
     review(call_id, approve, reviewer)     -> dict   (Agent Review, from the Console)
+    dismiss_alerts(customer_id, device_token) -> int (Security Alerts, from the Bank App; lifts the voice pause)
     hang_up(call_id)                       -> None
 Reads:
     call(call_id), calls(limit), inbox(customer_id, device_token), customers()

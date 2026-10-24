@@ -38,3 +38,8 @@ verdict:
   pass_at: 0.75          # mean Liveness Score at or above: PASS
   block_at: 0.45         # at or below: BLOCK; in between: STEP-UP
   max_step_ups: 1        # extra Whisper Phrases before handing over to App Approval
+
+protection:              # after a BLOCK, an impostor must not simply call again
+  pause_minutes: 30      # risky Requests for that Customer are refused on voice until the Customer dismisses
+                         # the Security Alert on their Registered Device, or this long has passed; 0 = off
+  alert_hours: 24        # how long the Registered Device shows the Security Alert

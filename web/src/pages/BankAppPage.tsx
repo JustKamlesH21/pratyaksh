@@ -38,6 +38,15 @@ export default function BankAppPage() {
     }
   }
 
+  async function dismissAlerts() {
+    try {
+      await api.dismissAlerts(customer, device);
+      setInbox((i) => (i ? { ...i, messages: i.messages.filter((x) => x.kind !== "security_alert") } : i));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-sm flex-col gap-4">
       {(!customer || !device) && (
@@ -62,7 +71,23 @@ export default function BankAppPage() {
               <p className="mt-10 text-center text-ink-soft/70">No requests right now.</p>
             )}
             {inbox?.messages.map((m) =>
-              m.kind === "possession_code" ? (
+              m.kind === "security_alert" ? (
+                <div key={m.id} className="rounded-2xl border-2 border-block bg-block/10 p-4">
+                  <p className="font-bold text-block">Blocked call attempt</p>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    Someone called the bank as you
+                    {m.body.blocked_at && <> at {new Date(m.body.blocked_at + "Z").toLocaleTimeString()}</>}
+                    {m.body.request_text && <> and asked to <b>{m.body.request_text}</b></>}. We could not verify them, so
+                    nothing was changed.
+                  </p>
+                  <p className="mt-1 text-xs text-ink-soft">
+                    Voice requests on your account are paused until you dismiss this. Never share codes with anyone.
+                  </p>
+                  <button className="mt-3 w-full rounded-xl bg-white py-3 font-bold ring-1 ring-block/40" onClick={dismissAlerts}>
+                    Dismiss
+                  </button>
+                </div>
+              ) : m.kind === "possession_code" ? (
                 <div key={m.id} className="rounded-2xl bg-paper p-4 text-center">
                   <p className="text-sm text-ink-soft">One-time code for your call with the bank</p>
                   <p className="my-2 font-mono text-4xl font-semibold tracking-[0.3em] text-ink">{m.body.code}</p>
