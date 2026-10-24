@@ -202,6 +202,9 @@ class LocalSpeechModels:
         self._whisper = None
         self._spoof = None
         self._load_lock = threading.Lock()  # warm-up and the first request must not both load
+        # Responses for different Calls are heard on parallel threads. CTranslate2 (whisper) allows
+        # concurrent calls; a transformers pipeline is not documented as thread-safe, so it runs one at a time.
+        self._spoof_lock = threading.Lock()
 
     def warm_up(self) -> None:
         self._load_whisper()
@@ -244,7 +247,8 @@ class LocalSpeechModels:
         if not self._spoof_name:
             return None
         clf = self._load_spoof()
-        results = clf({"raw": audio.samples, "sampling_rate": audio.sample_rate}, top_k=None)
+        with self._spoof_lock:
+            results = clf({"raw": audio.samples, "sampling_rate": audio.sample_rate}, top_k=None)
         fake = sum(r["score"] for r in results if r["label"].lower() in self._fake_labels)
         return round(float(fake), 3)
 
