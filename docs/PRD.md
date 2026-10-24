@@ -174,7 +174,7 @@ Rule we followed: a seam only exists where two adapters exist today (production 
 | Voice transport | LiveKit server (self-hosted, Docker) + LiveKit Agents 1.8 (Python) | Open source, WebRTC now and SIP later (ADR-0005) |
 | Backend | Python 3.11, FastAPI, SQLAlchemy 2, PyMySQL | All speech libraries are Python |
 | Database | MySQL 8 (JSON columns, insert-only Audit Trail triggers) | ADR-0004 |
-| Speech-to-text | faster-whisper `large-v3-turbo`, int8_float16 on GPU | Multilingual, fast |
+| Speech-to-text | faster-whisper `large-v3-turbo`, float16 on GPU (no int8 quantization) | Multilingual, fast; full precision for Hindi and Kannada |
 | Voice activity | Silero VAD (via LiveKit plugin) | Reply Latency and end-of-speech |
 | Anti-spoof | `MelodyMachine/Deepfake-audio-detection-V2` (wav2vec2, Apache-2.0), configurable | Standard transformers pipeline, swappable |
 | Agent voice | AI4Bharat Indic Parler-TTS (Apache-2.0), cached | Free, offline, Kannada/Hindi/English |
@@ -184,7 +184,7 @@ Rule we followed: a seam only exists where two adapters exist today (production 
 | Clone (red team only) | AI4Bharat IndicF5 on the attacker laptop | Indian-language Clones |
 | Packaging | Docker Compose (MySQL + LiveKit), `uv`/pip venv, npm | |
 
-GPU budget on a 6–8 GB laptop: Whisper turbo ≈ 1.6 GB, Parler-TTS ≈ 2 GB (fp16), spoof model ≈ 0.4 GB. IndicF5 runs on a different laptop.
+GPU budget on a 6–8 GB laptop: Whisper turbo ≈ 1.6 GB (fp16), Parler-TTS ≈ 2 GB (fp16), spoof model ≈ 0.4 GB; about 4 GB in all. IndicF5 runs on a different laptop.
 
 ## 9. HTTP interface (verifier)
 

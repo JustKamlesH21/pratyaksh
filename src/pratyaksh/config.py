@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     speech_backend: Literal["local", "scripted"] = "local"
     whisper_model: str = "large-v3-turbo"
     whisper_device: str = "auto"  # auto | cuda | cpu
-    whisper_compute_type: str = "default"  # e.g. int8_float16 on GPU, int8 on CPU
+    whisper_compute_type: str = "default"  # the model's own float16 on GPU (float32 on CPU); int8 only on a CPU laptop
     spoof_model: str = "MelodyMachine/Deepfake-audio-detection-V2"  # empty string disables
     spoof_fake_labels: str = "fake,spoof,synthetic"
     warm_up_models: bool = True
