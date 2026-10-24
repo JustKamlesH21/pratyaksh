@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Iterable, Protocol
 
 import numpy as np
@@ -49,14 +50,17 @@ class SignalExtractor:
         if response.reply_latency_ms is None or audio.seconds < 0.2:
             return Signals(reply_latency_ms=None)
 
+        # The whisper DSP is CPU work; speech-to-text and the spoof model release the GIL while they
+        # infer, so the two overlap instead of adding up.
+        whisper = _DSP.submit(whisper_score, audio) if challenge.kind is ChallengeKind.WHISPER_PHRASE else None
         transcript = self.transcribe(audio)
         spoof = self._models.spoof_probability(audio)
 
-        if challenge.kind is ChallengeKind.WHISPER_PHRASE:
+        if whisper is not None:
             return Signals(
                 transcript=transcript,
                 task_match=phrase_match(challenge.phrase, transcript),
-                whisper_score=whisper_score(audio),
+                whisper_score=whisper.result(),
                 reply_latency_ms=response.reply_latency_ms,
                 spoof_score=spoof,
             )
@@ -97,6 +101,7 @@ def phrase_match(expected: str, transcript: str) -> float:
 
 _dsp_lock = threading.Lock()
 _dsp_ready = False
+_DSP = ThreadPoolExecutor(max_workers=2, thread_name_prefix="whisper-dsp")
 
 
 def warm_up_dsp() -> None:
