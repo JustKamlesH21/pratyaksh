@@ -28,7 +28,7 @@ from ..policy import Policy
 from ..signals import SignalExtractor
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
-from .interpreter import Interpreter, TurnKind
+from .interpreter import Context, Interpreter, TurnKind
 from .store import AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow
 
 log = logging.getLogger(__name__)
@@ -49,6 +49,9 @@ _DONE = {
     RequestKind.BALANCE_ENQUIRY: "Your balance has been sent to the bank app on your registered phone.",
 }
 ANYTHING_ELSE = "Is there anything else I can help you with?"
+TAKE_YOUR_TIME = "Sure, take your time."
+# Asking a Challenge again after a side turn; the full Possession Code prompt would say "I've sent" twice.
+_REASK = {ChallengeKind.POSSESSION_CODE: "When you're ready, please read out the six-digit code from your bank app."}
 HANDOFF = "I'll connect you to a bank officer now. They will verify you again before making any change. Please stay on the line."
 
 GREETING = (
@@ -287,7 +290,7 @@ class Verifier:
 
     def _on_request(self, s: Session, call: CallRow, response: Response) -> Step:
         transcript = self._signals.transcribe(response.audio) if response.reply_latency_ms is not None else ""
-        heard = self._interpreter.understand(transcript)
+        heard = self._interpreter.understand(transcript, Context(last_said=self._pending(call).say))
         self._audit(
             s, call, "caller_said",
             {"transcript": transcript, "kind": heard.kind.value, "request": heard.request,
@@ -301,12 +304,16 @@ class Verifier:
             return self._hand_over(s, call, "Sure.")
         if heard.kind is TurnKind.GOODBYE:
             return self._close(s, call, Outcome.ENDED, "Thank you for calling. Goodbye.")
-        if heard.kind in (TurnKind.QUESTION, TurnKind.REPEAT):
+        if heard.kind in (TurnKind.QUESTION, TurnKind.CHAT, TurnKind.REPEAT, TurnKind.WAIT):
             call.side_turns += 1
             if call.side_turns > MAX_SIDE_TURNS:
                 return self._hand_over(s, call, "You have a few questions, so")
             if heard.kind is TurnKind.REPEAT:
                 return listen(_strip_lead(self._pending(call).say))
+            if heard.kind is TurnKind.WAIT:
+                return listen(f"{TAKE_YOUR_TIME} Tell me when you're ready.")
+            if heard.kind is TurnKind.CHAT:
+                return listen(heard.reply)
             return listen(f"{heard.reply} {ANYTHING_ELSE}")
         if heard.kind is TurnKind.APP_APPROVAL and heard.request is None:
             return listen("Sure, I can send it to your bank app. Which request is it: a payee, a SIM or password change, "
@@ -318,6 +325,7 @@ class Verifier:
             return listen(f"{heard.reply} {CLARIFY}" if heard.reply else CLARIFY)
 
         request = heard.request
+        answered = f"{heard.reply} " if heard.reply else ""  # "Is this safe? I want to transfer…": answer first
         plan = self._policy.plan(request)
         call.request = request.value
         call.agent_review = plan.agent_review
@@ -331,13 +339,13 @@ class Verifier:
             call.reasons = ["No Challenges needed for this Request."]
             self._audit(s, call, "verdict", {"verdict": "PASS", "liveness": None, "reasons": call.reasons})
             done = _DONE.get(request, "That's done.")
-            return self._close(s, call, Outcome.PASSED, f"Sure. {done} Thank you for calling. Goodbye.")
+            return self._close(s, call, Outcome.PASSED, f"{answered}Sure. {done} Thank you for calling. Goodbye.")
         call.state = CallState.CHALLENGING
         if heard.wants_app_approval:
-            return self._start_app_approval(s, call, "You asked to use the app.")
+            return self._start_app_approval(s, call, f"{answered}You asked to use the app.")
         n = len(plan.challenges)
         intro = (
-            f"Sure, I can help you {_REQUEST_NAMES[request]}. "
+            f"{answered}Sure, I can help you {_REQUEST_NAMES[request]}. "
             f"For your security I'll ask you {n} quick thing{'s' if n > 1 else ''}."
         )
         return self._issue_next(s, call, intro)
@@ -366,7 +374,7 @@ class Verifier:
             )
         signals = self._signals.extract(challenge, response)
 
-        off_script = self._off_script(challenge, signals)
+        off_script = self._off_script(call, challenge, signals)
         if off_script is not None:
             heard = off_script
             if heard.kind is TurnKind.APP_APPROVAL:
@@ -380,13 +388,19 @@ class Verifier:
             if heard.kind is TurnKind.HUMAN:
                 return self._hand_over(s, call, "Sure.")
             asked = int(issued.get("side_turns", 0))
-            if asked < MAX_SIDE_TURNS_PER_CHALLENGE:  # QUESTION or REPEAT: answer, then ask again
+            if asked < MAX_SIDE_TURNS_PER_CHALLENGE:  # QUESTION, CHAT, REPEAT or WAIT: reply, then ask again
                 call.challenges = call.challenges[:-1] + [{**issued, "side_turns": asked + 1}]
                 call.side_turns += 1
                 self._audit(s, call, "caller_said", {"transcript": signals.transcript, "kind": heard.kind.value})
-                lead = "Of course." if heard.kind is TurnKind.REPEAT else f"{heard.reply} Now,"
+                reask = _REASK.get(challenge.kind, challenge.prompt)
+                if heard.kind is TurnKind.REPEAT:
+                    say = f"Of course. {challenge.prompt}"
+                elif heard.kind is TurnKind.WAIT:
+                    say = f"{TAKE_YOUR_TIME} {reask}"
+                else:
+                    say = f"{heard.reply} {reask}"
                 return self._set_step(call, Step(
-                    call.id, f"{lead} {challenge.prompt}", listen=True,
+                    call.id, say, listen=True,
                     long_reply=challenge.kind is ChallengeKind.POSSESSION_CODE, state=CallState.CHALLENGING,
                 ))
             # Out of side turns: whatever was said is scored as the Response.
@@ -440,12 +454,13 @@ class Verifier:
             return self._issue_next(s, call, "Thank you. I need one more check.")
         return self._start_app_approval(s, call, "I need one more confirmation.")
 
-    def _off_script(self, challenge: Challenge, signals: Signals):
-        """The Caller said something other than an answer (a question, "repeat", "use the app",
-        "a person please"). Returns the Understanding, or None to score it as the Response."""
+    def _off_script(self, call: CallRow, challenge: Challenge, signals: Signals):
+        """The Caller said something other than an answer (a question, "repeat", "hold on",
+        "use the app", "a person please"). Returns the Understanding, or None to score it as the Response."""
         if not signals.transcript:
             return None
-        heard = self._interpreter.understand(signals.transcript, during_challenge=True)
+        context = Context(challenge.kind, RequestKind(call.request) if call.request else None, self._pending(call).say)
+        heard = self._interpreter.understand(signals.transcript, context)
         if heard.kind in (TurnKind.APP_APPROVAL, TurnKind.HUMAN):
             return heard  # explicit asks win
         if heard.kind is TurnKind.UNCLEAR:

@@ -12,8 +12,8 @@ Reads:
     pairing(customer_id) -> device token (shown only on the operator's machine)
 
 Errors: CallNotFound, UnknownCustomer, NotAllowed, DeviceNotPaired.
-Hidden inside: the Call state machine, understanding any utterance (Requests, questions,
-"repeat", "a person please"), Challenge planning and phrases,
+Hidden inside: the Call state machine, understanding any utterance (Requests, Questions answered
+to fit the moment, small talk, "repeat", "hold on", "a person please"), Challenge planning and phrases,
 Possession Codes and the Device Inbox, Policy decisions, the Audit Trail and live events.
 """
 

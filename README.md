@@ -114,7 +114,9 @@ Open:
 
 Demo customers: `cust-ananya`, `cust-rahul`, `cust-meera`.
 
-Try going off-script too: ask "why should I whisper?" in the middle of a Challenge, say "repeat that", ask about branch timings, or say "let me talk to an officer". The agent answers and carries on; it never hangs up on a Caller it doesn't understand.
+Try going off-script too: ask "why should I whisper?" in the middle of a Challenge, say "hold on" or "code nahi aaya" while reading the code, ask "is this call genuine?" or "what is the transfer limit?", report "there's a transaction I didn't make", or say "let me talk to an officer". The agent answers to fit the moment and carries on; it never hangs up on a Caller it doesn't understand.
+
+Answers come from `src/pratyaksh/knowledge.yaml` (its header explains the keyword format; add an entry to teach the agent a new question). Anything the keywords miss goes to the LLM (`OLLAMA_API_KEY`, `OLLAMA_MODEL=gpt-oss:120b`), which is told where the Call is and uses the same answers as its facts.
 
 ## Gotchas
 

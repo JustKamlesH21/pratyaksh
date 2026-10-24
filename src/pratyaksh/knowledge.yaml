@@ -1,61 +1,317 @@
 # What the Voice Agent may say when a Caller asks a question (not a Request).
 # Keep answers short, general and true for any bank. Never put account data, rates or numbers
-# that change here. The LLM rephrases these; without an LLM they are spoken as written.
+# that change here. A matched answer is spoken as written; the LLM uses all of them as its facts
+# for anything the keywords miss.
+#
+# keywords: an entry matches when all words of one keyword appear, in any order. Words of four
+#   letters or more also match longer words ("record" matches "recorded"); end a shorter word
+#   with * to match it as a stem. Rare words count for more, so "ifsc code" beats "what code".
+#   Add Kannada and Hindi keywords in native script and romanised; speech-to-text gives either.
+# during: whisper_phrase | possession_code — only while the Caller is answering that Challenge.
+#   These win there, even when the Caller does not phrase them as a question.
+# small_talk: true — greetings, thanks, "what can you do"; never preferred over a Request.
+# report: true — the Caller is reporting a problem (fraud, a failed payment); answered even when it
+#   mentions a Request ("someone transferred money from my account" is not a transfer Request).
 
-- id: why_whisper
-  keywords: [why whisper, whisper kyon, why should i whisper, what is this whisper, ಯಾಕೆ ಪಿಸುಮಾತು, फुसफुसा]
+# --- about Verification -----------------------------------------------------------------
+- id: why_verify
+  keywords: [why verify, verify me, why verification, why check, why checks, why security, why so many questions,
+             kyon verify, verify kyon, verify yake, ಯಾಕೆ ಪರಿಶೀಲನೆ, क्यों वेरिफाई]
   answer: >-
+    Voice-cloning tools can now copy anyone's voice from a short clip. So for risky requests I check that a live
+    person holding your registered phone is on the line. It takes a few seconds, and I never store your voice.
+- id: why_whisper
+  keywords: [why whisper, whisper kyon, whisper kyu, why should i whisper, what is this whisper, whisper yake,
+             ಯಾಕೆ ಪಿಸುಮಾತು, ಪಿಸುಮಾತು ಯಾಕೆ, फुसफुसा]
+  answer: &why_whisper >-
     Whispering a random phrase is easy for a person and very hard for a voice-cloning tool.
     It lets us confirm a live person is on the line without storing your voice.
-- id: why_code
-  keywords: [why code, which code, what code, code kahan, code kidhar, where is the code, ಕೋಡ್ ಎಲ್ಲಿ]
+- id: why_this_whisper
+  during: whisper_phrase
+  keywords: [why, why asking, why this, kyon, kyu, yake, ಯಾಕೆ, क्यों]
+  answer: *why_whisper
+- id: how_to_whisper
+  during: whisper_phrase
+  keywords: [how whisper, how do i whisper, louder, loud, speak up, normal voice, normally, whisper or talk,
+             whisper kaise, kaise bolu,
+             hege whisper, hege helali, ಹೇಗೆ ಹೇಳಲಿ, कैसे बोलूं]
   answer: >-
+    Whispering means saying the words very softly, without using your voice, as if telling someone a secret.
+    Keep the phone close to your mouth.
+- id: why_code
+  keywords: [why code, what code, which code, where is the code, code kahan, code kidhar, code elli, ಕೋಡ್ ಎಲ್ಲಿ, कोड कहाँ]
+  answer: &why_code >-
     We send a six-digit code to the bank app on your registered phone. Reading it out shows that
     the person calling also has your phone. The code is valid for two minutes.
+- id: why_this_code
+  during: possession_code
+  keywords: [why, why asking, why this, kyon, kyu, yake, ಯಾಕೆ, क्यों]
+  answer: *why_code
+- id: code_not_received
+  during: possession_code
+  keywords: [not received, didn't get, did not get, not got, haven't got, haven't received, no code, not come,
+             not showing, can't find, cannot find, can't see, no new, no message, nothing there, empty,
+             nahi aaya, nahi aya, nahi mila, banthilla, bandilla,
+             sigtilla, sigalilla, ಬಂದಿಲ್ಲ, ಸಿಕ್ಕಿಲ್ಲ, नहीं आया, नहीं मिला]
+  answer: >-
+    The code is in the bank app on your registered phone, not in an SMS. Open the app and it shows at the top;
+    it can take a few seconds to arrive.
+- id: which_app
+  keywords: [which app, what app, kaunsa app, kaun sa app, yava app, ಯಾವ ಆಪ್, कौन सा ऐप]
+  answer: >-
+    Your bank's own app on your registered phone, the one you use for payments. The code appears there, not in an SMS.
+- id: two_codes
+  during: possession_code
+  keywords: [two codes, many codes, which one, latest code, old code, multiple codes, do code]
+  answer: Please read the newest code, the one at the top of the bank app.
+- id: noisy
+  during: whisper_phrase
+  keywords: [noisy, noise, loud here, people around, shor, galata]
+  answer: >-
+    That's fine. If you can, move somewhere a little quieter, hold the phone close and whisper the words.
+- id: how_many_digits
+  during: possession_code
+  keywords: [how many digits, how many numbers, how many, kitne digit, kitne number, estu digit, estu number]
+  answer: It's six digits. Please read them one at a time.
+- id: type_code
+  during: possession_code
+  keywords: [type, write, enter the code, keypad, type karu, type madla]
+  answer: >-
+    Please say the code out loud. If you can't speak it, say "use the app" and you can approve the request
+    in the bank app instead.
+- id: code_expired
+  during: possession_code
+  keywords: [expired, expire, code gone, disappeared, time over, invalid]
+  answer: >-
+    Codes are valid for two minutes. If yours has run out, say "use the app" and I'll send an approval
+    to your bank app instead.
+- id: code_app_trouble
+  during: possession_code
+  keywords: [app not open, app not working, app problem, app crash, app nahi khul, app band, app open aagtilla,
+             app work aagtilla, login, log in, asking for password, forgot app password]
+  answer: >-
+    If your bank app won't open, I can't confirm the code. Say "talk to an officer" and a bank officer will verify
+    you another way.
+- id: how_long
+  keywords: [how long, how much time, kitna time, time lagega, takes long, estu time, ಎಷ್ಟು ಸಮಯ, कितना समय]
+  answer: >-
+    The checks usually take less than twenty seconds, and only for risky requests like transfers or SIM changes.
+- id: fail_check
+  keywords: [fail, failed, what if wrong, get it wrong, galat ho, tappu aadre, ತಪ್ಪಾದರೆ, गलत हो]
+  answer: >-
+    If a check doesn't go through, I may ask you one more, or you can approve the request in the bank app instead.
+    If we still can't confirm it's you, the request is stopped for your safety, and you can visit your branch.
+- id: genuine_call
+  keywords: [genuine, real bank, really the bank, really from the bank, fake call, is this the bank, how do i know,
+             trust, secure line, how secure, is this safe, is it safe, safe, asli, nakli, sach mein bank, nijavada,
+             surakshit,
+             ನಿಜವಾದ ಬ್ಯಾಂಕ್, ಸುರಕ್ಷಿತ, असली, सुरक्षित]
+  answer: >-
+    This is your bank's secure line. We never ask for your PIN, password or OTP, and the only code I'll ask for
+    is the one shown in your own bank app. If you're ever unsure, hang up and call the number on the back of your card.
 - id: voice_stored
-  keywords: [record my voice, voice stored, store my voice, voiceprint, recording, privacy, data safe]
+  keywords: [record my voice, voice stored, store my voice, voiceprint, recording, record, privacy, data safe,
+             keep my voice, copy of my voice, save my voice, awaaz record, awaaz save, dhvani record, ಧ್ವನಿ,
+             आवाज़ रिकॉर्ड]
   answer: >-
     No. We never store your voice or a voiceprint. Your answers are checked during the call and then deleted.
 - id: what_is_this
-  keywords: [what is this, who are you, kaun ho, robot, are you human, bot, ನೀವು ಯಾರು]
+  keywords: [what is this, who are you, who is this, who am i talking, kaun ho, kaun hai, kisse baat, robot,
+             are you human, are you a person, real person, bot, ai, machine, computer, neevu yaaru, yaaru,
+             yaara jothe, ನೀವು ಯಾರು, आप कौन]
   answer: >-
     I'm the bank's automated voice assistant on the secure line. For risky requests I run a quick
     live check so nobody can misuse a copy of your voice.
 - id: languages
-  keywords: [kannada, hindi, english, language, bhasha, ಭಾಷೆ, भाषा]
+  keywords: [kannada, hindi, english, language, bhasha, ಭಾಷೆ, ಕನ್ನಡ, भाषा, हिंदी]
   answer: >-
     You can speak in Kannada, Hindi or English, or mix them. The security phrase also mixes all three.
+
+# --- safety -----------------------------------------------------------------------------
 - id: fraud_report
-  keywords: [fraud, scam, cheated, dhoka, money lost, report fraud, cyber crime, ವಂಚನೆ, धोखा]
+  report: true
+  keywords: [fraud, scam, cheated, dhoka, money lost, lost money, money is gone, report fraud, cyber crime, hacked,
+             hack, someone used, did not make, didn't make, not done by me, without my permission, without asking me,
+             unauthorised, unauthorized, unknown transaction,
+             hana kaledu, hana hogide, ವಂಚನೆ, ಹಣ ಕಳೆದು, धोखा, ठगी]
   answer: >-
     If you have lost money to fraud, call the national cyber crime helpline 1930 right away, or report it
     at cybercrime dot gov dot in. I can also connect you to a bank officer.
+- id: failed_debit
+  report: true
+  keywords: [money deducted, amount deducted, deducted, debited, failed transaction, payment failed, money taken,
+             paisa kat, paise kat, kat gaya, hana cut, ಹಣ ಕಟ್, पैसे कट, पैसा कट]
+  answer: >-
+    If money was taken for a payment that failed, it usually comes back to your account on its own within a few
+    working days. If it doesn't, raise a complaint in the bank app, or I can connect you to a bank officer.
+- id: phishing
+  report: true
+  keywords: [suspicious, link, fake message, strange message, lottery, prize, kyc message, someone called, unknown call,
+             fake call, called me, a man called, a woman called, said he is from the bank, said she is from the bank,
+             asked for my card number, wanted my card number, ಲಿಂಕ್, लिंक]
+  answer: >-
+    Don't open links or call numbers from messages like that, and never share your PIN, password or OTP; your bank
+    never asks for them. If you already shared something, call 1930 now, or I can connect you to a bank officer.
+- id: otp_safety
+  keywords: [otp share, share otp, someone asked otp, pin share, give pin, password share, ask pin, ask for pin,
+             ask otp, ask for otp, ask my password, otp dena, otp kisi, otp batana, pin batana, otp kodu, otp heli,
+             ಒಟಿಪಿ, ओटीपी]
+  answer: >-
+    Never share a PIN, password or OTP with anyone, including bank staff. On this line I only ask you to
+    read the code from your own bank app back to me.
+- id: upi_safety
+  keywords: [upi safe, safe upi, online payment safe, upi pin]
+  answer: >-
+    Yes, as long as only you use your phone and UPI PIN. Never share your UPI PIN or OTP, and remember you never
+    need to enter a PIN to receive money.
 - id: lost_phone
-  keywords: [lost phone, phone lost, phone stolen, mobile kho gaya, no phone, ಫೋನ್ ಕಳೆದು]
+  keywords: [lost phone, phone lost, phone stolen, lost my mobile, mobile kho gaya, phone kho gaya, no phone,
+             phone kaledu, ಫೋನ್ ಕಳೆದು, फोन खो]
   answer: >-
     If your registered phone is lost, I can't send you a code, so I'll connect you to a bank officer
     who can verify you another way and block the old number.
+- id: card_block
+  keywords: [block card, card lost, lost card, card stolen, card band, card kho, card kaledu, ಕಾರ್ಡ್ ಕಳೆದು, कार्ड खो]
+  answer: >-
+    You can block a card instantly in the bank app. If you want me to do it on this call, say
+    "block my card" and I'll verify you first.
+- id: card_kept_by_atm
+  keywords: [swallowed, atm kept, atm took, card stuck, stuck in atm, card retained, card atm mein, card atm alli]
+  answer: >-
+    If an ATM kept your card, block it in the bank app right away and order a new one, or say "block my card"
+    and I'll verify you first.
+- id: complaint
+  keywords: [complain, complaint, grievance, shikayat, doori, ದೂರು, शिकायत]
+  answer: >-
+    You can raise a complaint in the bank app under help or support, and you'll get a reference number to track it.
+    I can also connect you to a bank officer now.
+- id: on_behalf
+  keywords: [on behalf, calling for, someone else's account, mother's account, father's account, wife's account,
+             husband's account]
+  answer: >-
+    For safety I can only help the account holder, on their own registered phone. They can call us themselves,
+    or visit the branch with you.
+- id: card_blocked_why
+  keywords: [why card blocked, card blocked, card not working, card declined, card band ho gaya, card kaam nahi]
+  answer: >-
+    I can't see account details on this line. Cards are usually blocked after several wrong PIN tries or a fraud
+    alert. The bank app shows the reason and lets you unblock it, or say "unblock my card" and I'll verify you first.
+
+# --- banking in general ------------------------------------------------------------------
 - id: timings
-  keywords: [timing, timings, open, branch hours, working hours, holiday, kab khulta, ಸಮಯ]
+  keywords: [timing, timings, branch hours, working hours, holiday, opening time, closing time, branch open,
+             bank open, bank close, what time, open on saturday, open on sunday, kab khulta, kab khulti, branch kab,
+             kitne baje, band hota, branch yavaga, ಸಮಯ, ಬ್ರಾಂಚ್ ಯಾವಾಗ, ब्रांच कब, कितने बजे]
   answer: >-
     Most branches open on weekdays and on some Saturdays. Exact hours depend on your branch; the bank app
     shows timings for the branch nearest you.
+- id: branch_atm
+  keywords: [nearest branch, nearest atm, near me, atm, where is the branch, branch near, branch kahan, branch elli,
+             ಎಟಿಎಂ, एटीएम]
+  answer: The bank app has a branch and ATM finder that shows the ones nearest you, with directions.
 - id: rates
   keywords: [interest, rate, fd rate, loan rate, emi, byaj, ಬಡ್ಡಿ, ब्याज]
   answer: >-
     Rates change often, so I won't quote one on this line. The bank app and website show today's interest
     rates, or I can connect you to an officer.
-- id: card_block
-  keywords: [block card, card lost, card stolen, card band, ಕಾರ್ಡ್ ಕಳೆದು]
+- id: loans
+  keywords: [loan, home loan, car loan, personal loan, gold loan, education loan, karz, ಸಾಲ, लोन, ऋण]
   answer: >-
-    You can block a card instantly in the bank app. If you want me to do it on this call, say
-    "block my card" and I'll verify you first.
-- id: how_long
-  keywords: [how long, kitna time, time lagega, takes long, ಎಷ್ಟು ಸಮಯ]
+    You can see loan options and apply in the bank app or at your branch, where an officer will explain eligibility
+    and documents. I can also connect you to a bank officer now.
+- id: open_account
+  keywords: [open account, new account, open an account, open a new account, khata khol*, account khol*,
+             account open, ಖಾತೆ ತೆರೆ, खाता खोल]
   answer: >-
-    The checks usually take less than twenty seconds, and only for risky requests like transfers or SIM changes.
-- id: otp_safety
-  keywords: [otp share, share otp, someone asked otp, pin share, give pin, password share]
+    You can open a new account in the bank app with your Aadhaar and PAN, or at any branch.
+- id: kyc
+  keywords: [kyc, documents, document, aadhaar, pan card, kyc update, ದಾಖಲೆ, दस्तावेज]
   answer: >-
-    Never share a PIN, password or OTP with anyone, including bank staff. On this line I only ask you to
-    read the code from your own bank app back to me.
+    For KYC you usually need an identity proof and an address proof, such as Aadhaar and PAN. You can update KYC
+    in the bank app or at your branch. The bank never asks you to update KYC through a link in a message.
+- id: charges
+  keywords: [charges, charge, fee, fees, service charge, shulk, kitna charge, ಶುಲ್ಕ, शुल्क]
+  answer: >-
+    Charges depend on your account type and change from time to time, so I won't quote one on this line.
+    The bank app and website list the current charges.
+- id: limits
+  keywords: [transfer limit, upi limit, daily limit, limit per day, maximum transfer, how much can i transfer,
+             kitna bhej sakte, limit kitna, ಮಿತಿ, सीमा]
+  answer: >-
+    Limits depend on your account and the type of payment; the bank app shows yours and lets you change them.
+    If you want to make a transfer now, just tell me and I'll verify you first.
+- id: minimum_balance
+  keywords: [minimum balance, min balance, average balance, kam se kam balance, ಕನಿಷ್ಠ ಬ್ಯಾಲೆನ್ಸ್, न्यूनतम]
+  answer: >-
+    The minimum balance depends on your account type, and the bank app shows the amount for your account.
+- id: cheque_clearing
+  keywords: [cheque clear, check clear, clearing, cheque deposit, cheque kab, cheque status]
+  answer: >-
+    Clearing times vary. The bank app shows the status of a cheque you deposited and when the money is credited.
+- id: payment_types
+  keywords: [what is neft, what is rtgs, what is imps, neft rtgs, rtgs neft, neft and imps, difference neft,
+             difference rtgs]
+  answer: >-
+    NEFT, RTGS and IMPS are ways to send money to another bank account. IMPS is instant, RTGS is for large amounts,
+    and NEFT works for any amount. If you want to make a transfer now, just tell me.
+- id: offers
+  keywords: [offer, offers, cashback, discount]
+  answer: Current offers on cards, loans and deposits are listed in the bank app and on the website.
+- id: ifsc
+  keywords: [ifsc, ifsc code, branch code, micr]
+  answer: >-
+    The IFSC code is printed on your cheque book and passbook, and the bank app shows it under your account details.
+- id: customer_care
+  keywords: [customer care number, customer care, helpline, contact number, toll free, phone number of the bank,
+             bank number, ಸಹಾಯವಾಣಿ, हेल्पलाइन]
+  answer: >-
+    The bank's customer care number is on the back of your debit card and in the bank app. For fraud, the national
+    cyber crime helpline is 1930. I can also connect you to a bank officer now.
+- id: net_banking
+  keywords: [net banking, internet banking, netbanking, forgot login, login problem, can't login, cannot login,
+             can't log in, user id, ನೆಟ್ ಬ್ಯಾಂಕಿಂಗ್, नेट बैंकिंग]
+  answer: >-
+    You can register for net banking or reset your login in the bank app. If you want me to reset your password
+    on this call, say "reset my password" and I'll verify you first.
+- id: download_app
+  keywords: [download app, download the app, install app, install the app, get the app, app download, app kaise]
+  answer: >-
+    Download your bank's official app from the Play Store or the App Store, and check that the developer is your bank
+    before you install it.
+- id: app_trouble
+  keywords: [app not working, app not opening, app problem, app crash, app nahi khul, app nahi chal, app band]
+  answer: >-
+    Try updating the bank app from the Play Store or the App Store and restarting your phone. If it still doesn't work,
+    I can connect you to a bank officer.
+- id: credit_card
+  keywords: [credit card apply, get a credit card, get credit card, apply for a card, apply card, card apply,
+             credit card eligibility, ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ಬೇಕು]
+  answer: You can see card offers and apply in the bank app or at your branch.
+- id: account_details
+  keywords: [account number, my account number, salary, credited, did my, has my, status, transaction status,
+             statement, last transaction, khata number, ಖಾತೆ ಸಂಖ್ಯೆ, खाता नंबर]
+  answer: >-
+    For your safety I don't read out account details on this line. The bank app shows your transactions and the
+    status of your requests, and if you say "check my balance" I'll send your balance to the bank app.
+
+# --- small talk ---------------------------------------------------------------------------
+- id: hello
+  small_talk: true
+  keywords: [hello, hallo, hi, anyone there, are you there, can you hear me, namaste, namaskara, ನಮಸ್ಕಾರ, नमस्ते]
+  answer: Yes, I'm here and I can hear you.
+- id: thanks
+  small_talk: true
+  keywords: [thank you, thanks, shukriya, ok thanks]
+  answer: You're welcome.
+- id: capabilities
+  small_talk: true
+  keywords: [what can you do, help, options, what are my options, what services, kya kar sakte, enu madabahudu]
+  answer: >-
+    I can check your balance, add a payee, change your SIM or password, transfer money, or make other changes to
+    your account, and answer banking questions. What would you like to do?
+- id: off_topic
+  small_talk: true
+  keywords: [cricket, weather, joke, movie, song, news, politics, match score]
+  answer: >-
+    I can only help with banking on this line. You can ask me a banking question, or ask to check your balance,
+    add a payee, change your SIM or password, or transfer money.
