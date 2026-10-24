@@ -1,4 +1,4 @@
-import type { CallView, Customer, EvalRun, Inbox } from "./types";
+import type { CallView, Customer, EvalRun, Inbox, Receipt, ReceiptCheck, Stats, Status } from "./types";
 
 export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
 
@@ -48,6 +48,12 @@ export const api = {
       body: JSON.stringify({ customer_id: customerId }),
     }),
   latestEval: () => http<EvalRun>("/v1/eval-runs/latest"),
+  status: () => http<Status>("/v1/status"),
+  stats: () => http<Stats>("/v1/stats"),
+  receipt: (callId: string, consoleKey: string) =>
+    http<Receipt>(`/v1/calls/${callId}/receipt`, { headers: { "X-Console-Key": consoleKey } }),
+  verifyReceipt: (receipt: string) =>
+    http<ReceiptCheck>("/v1/receipts/verify", { method: "POST", body: JSON.stringify({ receipt }) }),
 };
 
 export function eventsUrl(): string {
