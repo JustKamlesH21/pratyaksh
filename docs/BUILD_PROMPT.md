@@ -24,6 +24,14 @@ Architecture rules:
 - Policy numbers (weights, thresholds, latency bounds) live in `policy.yaml` and are tuned from Eval Runs, never hard-coded.
 - Python 3.11, FastAPI, SQLAlchemy 2, MySQL. Frontend is Vite + React + TypeScript + Tailwind 4. Do not add new frameworks without asking.
 
+Where things stand (Oct 24): the verifier, Voice Agent, web apps, Eval Runs and red-team tools are written; 51 pytest tests pass and the web app builds; a scripted call ran end to end through a real LiveKit server. Never run yet: the real speech models (faster-whisper, the spoof classifier, Indic Parler-TTS), MySQL itself, and IndicF5. The Voice Agent understands any utterance through `verification/interpreter.py` (keyword rules, then the Ollama LLM) and answers Questions from `src/pratyaksh/knowledge.yaml`.
+
+Open work, in order:
+1. On the GPU laptop: install the `ml` extra, run MySQL + LiveKit + API + agent, make one real call, fix what breaks.
+2. Check that whispers are detected (tune `VAD_ACTIVATION`) and that `whisper_score` separates real whispers from normal speech on our mics.
+3. Record consented real and Clone calls, run `pratyaksh-eval`, and tune `policy.yaml`.
+4. Polish the Console for the projector and rehearse the demo in `docs/PRD.md` §13.
+
 My machine: an NVIDIA GPU laptop with 6–8 GB VRAM runs MySQL, LiveKit, the verifier API and the agent. Other laptops run the web app.
 
 Current task: **[describe the task here, e.g. "get the first real call working end to end on my GPU laptop and fix whatever breaks", or "tune whisper_score thresholds using the recordings in data/recordings"]**

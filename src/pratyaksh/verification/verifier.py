@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import random
 import uuid
@@ -25,30 +26,40 @@ from ..domain import (
 from ..phrases import random_phrase, speakable
 from ..policy import Policy
 from ..signals import SignalExtractor
-import hmac
-
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
-from .requests import RequestClassifier
+from .interpreter import Interpreter, TurnKind
 from .store import AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow
 
 log = logging.getLogger(__name__)
 
-MAX_REQUEST_ATTEMPTS = 3
+MAX_REQUEST_ATTEMPTS = 3  # unclear turns before handing over to a Bank Agent
+MAX_SIDE_TURNS = 6  # questions and repeats answered per Call
+MAX_SIDE_TURNS_PER_CHALLENGE = 2  # so stalling never buys a Clone extra tries
 
 _REQUEST_NAMES = {
     RequestKind.BALANCE_ENQUIRY: "check your balance",
     RequestKind.ADD_PAYEE: "add a new payee",
     RequestKind.SIM_SWAP: "change your SIM or reset your password",
     RequestKind.HIGH_VALUE_TRANSFER: "make a high-value transfer",
+    RequestKind.ACCOUNT_SERVICE: "make that change to your account",
 }
+
+_DONE = {
+    RequestKind.BALANCE_ENQUIRY: "Your balance has been sent to the bank app on your registered phone.",
+}
+ANYTHING_ELSE = "Is there anything else I can help you with?"
+HANDOFF = "I'll connect you to a bank officer now. They will verify you again before making any change. Please stay on the line."
 
 GREETING = (
     "Namaskara, you have reached your bank's secure line. "
     "You can ask to check your balance, add a payee, change your SIM or password, or transfer money. "
     "How can I help you today?"
 )
-CLARIFY = "Sorry, I didn't catch that. Do you want to check your balance, add a payee, change your SIM or password, or transfer money?"
+CLARIFY = (
+    "Sorry, I didn't catch that. You can ask me a question, or ask to check your balance, add a payee, "
+    "change your SIM or password, transfer money, or make another change to your account."
+)
 
 
 def _utcnow() -> datetime:
@@ -65,7 +76,7 @@ class Verifier:
         db: Database,
         policy: Policy,
         signals: SignalExtractor,
-        classifier: RequestClassifier | None = None,
+        interpreter: Interpreter | None = None,
         events: EventHub | None = None,
         rng: random.Random | None = None,
         clock: Callable[[], datetime] = _utcnow,
@@ -75,7 +86,7 @@ class Verifier:
         self._db = db
         self._policy = policy
         self._signals = signals
-        self._classifier = classifier or RequestClassifier()
+        self._interpreter = interpreter or Interpreter()
         self._events = events or EventHub()
         self._rng = rng or random.SystemRandom()
         self._now = clock
@@ -111,16 +122,39 @@ class Verifier:
         return step
 
     def respond(self, call_id: str, response: Response) -> Step:
-        with self._db.session() as s:
-            call = self._lock(s, call_id)
-            if call.state == CallState.AWAITING_REQUEST:
-                step = self._on_request(s, call, response)
-            elif call.state == CallState.CHALLENGING:
-                step = self._on_challenge_response(s, call, response)
-            else:  # Responses after close or while waiting for the app are ignored
-                step = self._pending(call)
+        try:
+            with self._db.session() as s:
+                call = self._lock(s, call_id)
+                if call.state == CallState.AWAITING_REQUEST:
+                    step = self._on_request(s, call, response)
+                elif call.state == CallState.CHALLENGING:
+                    step = self._on_challenge_response(s, call, response)
+                else:  # Responses after close or while waiting for the app are ignored
+                    step = self._pending(call)
+        except CallNotFound:
+            raise
+        except Exception:
+            # A model or LLM failure must not end the Call: ask again once, then hand over.
+            log.exception("could not process a Response on call %s", call_id)
+            step = self._recover(call_id)
         self._publish_after(call_id)
         return step
+
+    def _recover(self, call_id: str) -> Step:
+        with self._db.session() as s:
+            call = self._lock(s, call_id)
+            if call.state == CallState.CLOSED:
+                return self._pending(call)
+            errors = sum(1 for e in s.scalars(select(AuditEventRow).where(
+                AuditEventRow.call_id == call.id, AuditEventRow.kind == "processing_error")))
+            self._audit(s, call, "processing_error", {"attempt": errors + 1})
+            if errors >= 1:
+                return self._hand_over(s, call, "I'm having trouble on this line.")
+            last = self._pending(call)
+            return self._set_step(call, Step(
+                call.id, f"Sorry, I had trouble hearing that. {_strip_lead(last.say)}", listen=True,
+                long_reply=last.long_reply, state=CallState(call.state),
+            ))
 
     def current_step(self, call_id: str) -> Step:
         with self._db.session() as s:
@@ -253,20 +287,35 @@ class Verifier:
 
     def _on_request(self, s: Session, call: CallRow, response: Response) -> Step:
         transcript = self._signals.transcribe(response.audio) if response.reply_latency_ms is not None else ""
-        heard = self._classifier.understand(transcript)
-        call.request_attempts += 1
+        heard = self._interpreter.understand(transcript)
         self._audit(
-            s, call, "request_heard",
-            {"transcript": transcript, "request": heard.request, "wants_app_approval": heard.wants_app_approval},
+            s, call, "caller_said",
+            {"transcript": transcript, "kind": heard.kind.value, "request": heard.request,
+             "wants_app_approval": heard.wants_app_approval},
         )
-        if heard.request is None:
+        listen = lambda say: self._set_step(  # noqa: E731
+            call, Step(call.id, say, listen=True, state=CallState.AWAITING_REQUEST)
+        )
+
+        if heard.kind is TurnKind.HUMAN:
+            return self._hand_over(s, call, "Sure.")
+        if heard.kind is TurnKind.GOODBYE:
+            return self._close(s, call, Outcome.ENDED, "Thank you for calling. Goodbye.")
+        if heard.kind in (TurnKind.QUESTION, TurnKind.REPEAT):
+            call.side_turns += 1
+            if call.side_turns > MAX_SIDE_TURNS:
+                return self._hand_over(s, call, "You have a few questions, so")
+            if heard.kind is TurnKind.REPEAT:
+                return listen(_strip_lead(self._pending(call).say))
+            return listen(f"{heard.reply} {ANYTHING_ELSE}")
+        if heard.kind is TurnKind.APP_APPROVAL and heard.request is None:
+            return listen("Sure, I can send it to your bank app. Which request is it: a payee, a SIM or password change, "
+                          "a transfer, or another account change?")
+        if heard.request is None:  # UNCLEAR
+            call.request_attempts += 1
             if call.request_attempts >= MAX_REQUEST_ATTEMPTS:
-                return self._close(
-                    s, call, Outcome.ABANDONED,
-                    "I'm sorry, I couldn't understand the request. Please call again or visit your branch. Goodbye.",
-                )
-            say = f"{heard.reply} {CLARIFY}" if heard.reply else CLARIFY
-            return self._set_step(call, Step(call.id, say, listen=True, state=CallState.AWAITING_REQUEST))
+                return self._hand_over(s, call, "I'm sorry, I couldn't understand.")
+            return listen(f"{heard.reply} {CLARIFY}" if heard.reply else CLARIFY)
 
         request = heard.request
         plan = self._policy.plan(request)
@@ -281,10 +330,8 @@ class Verifier:
             call.verdict = Verdict.PASS.value
             call.reasons = ["No Challenges needed for this Request."]
             self._audit(s, call, "verdict", {"verdict": "PASS", "liveness": None, "reasons": call.reasons})
-            return self._close(
-                s, call, Outcome.PASSED,
-                "Sure. Your balance has been sent to the bank app on your registered phone. Thank you for calling. Goodbye.",
-            )
+            done = _DONE.get(request, "That's done.")
+            return self._close(s, call, Outcome.PASSED, f"Sure. {done} Thank you for calling. Goodbye.")
         call.state = CallState.CHALLENGING
         if heard.wants_app_approval:
             return self._start_app_approval(s, call, "You asked to use the app.")
@@ -294,6 +341,17 @@ class Verifier:
             f"For your security I'll ask you {n} quick thing{'s' if n > 1 else ''}."
         )
         return self._issue_next(s, call, intro)
+
+    def _hand_over(self, s: Session, call: CallRow, lead_in: str) -> Step:
+        """A Bank Agent takes over. Evidence that already says BLOCK still blocks."""
+        if call.evidence:
+            so_far = self._policy.decide(_evidence(call.evidence), call.step_ups)
+            if so_far.verdict is Verdict.BLOCK:
+                return self._block(s, call, so_far)
+        for msg in self._open_messages(s, call):
+            msg.resolved_at = self._now()
+        self._audit(s, call, "handed_to_agent", {})
+        return self._close(s, call, Outcome.HANDED_TO_AGENT, f"{lead_in} {HANDOFF}")
 
     def _on_challenge_response(self, s: Session, call: CallRow, response: Response) -> Step:
         issued = call.challenges[-1]
@@ -308,14 +366,30 @@ class Verifier:
             )
         signals = self._signals.extract(challenge, response)
 
-        if self._classifier.wants_app_approval(signals.transcript):
-            self._audit(s, call, "app_approval_asked", {"transcript": signals.transcript})
-            # Evidence already gathered still counts: a Clone cannot escape a BLOCK by asking for the app.
-            if call.evidence:
-                so_far = self._policy.decide(_evidence(call.evidence), call.step_ups)
-                if so_far.verdict is Verdict.BLOCK:
-                    return self._block(s, call, so_far)
-            return self._start_app_approval(s, call, "No problem.")
+        off_script = self._off_script(challenge, signals)
+        if off_script is not None:
+            heard = off_script
+            if heard.kind is TurnKind.APP_APPROVAL:
+                self._audit(s, call, "app_approval_asked", {"transcript": signals.transcript})
+                # Evidence already gathered still counts: a Clone cannot escape a BLOCK by asking for the app.
+                if call.evidence:
+                    so_far = self._policy.decide(_evidence(call.evidence), call.step_ups)
+                    if so_far.verdict is Verdict.BLOCK:
+                        return self._block(s, call, so_far)
+                return self._start_app_approval(s, call, "No problem.")
+            if heard.kind is TurnKind.HUMAN:
+                return self._hand_over(s, call, "Sure.")
+            asked = int(issued.get("side_turns", 0))
+            if asked < MAX_SIDE_TURNS_PER_CHALLENGE:  # QUESTION or REPEAT: answer, then ask again
+                call.challenges = call.challenges[:-1] + [{**issued, "side_turns": asked + 1}]
+                call.side_turns += 1
+                self._audit(s, call, "caller_said", {"transcript": signals.transcript, "kind": heard.kind.value})
+                lead = "Of course." if heard.kind is TurnKind.REPEAT else f"{heard.reply} Now,"
+                return self._set_step(call, Step(
+                    call.id, f"{lead} {challenge.prompt}", listen=True,
+                    long_reply=challenge.kind is ChallengeKind.POSSESSION_CODE, state=CallState.CHALLENGING,
+                ))
+            # Out of side turns: whatever was said is scored as the Response.
 
         if challenge.kind is ChallengeKind.POSSESSION_CODE:
             match = self._check_code(s, call, signals.spoken_digits, final=bool(issued.get("retried")))
@@ -365,6 +439,23 @@ class Verifier:
             call.planned = [decision.next_challenge.value]
             return self._issue_next(s, call, "Thank you. I need one more check.")
         return self._start_app_approval(s, call, "I need one more confirmation.")
+
+    def _off_script(self, challenge: Challenge, signals: Signals):
+        """The Caller said something other than an answer (a question, "repeat", "use the app",
+        "a person please"). Returns the Understanding, or None to score it as the Response."""
+        if not signals.transcript:
+            return None
+        heard = self._interpreter.understand(signals.transcript, during_challenge=True)
+        if heard.kind in (TurnKind.APP_APPROVAL, TurnKind.HUMAN):
+            return heard  # explicit asks win
+        if heard.kind is TurnKind.UNCLEAR:
+            return None
+        attempted = (
+            (signals.task_match or 0) >= 0.5
+            if challenge.kind is ChallengeKind.WHISPER_PHRASE
+            else len(signals.spoken_digits or "") >= 4
+        )
+        return None if attempted else heard  # a QUESTION or REPEAT, unless they tried to answer
 
     def _block(self, s: Session, call: CallRow, decision) -> Step:
         if call.verdict != Verdict.BLOCK.value:  # record the Verdict if it was not recorded yet
@@ -552,3 +643,11 @@ def _jsonable(data: dict) -> dict:
             v = v.value
         out[k] = v
     return out
+
+
+def _strip_lead(say: str) -> str:
+    """Drop apology prefixes so repeated prompts don't stack ("Sorry… Sorry…")."""
+    for lead in ("Sorry, I had trouble hearing that. ", "Sorry, I didn't hear you. ", "Of course. "):
+        while say.startswith(lead):
+            say = say[len(lead):]
+    return say

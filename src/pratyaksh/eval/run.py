@@ -121,7 +121,10 @@ def _share(rows: list[dict], pred) -> float | None:
 
 # -- export recorded Calls -------------------------------------------------------------
 
-_RESPONSE_EVENTS = {"request_heard", "challenge_repeated", "code_retry", "app_approval_asked", "response_scored"}
+# Audit kinds written exactly once per posted Response (keeps recordings and events aligned).
+_RESPONSE_EVENTS = {
+    "caller_said", "challenge_repeated", "code_retry", "app_approval_asked", "response_scored", "processing_error",
+}
 
 
 def export(db: Database, audio_dir: Path, label: str, since: datetime | None, out: Path) -> int:

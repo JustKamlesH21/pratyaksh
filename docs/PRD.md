@@ -43,8 +43,9 @@ Pratyaksh is a Voice Agent that sits in front of risky Requests on a bank call. 
 | # | Feature | Acceptance |
 |---|---|---|
 | M1 | Browser voice call over self-hosted LiveKit | Caller app joins a room; Voice Agent greets within 2 s |
-| M2 | Request capture | Caller says the Request in English, Hindi or Kannada; keyword rules classify the four Requests; LLM fallback for the rest |
-| M3 | Risk Tiers from Policy | balance = 0 Challenges · add payee = 2 · SIM swap/password reset = 3 · transfer > ₹5 lakh = 3 + Agent Review |
+| M2 | Understand anything | Caller may say a Request, a Question, "repeat", "a person please" or "bye" in English, Hindi, Kannada or a mix. Keyword rules first, LLM for the rest; Questions answered from `knowledge.yaml`; unknown account changes become "account service" and are verified; never a dead end (Hand-over instead of hanging up) |
+| M2b | Never fail mid-call | LLM down → keyword rules; speech model error → ask again, then Hand-over; TTS error → fallback tone; agent crash → Call closed cleanly |
+| M3 | Risk Tiers from Policy | balance = 0 Challenges · add payee = 2 · other account service = 2 · SIM swap/password reset = 3 · transfer > ₹5 lakh = 3 + Agent Review |
 | M4 | Whisper Phrase Challenge | Random code-mixed phrase; Task Match (fuzzy, script-agnostic) + Whisper Score |
 | M5 | Possession Code Challenge | 6-digit code to the Bank App; spoken digits parsed in en/hi/kn; Code Match |
 | M6 | Reply Latency Signal | Measured from end of prompt playout to start of speech |

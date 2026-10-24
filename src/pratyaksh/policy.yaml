@@ -11,6 +11,8 @@ requests:
   high_value_transfer:
     challenges: [whisper_phrase, whisper_phrase, possession_code]
     agent_review: true
+  account_service:       # cards, limits, address, closing an account, cheque book, KYC…
+    challenges: [whisper_phrase, possession_code]
 
 signals:
   task_match:

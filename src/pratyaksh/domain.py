@@ -17,6 +17,7 @@ class RequestKind(StrEnum):
     ADD_PAYEE = "add_payee"
     SIM_SWAP = "sim_swap"
     HIGH_VALUE_TRANSFER = "high_value_transfer"
+    ACCOUNT_SERVICE = "account_service"  # any other account change: cards, limits, address, closing…
 
 
 class ChallengeKind(StrEnum):
@@ -45,6 +46,8 @@ class Outcome(StrEnum):
     APPROVED_IN_APP = "approved_in_app"
     BLOCKED = "blocked"
     DECLINED_IN_APP = "declined_in_app"
+    HANDED_TO_AGENT = "handed_to_agent"  # a Bank Agent takes over (and verifies the Caller themselves)
+    ENDED = "ended"  # the Caller only had questions, or said goodbye
     ABANDONED = "abandoned"
 
 

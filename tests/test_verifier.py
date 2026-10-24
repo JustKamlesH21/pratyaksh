@@ -127,7 +127,7 @@ def test_silence_repeats_the_challenge_once_then_counts(harness):
     assert any("no reply" in r for r in h.verifier.call(call_id)["reasons"])
 
 
-def test_unclear_requests_use_the_llm_then_give_up():
+def test_unclear_requests_use_the_llm_then_hand_over():
     class StubLLM:
         def __init__(self):
             self.calls = 0
@@ -150,7 +150,7 @@ def test_unclear_requests_use_the_llm_then_give_up():
     for _ in range(2):
         h.say(call_id, "umm")
     step = h.say(call_id, "umm")
-    assert step.end and step.outcome is Outcome.ABANDONED
+    assert step.end and step.outcome is Outcome.HANDED_TO_AGENT  # never a dead end
 
 
 def test_audit_trail_is_ordered_and_events_reach_consoles(harness):
@@ -171,7 +171,7 @@ def test_audit_trail_is_ordered_and_events_reach_consoles(harness):
     assert got and got[-1]["call"]["outcome"] == "passed"
     events = h.verifier.call(call_id)["events"]
     assert [e["seq"] for e in events] == list(range(1, len(events) + 1))
-    assert [e["kind"] for e in events] == ["call_started", "request_heard", "risk_tier_set", "verdict", "call_closed"]
+    assert [e["kind"] for e in events] == ["call_started", "caller_said", "risk_tier_set", "verdict", "call_closed"]
 
 
 def test_hang_up_and_errors(harness):

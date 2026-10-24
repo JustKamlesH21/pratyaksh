@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from ..config import Settings
 from ..policy import Policy
 from ..signals import LocalSpeechModels, ScriptedSpeechModels, SignalExtractor, SpeechModels
-from ..verification import Database, EventHub, OllamaChat, RequestClassifier, Verifier
+from ..verification import Database, EventHub, Interpreter, OllamaChat, Verifier
 from ..verification.verifier import CLARIFY, GREETING
 from ..voice import ParlerVoice, PromptVoice, ToneVoice
 
@@ -52,7 +52,7 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
         db,
         Policy.load(settings.policy_path),
         SignalExtractor(speech),
-        RequestClassifier(llm),
+        Interpreter(llm),
         events,
         code_ttl_s=settings.code_ttl_seconds,
         approval_ttl_s=settings.approval_ttl_seconds,
@@ -62,5 +62,5 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
         if settings.tts_backend == "parler"
         else ToneVoice()
     )
-    voice = PromptVoice(synth, settings.tts_cache_dir)
+    voice = PromptVoice(synth, settings.tts_cache_dir, fallback=ToneVoice())
     return Container(settings, db, events, speech, verifier, voice)

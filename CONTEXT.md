@@ -37,8 +37,16 @@ One live voice conversation between a Caller and the Voice Agent, from greeting 
 _Avoid_: session, conversation, room
 
 **Request**:
-The thing the Caller asks the bank to do on a Call: a balance enquiry, adding a payee, a SIM swap or password reset, or a high-value transfer.
+The thing the Caller asks the bank to do on a Call: a balance enquiry, adding a payee, a SIM swap or password reset, a high-value transfer, or another account service (cards, limits, address, closing an account…).
 _Avoid_: intent, action, transaction
+
+**Question**:
+Something the Caller asks to know rather than asks the bank to do. Answered from the bank's general knowledge, never with account data, and never instead of a Challenge.
+_Avoid_: query, FAQ (in prose)
+
+**Hand-over**:
+Passing a Call to a Bank Agent when the Caller asks for a person or the Voice Agent can't understand them. The Bank Agent verifies the Caller again; a Call whose evidence already says BLOCK is blocked instead.
+_Avoid_: escalation, transfer (a Request means money)
 
 **Risk Tier**:
 The level a Request is assigned. It sets which Challenges the Caller must pass and whether Agent Review is needed.

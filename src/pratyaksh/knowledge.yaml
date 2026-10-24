@@ -1,0 +1,61 @@
+# What the Voice Agent may say when a Caller asks a question (not a Request).
+# Keep answers short, general and true for any bank. Never put account data, rates or numbers
+# that change here. The LLM rephrases these; without an LLM they are spoken as written.
+
+- id: why_whisper
+  keywords: [why whisper, whisper kyon, why should i whisper, what is this whisper, ಯಾಕೆ ಪಿಸುಮಾತು, फुसफुसा]
+  answer: >-
+    Whispering a random phrase is easy for a person and very hard for a voice-cloning tool.
+    It lets us confirm a live person is on the line without storing your voice.
+- id: why_code
+  keywords: [why code, which code, what code, code kahan, code kidhar, where is the code, ಕೋಡ್ ಎಲ್ಲಿ]
+  answer: >-
+    We send a six-digit code to the bank app on your registered phone. Reading it out shows that
+    the person calling also has your phone. The code is valid for two minutes.
+- id: voice_stored
+  keywords: [record my voice, voice stored, store my voice, voiceprint, recording, privacy, data safe]
+  answer: >-
+    No. We never store your voice or a voiceprint. Your answers are checked during the call and then deleted.
+- id: what_is_this
+  keywords: [what is this, who are you, kaun ho, robot, are you human, bot, ನೀವು ಯಾರು]
+  answer: >-
+    I'm the bank's automated voice assistant on the secure line. For risky requests I run a quick
+    live check so nobody can misuse a copy of your voice.
+- id: languages
+  keywords: [kannada, hindi, english, language, bhasha, ಭಾಷೆ, भाषा]
+  answer: >-
+    You can speak in Kannada, Hindi or English, or mix them. The security phrase also mixes all three.
+- id: fraud_report
+  keywords: [fraud, scam, cheated, dhoka, money lost, report fraud, cyber crime, ವಂಚನೆ, धोखा]
+  answer: >-
+    If you have lost money to fraud, call the national cyber crime helpline 1930 right away, or report it
+    at cybercrime dot gov dot in. I can also connect you to a bank officer.
+- id: lost_phone
+  keywords: [lost phone, phone lost, phone stolen, mobile kho gaya, no phone, ಫೋನ್ ಕಳೆದು]
+  answer: >-
+    If your registered phone is lost, I can't send you a code, so I'll connect you to a bank officer
+    who can verify you another way and block the old number.
+- id: timings
+  keywords: [timing, timings, open, branch hours, working hours, holiday, kab khulta, ಸಮಯ]
+  answer: >-
+    Most branches open on weekdays and on some Saturdays. Exact hours depend on your branch; the bank app
+    shows timings for the branch nearest you.
+- id: rates
+  keywords: [interest, rate, fd rate, loan rate, emi, byaj, ಬಡ್ಡಿ, ब्याज]
+  answer: >-
+    Rates change often, so I won't quote one on this line. The bank app and website show today's interest
+    rates, or I can connect you to an officer.
+- id: card_block
+  keywords: [block card, card lost, card stolen, card band, ಕಾರ್ಡ್ ಕಳೆದು]
+  answer: >-
+    You can block a card instantly in the bank app. If you want me to do it on this call, say
+    "block my card" and I'll verify you first.
+- id: how_long
+  keywords: [how long, kitna time, time lagega, takes long, ಎಷ್ಟು ಸಮಯ]
+  answer: >-
+    The checks usually take less than twenty seconds, and only for risky requests like transfers or SIM changes.
+- id: otp_safety
+  keywords: [otp share, share otp, someone asked otp, pin share, give pin, password share]
+  answer: >-
+    Never share a PIN, password or OTP with anyone, including bank staff. On this line I only ask you to
+    read the code from your own bank app back to me.

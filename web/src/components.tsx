@@ -33,6 +33,8 @@ const outcomeText: Record<Outcome, [string, string]> = {
   approved_in_app: ["Approved in app", "text-pass"],
   blocked: ["Blocked", "text-block"],
   declined_in_app: ["Declined in app", "text-block"],
+  handed_to_agent: ["Handed to officer", "text-stepup"],
+  ended: ["Ended (questions only)", "text-ink-soft/70"],
   abandoned: ["Abandoned", "text-ink-soft/70"],
 };
 

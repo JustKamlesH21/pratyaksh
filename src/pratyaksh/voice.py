@@ -31,8 +31,9 @@ class Synthesiser(Protocol):
 
 
 class PromptVoice:
-    def __init__(self, synth: Synthesiser, cache_dir: str | Path):
+    def __init__(self, synth: Synthesiser, cache_dir: str | Path, fallback: Synthesiser | None = None):
         self._synth = synth
+        self._fallback = fallback  # used when the main model fails, so the Call keeps going
         self._cache = Path(cache_dir)
         self._cache.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()  # one synthesis at a time on the GPU
@@ -46,10 +47,15 @@ class PromptVoice:
         with self._lock:
             if path.exists():
                 return path.read_bytes()
-            samples, rate = self._synth.synthesise(text)
-            buf = io.BytesIO()
-            sf.write(buf, samples.astype(np.float32), rate, format="WAV", subtype="PCM_16")
-            data = buf.getvalue()
+            try:
+                samples, rate = self._synth.synthesise(text)
+            except Exception:
+                if self._fallback is None:
+                    raise
+                log.exception("TTS failed; using the fallback voice for this prompt")
+                samples, rate = self._fallback.synthesise(text)
+                return _wav(samples, rate)  # not cached: retry the real voice next time
+            data = _wav(samples, rate)
             tmp = path.with_suffix(".tmp")
             tmp.write_bytes(data)
             tmp.replace(path)
@@ -61,6 +67,12 @@ class PromptVoice:
                 self.render(t)
             except Exception as e:  # a missing prompt is rendered on demand later
                 log.warning("could not pre-render prompt %r: %r", t[:40], e)
+
+
+def _wav(samples: np.ndarray, rate: int) -> bytes:
+    buf = io.BytesIO()
+    sf.write(buf, samples.astype(np.float32), rate, format="WAV", subtype="PCM_16")
+    return buf.getvalue()
 
 
 class ParlerVoice:

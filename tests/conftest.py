@@ -9,7 +9,7 @@ import pytest
 from pratyaksh.domain import SAMPLE_RATE, Audio, Response
 from pratyaksh.policy import Policy
 from pratyaksh.signals import ScriptedSpeechModels, SignalExtractor
-from pratyaksh.verification import Database, EventHub, RequestClassifier, Verifier
+from pratyaksh.verification import Database, EventHub, Interpreter, Verifier
 
 
 def voiced(seconds: float = 1.5, f0: float = 140.0, seed: int = 0) -> Audio:
@@ -62,7 +62,7 @@ class Harness:
             self.db,
             Policy.load(),
             SignalExtractor(self.models),
-            RequestClassifier(llm),
+            Interpreter(llm),
             self.events,
             rng=random.Random(7),
             clock=self.clock,

@@ -14,10 +14,12 @@ Pratyaksh decides whether the person on a bank call is a **live human holding th
 src/pratyaksh/
   domain.py            value types (Step, Signals, Verdict…)
   policy.py + .yaml    Requests → Challenges, Signals → Verdict + Reasons
+  knowledge.yaml       answers the Voice Agent may give to Questions (edit freely)
   signals.py           SignalExtractor + speech model adapters (faster-whisper, spoof classifier)
   language.py          Kannada/Devanagari/Latin folding, spoken digits
   phrases.py           Whisper Phrase bank
-  verification/        Verifier: Call state machine, Possession Codes, Device Inbox, Audit Trail
+  verification/        Verifier: Call state machine, Interpreter (any utterance), Possession Codes,
+                       Device Inbox, Audit Trail
   voice.py             PromptVoice: Indic Parler-TTS with a disk cache
   api/                 FastAPI verifier (HTTP + WebSocket)
   agent/               LiveKit Voice Agent worker (thin; ADR-0001)
@@ -111,6 +113,8 @@ Open:
 5. Watch the Signals, Verdict and Reasons on the Console.
 
 Demo customers: `cust-ananya`, `cust-rahul`, `cust-meera`.
+
+Try going off-script too: ask "why should I whisper?" in the middle of a Challenge, say "repeat that", ask about branch timings, or say "let me talk to an officer". The agent answers and carries on; it never hangs up on a Caller it doesn't understand.
 
 ## Gotchas
 

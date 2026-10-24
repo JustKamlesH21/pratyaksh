@@ -12,13 +12,14 @@ Reads:
     pairing(customer_id) -> device token (shown only on the operator's machine)
 
 Errors: CallNotFound, UnknownCustomer, NotAllowed, DeviceNotPaired.
-Hidden inside: the Call state machine, Request understanding, Challenge planning and phrases,
+Hidden inside: the Call state machine, understanding any utterance (Requests, questions,
+"repeat", "a person please"), Challenge planning and phrases,
 Possession Codes and the Device Inbox, Policy decisions, the Audit Trail and live events.
 """
 
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
-from .requests import OllamaChat, RequestClassifier
+from .interpreter import Faq, Interpreter, OllamaChat
 from .store import Database
 from .verifier import Verifier
 
@@ -27,9 +28,10 @@ __all__ = [
     "DeviceNotPaired",
     "Database",
     "EventHub",
+    "Faq",
+    "Interpreter",
     "NotAllowed",
     "OllamaChat",
-    "RequestClassifier",
     "UnknownCustomer",
     "Verifier",
 ]

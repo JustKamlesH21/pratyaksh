@@ -64,7 +64,8 @@ class CallRow(Base):
     room: Mapped[str] = mapped_column(String(128))
     state: Mapped[str] = mapped_column(String(32))
     request: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    request_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    request_attempts: Mapped[int] = mapped_column(Integer, default=0)  # unclear turns before a Request
+    side_turns: Mapped[int] = mapped_column(Integer, default=0)  # questions and repeats answered
     agent_review: Mapped[bool] = mapped_column(Boolean, default=False)
     review_status: Mapped[str | None] = mapped_column(String(16), nullable=True)  # pending|approved|rejected
     planned: Mapped[list] = mapped_column(JSON, default=list)  # ChallengeKind values still to ask, in order

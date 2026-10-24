@@ -7,10 +7,12 @@ export type Outcome =
   | "approved_in_app"
   | "blocked"
   | "declined_in_app"
+  | "handed_to_agent"
+  | "ended"
   | "abandoned";
 export type Verdict = "PASS" | "STEP_UP" | "BLOCK";
 export type ChallengeKind = "whisper_phrase" | "possession_code";
-export type RequestKind = "balance_enquiry" | "add_payee" | "sim_swap" | "high_value_transfer";
+export type RequestKind = "balance_enquiry" | "add_payee" | "sim_swap" | "high_value_transfer" | "account_service";
 
 export interface Customer {
   id: string;
@@ -103,4 +105,5 @@ export const REQUEST_LABEL: Record<RequestKind, string> = {
   add_payee: "Add payee",
   sim_swap: "SIM swap / password reset",
   high_value_transfer: "Transfer above ₹5 lakh",
+  account_service: "Other account change",
 };
