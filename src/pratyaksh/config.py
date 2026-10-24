@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     # LLM fallback for Request classification (ADR-0002). Leave the key empty to disable.
     ollama_host: str = "https://ollama.com"
     ollama_api_key: str = ""
-    ollama_model: str = "gpt-oss:20b"
+    ollama_model: str = "gpt-oss:120b"
 
     # Verification timing
     code_ttl_seconds: int = 120
