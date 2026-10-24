@@ -10,6 +10,7 @@ Interface (commands; each returns the Step the Voice Agent must do next):
     hang_up(call_id)                       -> None
 Reads:
     call(call_id), calls(limit), inbox(customer_id, device_token), customers()
+    audit_check(call_id) -> {intact, events, broken_at, head}   (recomputes the Audit Trail's hash chain)
     pairing(customer_id) -> device token (shown only on the operator's machine)
 
 Errors: CallNotFound, UnknownCustomer, NotAllowed, DeviceNotPaired.

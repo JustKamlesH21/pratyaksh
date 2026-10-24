@@ -172,6 +172,10 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     def get_call(call_id: str, request: Request):
         return c(request).verifier.call(call_id)
 
+    @app.get("/v1/calls/{call_id}/audit")
+    def audit_check(call_id: str, request: Request):
+        return c(request).verifier.audit_check(call_id)
+
     @app.post("/v1/calls/{call_id}/review")
     def review(call_id: str, body: Review, request: Request, x_console_key: str = Header(default="")):
         key = c(request).settings.console_key
