@@ -69,7 +69,7 @@ function Shell() {
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
           <Link to="/" className="press flex items-center gap-2 rounded-lg" aria-label="Pratyaksh home">
             <Logo />
-            <span className="hidden font-display text-lg font-semibold tracking-tight sm:inline">Pratyaksh</span>
+            <span className="font-display text-base font-semibold tracking-tight sm:text-lg">Pratyaksh</span>
           </Link>
           <nav className="ml-auto flex gap-0.5 sm:gap-1">
             {tabs.map(({ to, label, icon: Icon }) => (
