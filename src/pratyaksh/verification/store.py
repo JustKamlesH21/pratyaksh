@@ -20,8 +20,8 @@ from typing import Iterator
 import secrets
 
 from sqlalchemy import (
-    JSON, Boolean, DateTime as _DateTime, Double, ForeignKey, Integer, String, Text, create_engine, inspect, select,
-    text,
+    JSON, Boolean, DateTime as _DateTime, Double, ForeignKey, Integer, String, Text, UniqueConstraint, create_engine,
+    event, inspect, select, text,
 )
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
@@ -90,6 +90,8 @@ class CallRow(Base):
 
 class AuditEventRow(Base):
     __tablename__ = "audit_events"
+    # Two events with one seq would read as a broken chain; the database refuses the second instead.
+    __table_args__ = (UniqueConstraint("call_id", "seq", name="uq_audit_events_call_seq"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     call_id: Mapped[str] = mapped_column(String(36), index=True)
     seq: Mapped[int] = mapped_column(Integer)
@@ -165,6 +167,22 @@ class SchemaOutOfDate(RuntimeError):
     """The database was created by an older version: create_all() never adds columns."""
 
 
+def _sqlite_write_lock_per_transaction(engine) -> None:
+    """SQLite ignores SELECT ... FOR UPDATE and pysqlite opens a transaction only at the first write,
+    so the Verifier's row lock would do nothing. BEGIN IMMEDIATE takes SQLite's write lock when each
+    transaction starts instead (the recipe in SQLAlchemy's pysqlite docs). Transactions are short; the
+    slow work (speech models, LLM) runs outside them. In-memory test databases share one connection
+    and are left as they are."""
+
+    @event.listens_for(engine, "connect")
+    def _no_implicit_begin(dbapi_connection, _record):
+        dbapi_connection.isolation_level = None
+
+    @event.listens_for(engine, "begin")
+    def _begin_immediate(conn):
+        conn.exec_driver_sql("BEGIN IMMEDIATE")
+
+
 class Database:
     def __init__(self, url: str):
         kwargs: dict = {"pool_pre_ping": True}
@@ -173,6 +191,8 @@ class Database:
             if url in ("sqlite://", "sqlite:///:memory:"):
                 kwargs["poolclass"] = StaticPool
         self.engine = create_engine(url, **kwargs)
+        if url.startswith("sqlite") and kwargs.get("poolclass") is not StaticPool:
+            _sqlite_write_lock_per_transaction(self.engine)
         self._sessions = sessionmaker(self.engine, expire_on_commit=False)
 
     def create_schema(self) -> list[str]:

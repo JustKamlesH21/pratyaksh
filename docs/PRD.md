@@ -205,12 +205,13 @@ GPU budget on a 6–8 GB laptop: Whisper turbo ≈ 1.6 GB, Parler-TTS ≈ 2 GB (
 | POST | `/v1/customers/{id}/alerts/dismiss` (device token) | Bank App |
 | GET | `/v1/calls/{id}/audit` → `{intact, events, broken_at, head}` | Console |
 | GET | `/v1/calls/{id}/receipt` (console key) → `{receipt, claims}` | Core banking, Console |
-| POST | `/v1/receipts/verify` `{receipt}`, GET `/v1/receipts/key` (JWK) | Core banking, anyone |
+| POST | `/v1/receipts/verify` `{receipt}` → `{valid, reason, claims, redeemed}`, GET `/v1/receipts/key` (JWK) | Core banking, anyone |
+| POST | `/v1/receipts/redeem` `{receipt}` (console key): once per Call, on the Audit Trail | Core banking |
 | GET | `/v1/status`, `/v1/stats` (outcomes, Added Time, hearing p50/p95, Attack Wave) | Console, operator |
 | GET | `/v1/calls/{id}/transcript` (`?format=text` downloads) | Console, fraud team |
 | GET | `/v1/calls?outcome=&customer_id=`, `/v1/customers/{id}/risk` | Console |
 
-Agent-only routes (`/v1/calls` POST, `/responses`, `/step`, `/hangup`, `/v1/voice`) require `X-Agent-Key` when `AGENT_KEY` is set.
+Agent-only routes (`/v1/calls` POST, `/responses`, `/step`, `/hangup`, `/v1/voice`) require `X-Agent-Key` when `AGENT_KEY` is set. With `CONSOLE_KEY` set, Console reads (`/v1/calls…`, `/transcript`, `/audit`, `/v1/customers/{id}/risk`, review, receipts, redeem) need `X-Console-Key`, and `WS /v1/events` takes `{"key": …}` as its first message.
 
 `Step = {call_id, say, listen, wait, end, state, outcome}`. Interactive docs at `/docs` when the API runs.
 

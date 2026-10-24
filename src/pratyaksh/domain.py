@@ -73,6 +73,12 @@ class Audio:
             mono = librosa.resample(mono, orig_sr=rate, target_sr=SAMPLE_RATE)
         return cls(np.ascontiguousarray(mono, dtype=np.float32), SAMPLE_RATE)
 
+    @staticmethod
+    def wav_info(data: bytes) -> tuple[float, int]:
+        """(seconds, sample rate) from the header alone, without decoding."""
+        info = sf.info(io.BytesIO(data))
+        return info.frames / info.samplerate, int(info.samplerate)
+
     def to_wav(self) -> bytes:
         buf = io.BytesIO()
         sf.write(buf, self.samples, self.sample_rate, format="WAV", subtype="PCM_16")

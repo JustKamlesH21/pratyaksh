@@ -75,7 +75,8 @@ def as_text(call: dict) -> str:
 def _line(kind: str, d: dict) -> dict | None:
     if kind == "agent_said":
         return {"speaker": "agent", "text": d.get("say", "")}
-    if kind in ("caller_said", "app_approval_asked", "code_retry", "response_scored", "challenge_repeated"):
+    if kind in ("caller_said", "app_approval_asked", "code_retry", "code_expired", "response_scored",
+                "challenge_repeated"):
         return _caller(kind, d)
     text = _system(kind, d)
     if text is None:
@@ -101,6 +102,9 @@ def _caller(kind: str, d: dict) -> dict:
         line["understood"] = "app_approval"
     elif kind == "code_retry":
         line["note"] = "The code didn't match. One more try."
+    elif kind == "code_expired":
+        line["note"] = ("The right code, read after it expired. A new one was sent." if d.get("reissued")
+                        else "The new code expired too. Handing over to App Approval.")
     elif kind == "challenge_repeated":
         line["note"] = "No speech heard. The Challenge is repeated once."
     elif kind == "response_scored":
@@ -149,6 +153,8 @@ def _system(kind: str, d: dict) -> str | None:
         return f"Couldn't process that Response (attempt {d.get('attempt', 1)})."
     if kind == "response_ignored":
         return f"A late Response was ignored: {d.get('reason', '')}."
+    if kind == "receipt_redeemed":
+        return "Core banking redeemed the Verification Receipt and carried out the Request."
     if kind == "call_closed":
         return f"Call closed: {OUTCOME_NAMES.get(d.get('outcome', ''), d.get('outcome'))}."
     return None

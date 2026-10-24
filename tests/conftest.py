@@ -75,8 +75,8 @@ class Clock:
 class Harness:
     """A Verifier on in-memory SQLite (or the test MySQL) with scripted speech models."""
 
-    def __init__(self, spoof=None, llm=None):
-        self.db = Database(database_url())
+    def __init__(self, spoof=None, llm=None, url: str | None = None):
+        self.db = Database(url or database_url())
         self.db.create_schema()
         self.db.seed_demo_customers()
         self.models = ScriptedSpeechModels(spoof=spoof)
@@ -115,3 +115,11 @@ class Harness:
 @pytest.fixture
 def harness() -> Harness:
     return Harness()
+
+
+@pytest.fixture
+def threaded(tmp_path) -> Harness:
+    """A Harness whose database really runs transactions side by side: a SQLite file (one connection
+    per thread), or the test MySQL. In-memory SQLite shares one connection, so it cannot show races."""
+    url = None if os.environ.get("PRATYAKSH_TEST_DATABASE_URL") else f"sqlite:///{tmp_path / 'threaded.db'}"
+    return Harness(url=url)

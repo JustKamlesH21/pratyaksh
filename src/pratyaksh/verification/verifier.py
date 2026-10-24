@@ -40,7 +40,7 @@ from .store import (
 log = logging.getLogger(__name__)
 
 # Audit kinds that record a heard Response (and its timings_ms).
-_HEARD_EVENTS = ["caller_said", "app_approval_asked", "code_retry", "response_scored"]
+_HEARD_EVENTS = ["caller_said", "app_approval_asked", "code_retry", "code_expired", "response_scored"]
 
 MAX_REQUEST_ATTEMPTS = 3  # unclear turns before handing over to a Bank Agent
 MAX_SIDE_TURNS = 6  # questions and repeats answered per Call
@@ -312,18 +312,22 @@ class Verifier:
     def dismiss_alerts(self, customer_id: str, device_token: str) -> int:
         """The Customer saw the Security Alerts on their Registered Device. Dismissing them also lifts
         the voice pause, which only the Customer's own phone can do. Returns how many were dismissed."""
+        open_alerts = (
+            select(DeviceMessageRow)
+            .where(DeviceMessageRow.customer_id == customer_id, DeviceMessageRow.kind == "security_alert",
+                   DeviceMessageRow.resolved_at.is_(None))
+            .order_by(DeviceMessageRow.id)
+        )
         with self._db.session() as s:
             self._check_device(s, customer_id, device_token)
-            alerts = s.scalars(select(DeviceMessageRow).where(
-                DeviceMessageRow.customer_id == customer_id,
-                DeviceMessageRow.kind == "security_alert",
-                DeviceMessageRow.resolved_at.is_(None),
-            )).all()
+            # Lock the Calls first, then the alerts, as every other writer does: a double tap on Dismiss
+            # waits here and then finds nothing left to dismiss.
+            for call_id in sorted({m.call_id for m in s.scalars(open_alerts).all()}):
+                self._lock(s, call_id)
+            alerts = s.scalars(open_alerts.with_for_update()).all()
             for msg in alerts:
                 msg.resolved_at = self._now()
-                call = s.get(CallRow, msg.call_id)
-                if call is not None:
-                    self._audit(s, call, "security_alert_dismissed", {})
+                self._audit(s, s.get(CallRow, msg.call_id), "security_alert_dismissed", {})
             return len(alerts)
 
     def hang_up(self, call_id: str) -> None:
@@ -374,6 +378,7 @@ class Verifier:
             reviewed = not call.agent_review or call.review_status == "approved"
             claims = {
                 "iss": "pratyaksh",
+                "jti": uuid.uuid4().hex,
                 "sub": call.customer_id,
                 "call_id": call.id,
                 "request": call.request,
@@ -410,7 +415,30 @@ class Verifier:
         n = int(claims.get("audit_events", 0))
         if broken_at is not None or n > len(hashes) or (n and hashes[n - 1] != claims.get("audit_head")):
             return {"valid": False, "reason": "the Call's Audit Trail no longer matches the receipt", "claims": claims}
-        return {"valid": True, "reason": "", "claims": claims}
+        with self._db.session() as s:
+            redeemed = s.scalar(select(func.count()).where(
+                AuditEventRow.call_id == str(claims.get("call_id")), AuditEventRow.kind == "receipt_redeemed"))
+        return {"valid": True, "reason": "", "claims": claims, "redeemed": bool(redeemed)}
+
+    def redeem_receipt(self, receipt: str) -> dict:
+        """Core banking carries out a Request once: redeeming checks the receipt, then records on the
+        Call's Audit Trail that it was used. Any second redeem for that Call, with this receipt or
+        another one issued for it, is refused."""
+        check = self.verify_receipt(receipt)
+        claims = check["claims"]
+        if not check["valid"]:
+            raise NotAllowed(f"invalid receipt: {check['reason']}")
+        if not claims.get("executable"):
+            raise NotAllowed("this receipt does not allow the Request to be carried out")
+        with self._db.session() as s:
+            call = self._lock(s, str(claims["call_id"]))  # two redeems at once: the second waits, then sees the first
+            done = s.scalar(select(func.count()).where(
+                AuditEventRow.call_id == call.id, AuditEventRow.kind == "receipt_redeemed"))
+            if done:
+                raise NotAllowed("this Call's Request was already carried out")
+            self._audit(s, call, "receipt_redeemed", {"jti": claims.get("jti")})
+        self._publish_after(call.id)
+        return {"redeemed": True, "claims": claims}
 
     def stats(self) -> dict:
         """Live numbers for the Console: Calls by Outcome, and the Added Time genuine Callers spent on
@@ -706,6 +734,18 @@ class Verifier:
                 ))
             # Out of side turns: whatever was said is scored as the Response.
 
+        if challenge.kind is ChallengeKind.POSSESSION_CODE and self._expired_code_read(s, call, signals.spoken_digits):
+            # The right code, read too late: the Caller can see the Registered Device, which is no sign of a Clone.
+            again = bool(issued.get("reissued"))
+            self._audit_heard(s, call, "code_expired", said, {"transcript": signals.transcript, "reissued": not again})
+            if again:
+                return self._start_app_approval(s, call, "That code expired again.")
+            call.challenges = call.challenges[:-1] + [{**issued, "reissued": True, "retried": False}]
+            self._send_code(s, call)
+            return self._set_step(s, call, Step(
+                call.id, "That code had just expired, so I've sent a new one to your bank app. "
+                "Please read out the new six-digit code.", listen=True, long_reply=True, state=CallState.CHALLENGING,
+            ))
         if challenge.kind is ChallengeKind.POSSESSION_CODE:
             match = self._check_code(s, call, signals.spoken_digits, final=bool(issued.get("retried")))
             if match is not True and not issued.get("retried"):
@@ -805,15 +845,7 @@ class Verifier:
             prompt = f"Please whisper these words: {speakable(phrase)}."
             record = {"kind": kind.value, "prompt": prompt, "phrase": phrase, "issued_at": now.isoformat()}
         else:
-            code = f"{self._rng.randrange(10**6):06d}"
-            s.add(PossessionCodeRow(
-                call_id=call.id, customer_id=call.customer_id, code_hash=_hash_code(call.id, code),
-                expires_at=now + self._code_ttl,
-            ))
-            s.add(DeviceMessageRow(
-                customer_id=call.customer_id, call_id=call.id, kind="possession_code",
-                body={"code": code, "request": call.request}, created_at=now, expires_at=now + self._code_ttl,
-            ))
+            self._send_code(s, call)
             prompt = "I've sent a six-digit code to the bank app on your registered phone. Please read it out."
             record = {"kind": kind.value, "prompt": prompt, "phrase": "", "issued_at": now.isoformat()}
         call.challenges = list(call.challenges) + [record]
@@ -821,6 +853,24 @@ class Verifier:
         return self._set_step(s, call, Step(
             call.id, f"{lead_in} {prompt}", listen=True, long_reply=kind is ChallengeKind.POSSESSION_CODE,
             state=CallState.CHALLENGING,
+        ))
+
+    def _send_code(self, s: Session, call: CallRow) -> None:
+        """A fresh Possession Code on the Registered Device; any earlier one of this Call stops working."""
+        now = self._now()
+        for row in s.scalars(select(PossessionCodeRow).where(
+                PossessionCodeRow.call_id == call.id, PossessionCodeRow.used_at.is_(None))):
+            row.used_at = now
+        for msg in self._open_messages(s, call, kind="possession_code"):
+            msg.resolved_at = now
+        code = f"{self._rng.randrange(10**6):06d}"
+        s.add(PossessionCodeRow(
+            call_id=call.id, customer_id=call.customer_id, code_hash=_hash_code(call.id, code),
+            expires_at=now + self._code_ttl,
+        ))
+        s.add(DeviceMessageRow(
+            customer_id=call.customer_id, call_id=call.id, kind="possession_code",
+            body={"code": code, "request": call.request}, created_at=now, expires_at=now + self._code_ttl,
         ))
 
     def _start_app_approval(self, s: Session, call: CallRow, lead_in: str) -> Step:
@@ -837,6 +887,17 @@ class Verifier:
         self._audit(s, call, "app_approval_requested", {"expires_in_s": int(self._approval_ttl.total_seconds())})
         say = f"{lead_in} I've sent an approval request to the bank app on your registered phone. Please approve it there."
         return self._set_step(s, call, Step(call.id, say, wait=True, state=CallState.AWAITING_APP_APPROVAL))
+
+    def _expired_code_read(self, s: Session, call: CallRow, spoken: str | None) -> bool:
+        """Did the Caller read out this Call's Possession Code correctly, but after it expired?"""
+        row = s.scalars(
+            select(PossessionCodeRow)
+            .where(PossessionCodeRow.call_id == call.id, PossessionCodeRow.used_at.is_(None))
+            .order_by(PossessionCodeRow.id.desc())
+        ).first()
+        if row is None or row.expires_at > self._now() or not spoken or len(spoken) > self._policy.max_code_digits:
+            return False
+        return any(_hash_code(call.id, spoken[i : i + 6]) == row.code_hash for i in range(max(1, len(spoken) - 5)))
 
     def _check_code(self, s: Session, call: CallRow, spoken: str | None, final: bool) -> bool | None:
         """Compare the spoken digits with the issued Possession Code.
@@ -866,6 +927,8 @@ class Verifier:
         return match
 
     def _close(self, s: Session, call: CallRow, outcome: Outcome, say: str) -> Step:
+        if call.state == CallState.CLOSED:  # never two Outcomes for one Call
+            raise NotAllowed("this Call is already closed")
         call.state = CallState.CLOSED
         call.outcome = outcome.value
         call.planned = []
@@ -879,7 +942,7 @@ class Verifier:
         customer = s.get(CustomerRow, customer_id)
         if customer is None:
             raise UnknownCustomer(customer_id)
-        if not device_token or not hmac.compare_digest(customer.device_token, device_token):
+        if not device_token or not hmac.compare_digest(customer.device_token.encode(), device_token.encode()):
             raise DeviceNotPaired(customer_id)
         return customer
 
@@ -925,9 +988,10 @@ class Verifier:
         self._audit(s, call, kind, {**data, "timings_ms": said.timings} if said.timings else data)
 
     def _audit(self, s: Session, call: CallRow, kind: str, data: dict) -> None:
-        last = s.execute(
+        last = s.execute(  # a locking read: it sees events committed after this transaction's snapshot
             select(AuditEventRow.seq, AuditEventRow.hash)
             .where(AuditEventRow.call_id == call.id).order_by(AuditEventRow.seq.desc()).limit(1)
+            .with_for_update()
         ).first()
         seq, prev = (last.seq + 1, last.hash) if last else (1, GENESIS)
         data, at = _jsonable(data), self._now()

@@ -13,6 +13,7 @@ from pratyaksh.config import Settings
 from pratyaksh.signals import ScriptedSpeechModels
 
 C = "cust-rahul"
+NO_KEY = {"X-Console-Key": ""}
 
 
 @pytest.fixture
@@ -32,6 +33,7 @@ def api(tmp_path):
     container = build(settings, speech=models)
     with TestClient(create_app(container=container)) as client:
         client.models = models
+        client.headers["X-Console-Key"] = "console-secret"  # the Console; tests of refusals send none
         yield client
 
 
@@ -88,9 +90,8 @@ def test_app_approval_and_review_over_http(api):
     step = api.post(f"/v1/calls/{call_id}/app-approval", json={"customer_id": C, "approve": True},
                     headers=device(api, C)).json()
     assert step["outcome"] == "approved_in_app"
-    assert api.post(f"/v1/calls/{call_id}/review", json={"approve": False}).status_code == 403
-    reviewed = api.post(f"/v1/calls/{call_id}/review", json={"approve": False},
-                        headers={"X-Console-Key": "console-secret"}).json()
+    assert api.post(f"/v1/calls/{call_id}/review", json={"approve": False}, headers=NO_KEY).status_code == 403
+    reviewed = api.post(f"/v1/calls/{call_id}/review", json={"approve": False}).json()
     assert reviewed["review_status"] == "rejected"
 
 
@@ -111,6 +112,7 @@ def test_livekit_token_is_scoped_to_one_room(api):
 
 def test_console_websocket_gets_a_snapshot_then_live_calls(api):
     with api.websocket_connect("/v1/events") as ws:
+        ws.send_json({"key": "console-secret"})
         assert ws.receive_json()["type"] == "snapshot"
         call_id = api.post("/v1/calls", json={"customer_id": C}).json()["call_id"]
         msg = ws.receive_json()
@@ -142,6 +144,12 @@ def test_only_the_voice_agent_can_start_calls_and_post_responses(tmp_path):
         assert client.post(f"/v1/calls/{call_id}/hangup").status_code == 401
         assert client.get("/v1/voice", params={"text": "hello"}).status_code == 401
         assert client.post(f"/v1/calls/{call_id}/responses", headers={"X-Agent-Key": "guess"}, **reply).status_code == 401
+        assert client.post(f"/v1/calls/{call_id}/responses", headers={"X-Agent-Key": "ключ".encode()}, **reply).status_code == 401
+        assert client.post("/v1/calls", json={"customer_id": C}, headers={"X-Agent-Key": "ключ".encode()}).status_code == 401
+        # Without the key a big upload is refused before a byte of it is read or spooled to disk.
+        big = {"files": {"audio": ("r.wav", b"0" * (20 * 1024 * 1024), "audio/wav")}}
+        assert client.post(f"/v1/calls/{call_id}/responses", **big).status_code == 401
+        assert client.post(f"/v1/calls/{call_id}/responses", headers=agent, **big).status_code == 413
         # The Voice Agent, the Caller app and the Console carry on as before.
         assert client.post(f"/v1/calls/{call_id}/responses", headers=agent, **reply).status_code == 200
         assert client.get("/v1/customers").status_code == 200
@@ -157,13 +165,29 @@ def test_oversized_or_overlong_audio_is_refused(api):
     long = Audio.silence(61).to_wav()
     assert api.post(f"/v1/calls/{call_id}/responses", files={"audio": ("r.wav", long, "audio/wav")}).status_code == 413
 
+    # A header claiming 100 Hz would be resampled into gigabytes: refused from the header, before decoding.
+    import io
+
+    import numpy as np
+    import soundfile as sf
+
+    buf = io.BytesIO()
+    sf.write(buf, np.zeros(40_000, dtype=np.float32), 100, format="WAV", subtype="PCM_16")
+    r = api.post(f"/v1/calls/{call_id}/responses", files={"audio": ("r.wav", buf.getvalue(), "audio/wav")})
+    assert r.status_code == 422 and "sample rate" in r.json()["detail"]
+
+    # JSON routes take small bodies only.
+    assert api.post("/v1/receipts/verify", json={"receipt": "x" * 100_000}).status_code == 413
+    chunked = iter([b"{" * 40_000, b"{" * 40_000])  # no Content-Length: counted as it arrives
+    assert api.post("/v1/receipts/verify", content=chunked, headers={"content-type": "application/json"}).status_code == 413
+
 
 def test_verification_receipts_over_http_check_with_any_jwt_library(api):
     jwt = pytest.importorskip("jwt")
     call_id = api.post("/v1/calls", json={"customer_id": C}).json()["call_id"]
     send(api, call_id, "what is my balance", voiced())
-    assert api.get(f"/v1/calls/{call_id}/receipt").status_code == 403  # bank systems only
-    issued = api.get(f"/v1/calls/{call_id}/receipt", headers={"X-Console-Key": "console-secret"}).json()
+    assert api.get(f"/v1/calls/{call_id}/receipt", headers=NO_KEY).status_code == 403  # bank systems only
+    issued = api.get(f"/v1/calls/{call_id}/receipt").json()
     assert issued["claims"]["executable"] is True
 
     checked = api.post("/v1/receipts/verify", json={"receipt": issued["receipt"]}).json()
@@ -214,3 +238,35 @@ def test_call_filters_and_customer_risk_over_http(api):
     risk = api.get(f"/v1/customers/{C}/risk").json()
     assert risk["risk"] == "normal" and risk["calls_7d"] == 1 and risk["voice_pause"]["active"] is False
     assert api.get("/v1/customers/nobody/risk").status_code == 404
+
+
+def test_with_a_console_key_what_callers_said_is_for_bank_staff_only(api):
+    from starlette.websockets import WebSocketDisconnect
+
+    test_a_full_call_over_http(api)
+    call_id = api.get("/v1/calls").json()[0]["id"]
+    for path in ["/v1/calls", f"/v1/calls/{call_id}", f"/v1/calls/{call_id}/audit", f"/v1/calls/{call_id}/transcript",
+                 f"/v1/customers/{C}/risk"]:
+        assert api.get(path, headers=NO_KEY).status_code == 403, path
+        assert api.get(path, headers={"X-Console-Key": "ключ".encode()}).status_code == 403, path
+    for path in ["/v1/status", "/v1/stats", "/v1/customers", "/v1/receipts/key"]:
+        assert api.get(path, headers=NO_KEY).status_code == 200, path
+    with pytest.raises(WebSocketDisconnect) as closed:
+        with api.websocket_connect("/v1/events") as ws:
+            ws.send_json({"key": "guess"})
+            ws.receive_json()
+    assert closed.value.code == 4401
+
+
+def test_core_banking_redeems_a_receipt_once(api):
+    call_id = api.post("/v1/calls", json={"customer_id": C}).json()["call_id"]
+    send(api, call_id, "what is my balance", voiced())
+    first, second = (api.get(f"/v1/calls/{call_id}/receipt").json()["receipt"] for _ in range(2))
+    assert api.post("/v1/receipts/redeem", json={"receipt": first}, headers=NO_KEY).status_code == 403
+    assert api.post("/v1/receipts/redeem", json={"receipt": first}).json()["redeemed"] is True
+    again = api.post("/v1/receipts/redeem", json={"receipt": first})
+    assert again.status_code == 409 and "already carried out" in again.json()["detail"]
+    assert api.post("/v1/receipts/redeem", json={"receipt": second}).status_code == 409  # a fresh receipt too
+    assert api.post("/v1/receipts/verify", json={"receipt": first}).json()["redeemed"] is True
+    lines = api.get(f"/v1/calls/{call_id}/transcript").json()["lines"]
+    assert lines[-1]["event"] == "receipt_redeemed"

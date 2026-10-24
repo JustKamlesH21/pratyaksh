@@ -113,10 +113,19 @@ class Policy:
         hard_fails: list[str] = []
         scores: list[float] = []
         failed = 0  # Whisper Phrases not completed (wrong words or not whispered)
+        # Failed Whisper Phrases not yet made up for by a completed STEP-UP phrase after them. STEP-UP
+        # phrases are the last step_ups_used Challenges; planned ones never count as a retry.
+        owed = 0
+        extra_from = len(evidence) - step_ups_used
         for i, ev in enumerate(evidence, start=1):
             score, why, hard, task_failed = self._assess(ev.kind, ev.signals)
             scores.append(score)
             failed += task_failed
+            if ev.kind is ChallengeKind.WHISPER_PHRASE:
+                if task_failed:
+                    owed += 1
+                elif owed and i > extra_from:
+                    owed -= 1
             label = f"Challenge {i} ({_kind_label(ev.kind)})"
             reasons.extend(f"{label}: {w}" for w in why)
             hard_fails.extend(f"{label}: {h}" for h in hard)
@@ -128,16 +137,22 @@ class Policy:
             return Decision(
                 Verdict.BLOCK, mean, [f"Liveness {mean:.2f} is at or below {self._block_at:.2f}."] + reasons, scores
             )
-        # Each STEP-UP is one retry; a Whisper Phrase failed beyond that blocks, whatever the mean.
-        if failed > step_ups_used:
+        # A failed Whisper Phrase never PASSes until a STEP-UP phrase after it is completed, whatever the mean.
+        if owed:
             if step_ups_used < self._max_step_ups:
                 return Decision(
                     Verdict.STEP_UP, mean, ["A Whisper Phrase was not completed; asking one more."] + reasons,
                     scores, next_challenge=ChallengeKind.WHISPER_PHRASE,
                 )
+            if failed >= 2:
+                return Decision(
+                    Verdict.BLOCK, mean, [f"{failed} Whisper Phrases not completed, even after a retry."] + reasons,
+                    scores,
+                )
             return Decision(
-                Verdict.BLOCK, mean, [f"{failed} Whisper Phrase(s) not completed, even after a retry."] + reasons,
-                scores,
+                Verdict.STEP_UP, mean,
+                ["A Whisper Phrase was not completed and no retry is left.", "Handing over to App Approval."] + reasons,
+                scores, offer_app_approval=True,
             )
         if mean >= self._pass_at:
             return Decision(
