@@ -3,6 +3,11 @@
 # that change here. A matched answer is spoken as written; the LLM uses all of them as its facts
 # for anything the keywords miss.
 #
+# answer / answer_hi / answer_kn: the same answer in English, Hindi and Kannada. The Caller gets
+#   the one in the language they spoke (language.language_of). Write Hindi and Kannada in native
+#   script, loanwords too (ऐप, ಆ್ಯಪ್), and numbers as words, so the voice can read them. The Hindi
+#   voice speaks as a woman ("कर सकती हूँ"). When an answer tells the Caller what to say, use
+#   words the Interpreter understands ("ऐप से करना है", "ಆ್ಯಪ್ ಮೂಲಕ ಮಾಡಿ").
 # keywords: an entry matches when all words of one keyword appear, in any order. Words of four
 #   letters or more also match longer words ("record" matches "recorded"); end a shorter word
 #   with * to match it as a stem. Rare words count for more, so "ifsc code" beats "what code".
@@ -16,142 +21,270 @@
 # --- about Verification -----------------------------------------------------------------
 - id: why_verify
   keywords: [why verify, verify me, why verification, why check, why checks, why security, why so many questions,
-             kyon verify, verify kyon, verify yake, ಯಾಕೆ ಪರಿಶೀಲನೆ, क्यों वेरिफाई]
+             kyon verify, verify kyon, verify yake, ಯಾಕೆ ಪರಿಶೀಲನೆ, ಪರಿಶೀಲನೆ ಯಾಕೆ, क्यों वेरिफाई, जाँच क्यों]
   answer: >-
     Voice-cloning tools can now copy anyone's voice from a short clip. So for risky requests I check that a live
     person holding your registered phone is on the line. It takes a few seconds, and I never store your voice.
+  answer_hi: >-
+    आजकल आवाज़ की नकल करने वाले टूल किसी की भी आवाज़ एक छोटी सी रिकॉर्डिंग से कॉपी कर लेते हैं। इसलिए जोखिम वाले
+    कामों के लिए मैं जाँचती हूँ कि लाइन पर आपका रजिस्टर्ड फ़ोन लिए कोई असली इंसान है। इसमें कुछ ही सेकंड लगते हैं,
+    और मैं आपकी आवाज़ कभी सेव नहीं करती।
+  answer_kn: >-
+    ಈಗ ಧ್ವನಿ ನಕಲು ಮಾಡುವ ಉಪಕರಣಗಳು ಒಂದು ಸಣ್ಣ ರೆಕಾರ್ಡಿಂಗ್‌ನಿಂದಲೇ ಯಾರ ಧ್ವನಿಯನ್ನಾದರೂ ನಕಲು ಮಾಡಬಲ್ಲವು. ಅದಕ್ಕೇ
+    ಅಪಾಯವಿರುವ ಕೆಲಸಗಳಿಗೆ, ನಿಮ್ಮ ನೋಂದಾಯಿತ ಫೋನ್ ಹಿಡಿದಿರುವ ನಿಜವಾದ ವ್ಯಕ್ತಿ ಲೈನ್‌ನಲ್ಲಿ ಇದ್ದಾರೆಯೇ ಎಂದು ನಾನು
+    ಪರಿಶೀಲಿಸುತ್ತೇನೆ. ಇದಕ್ಕೆ ಕೆಲವೇ ಸೆಕೆಂಡ್ ಸಾಕು, ಮತ್ತು ನಾನು ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಎಂದಿಗೂ ಉಳಿಸಿಕೊಳ್ಳುವುದಿಲ್ಲ.
 - id: why_whisper
   keywords: [why whisper, whisper kyon, whisper kyu, why should i whisper, what is this whisper, whisper yake,
              ಯಾಕೆ ಪಿಸುಮಾತು, ಪಿಸುಮಾತು ಯಾಕೆ, फुसफुसा]
   answer: &why_whisper >-
     Whispering a random phrase is easy for a person and very hard for a voice-cloning tool.
     It lets us confirm a live person is on the line without storing your voice.
+  answer_hi: &why_whisper_hi >-
+    किसी इंसान के लिए कोई रैंडम वाक्य फुसफुसाना आसान है, लेकिन आवाज़ की नकल करने वाले टूल के लिए बहुत मुश्किल।
+    इससे हम आपकी आवाज़ सेव किए बिना पक्का कर पाते हैं कि लाइन पर कोई असली इंसान है।
+  answer_kn: &why_whisper_kn >-
+    ಯಾವುದೋ ಒಂದು ವಾಕ್ಯವನ್ನು ಪಿಸುಗುಟ್ಟುವುದು ಮನುಷ್ಯರಿಗೆ ಸುಲಭ, ಆದರೆ ಧ್ವನಿ ನಕಲು ಮಾಡುವ ಉಪಕರಣಕ್ಕೆ ತುಂಬಾ ಕಷ್ಟ.
+    ಇದರಿಂದ ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಉಳಿಸಿಕೊಳ್ಳದೆಯೇ ಲೈನ್‌ನಲ್ಲಿ ನಿಜವಾದ ವ್ಯಕ್ತಿ ಇದ್ದಾರೆ ಎಂದು ನಾವು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳುತ್ತೇವೆ.
 - id: why_this_whisper
   during: whisper_phrase
   keywords: [why, why asking, why this, kyon, kyu, yake, ಯಾಕೆ, क्यों]
   answer: *why_whisper
+  answer_hi: *why_whisper_hi
+  answer_kn: *why_whisper_kn
 - id: how_to_whisper
   during: whisper_phrase
   keywords: [how whisper, how do i whisper, louder, loud, speak up, normal voice, normally, whisper or talk,
-             whisper kaise, kaise bolu,
-             hege whisper, hege helali, ಹೇಗೆ ಹೇಳಲಿ, कैसे बोलूं]
+             whisper kaise, kaise bolu, hege whisper, hege helali, ಹೇಗೆ ಹೇಳಲಿ, ಪಿಸುಮಾತು ಹೇಗೆ, कैसे बोलूं, कैसे फुसफुसा,
+             ज़ोर से]
   answer: >-
     Whispering means saying the words very softly, without using your voice, as if telling someone a secret.
     Keep the phone close to your mouth.
+  answer_hi: >-
+    फुसफुसाने का मतलब है शब्दों को बहुत धीरे, बिना आवाज़ निकाले बोलना, जैसे किसी को राज़ की बात बता रहे हों।
+    फ़ोन को मुँह के पास रखिए।
+  answer_kn: >-
+    ಪಿಸುಗುಟ್ಟುವುದು ಎಂದರೆ, ಯಾರಿಗೋ ಗುಟ್ಟು ಹೇಳುವಂತೆ, ಧ್ವನಿ ಬಳಸದೆ ಪದಗಳನ್ನು ತುಂಬಾ ಮೆಲ್ಲಗೆ ಹೇಳುವುದು.
+    ಫೋನನ್ನು ಬಾಯಿಯ ಹತ್ತಿರ ಇಟ್ಟುಕೊಳ್ಳಿ.
 - id: why_code
-  keywords: [why code, what code, which code, where is the code, code kahan, code kidhar, code elli, ಕೋಡ್ ಎಲ್ಲಿ, कोड कहाँ]
+  keywords: [why code, what code, which code, where is the code, code kahan, code kidhar, code elli, ಕೋಡ್ ಎಲ್ಲಿ,
+             ಯಾವ ಕೋಡ್, कोड कहाँ, कौन सा कोड]
   answer: &why_code >-
     We send a six-digit code to the bank app on your registered phone. Reading it out shows that
     the person calling also has your phone. The code is valid for two minutes.
+  answer_hi: &why_code_hi >-
+    हम आपके रजिस्टर्ड फ़ोन के बैंक ऐप में छह अंकों का एक कोड भेजते हैं। उसे पढ़कर सुनाने से पता चलता है कि कॉल
+    करने वाले के पास आपका फ़ोन भी है। यह कोड दो मिनट तक मान्य रहता है।
+  answer_kn: &why_code_kn >-
+    ನಿಮ್ಮ ನೋಂದಾಯಿತ ಫೋನ್‌ನ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ಗೆ ನಾವು ಆರು ಅಂಕಿಯ ಕೋಡ್ ಕಳುಹಿಸುತ್ತೇವೆ. ಅದನ್ನು ಓದಿ ಹೇಳಿದರೆ, ಕರೆ
+    ಮಾಡುತ್ತಿರುವವರ ಬಳಿ ನಿಮ್ಮ ಫೋನ್ ಕೂಡ ಇದೆ ಎಂದು ತಿಳಿಯುತ್ತದೆ. ಈ ಕೋಡ್ ಎರಡು ನಿಮಿಷ ಮಾನ್ಯವಾಗಿರುತ್ತದೆ.
 - id: why_this_code
   during: possession_code
   keywords: [why, why asking, why this, kyon, kyu, yake, ಯಾಕೆ, क्यों]
   answer: *why_code
+  answer_hi: *why_code_hi
+  answer_kn: *why_code_kn
 - id: code_not_received
   during: possession_code
   keywords: [not received, didn't get, did not get, not got, haven't got, haven't received, no code, not come,
              not showing, can't find, cannot find, can't see, no new, no message, nothing there, empty,
-             nahi aaya, nahi aya, nahi mila, banthilla, bandilla,
-             sigtilla, sigalilla, ಬಂದಿಲ್ಲ, ಸಿಕ್ಕಿಲ್ಲ, नहीं आया, नहीं मिला]
+             nahi aaya, nahi aya, nahi mila, banthilla, bandilla, sigtilla, sigalilla,
+             ಬಂದಿಲ್ಲ, ಸಿಕ್ಕಿಲ್ಲ, ಕೋಡ್ ಇಲ್ಲ, ಕಾಣಿಸ್ತಿಲ್ಲ, ಕಾಣಿಸುತ್ತಿಲ್ಲ, नहीं आया, नहीं मिला, दिख नहीं, कोड नहीं]
   answer: >-
     The code is in the bank app on your registered phone, not in an SMS. Open the app and it shows at the top;
     it can take a few seconds to arrive.
+  answer_hi: >-
+    कोड आपके रजिस्टर्ड फ़ोन के बैंक ऐप में आता है, एसएमएस में नहीं। ऐप खोलिए, कोड सबसे ऊपर दिखेगा; आने में कुछ
+    सेकंड लग सकते हैं।
+  answer_kn: >-
+    ಕೋಡ್ ನಿಮ್ಮ ನೋಂದಾಯಿತ ಫೋನ್‌ನ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಬರುತ್ತದೆ, ಎಸ್‌ಎಂಎಸ್‌ನಲ್ಲಿ ಅಲ್ಲ. ಆ್ಯಪ್ ತೆರೆಯಿರಿ, ಕೋಡ್
+    ಮೇಲ್ಭಾಗದಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ; ಬರಲು ಕೆಲವು ಸೆಕೆಂಡ್ ಆಗಬಹುದು.
 - id: which_app
-  keywords: [which app, what app, kaunsa app, kaun sa app, yava app, ಯಾವ ಆಪ್, कौन सा ऐप]
+  keywords: [which app, what app, kaunsa app, kaun sa app, yava app, ಯಾವ ಆಪ್, ಯಾವ ಆ್ಯಪ್, कौन सा ऐप]
   answer: >-
     Your bank's own app on your registered phone, the one you use for payments. The code appears there, not in an SMS.
+  answer_hi: >-
+    आपके रजिस्टर्ड फ़ोन पर आपके बैंक का अपना ऐप, जिससे आप पेमेंट करते हैं। कोड वहीं आता है, एसएमएस में नहीं।
+  answer_kn: >-
+    ನಿಮ್ಮ ನೋಂದಾಯಿತ ಫೋನ್‌ನಲ್ಲಿರುವ ನಿಮ್ಮ ಬ್ಯಾಂಕಿನ ಸ್ವಂತ ಆ್ಯಪ್, ಪೇಮೆಂಟ್ ಮಾಡಲು ನೀವು ಬಳಸುವುದು. ಕೋಡ್ ಅಲ್ಲೇ
+    ಬರುತ್ತದೆ, ಎಸ್‌ಎಂಎಸ್‌ನಲ್ಲಿ ಅಲ್ಲ.
 - id: two_codes
   during: possession_code
-  keywords: [two codes, many codes, which one, latest code, old code, multiple codes, do code]
+  keywords: [two codes, many codes, which one, latest code, old code, multiple codes, do code, दो कोड, ಎರಡು ಕೋಡ್]
   answer: Please read the newest code, the one at the top of the bank app.
+  answer_hi: कृपया सबसे नया कोड पढ़िए, जो बैंक ऐप में सबसे ऊपर है।
+  answer_kn: ದಯವಿಟ್ಟು ಹೊಸ ಕೋಡ್ ಓದಿ, ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಮೇಲ್ಭಾಗದಲ್ಲಿರುವುದು.
 - id: noisy
   during: whisper_phrase
-  keywords: [noisy, noise, loud here, people around, shor, galata]
+  keywords: [noisy, noise, loud here, people around, shor, galata, शोर, ಗಲಾಟೆ]
   answer: >-
     That's fine. If you can, move somewhere a little quieter, hold the phone close and whisper the words.
+  answer_hi: >-
+    कोई बात नहीं। हो सके तो थोड़ी शांत जगह पर चले जाइए, फ़ोन पास रखिए और शब्द फुसफुसाइए।
+  answer_kn: >-
+    ಪರವಾಗಿಲ್ಲ. ಸಾಧ್ಯವಾದರೆ ಸ್ವಲ್ಪ ಶಾಂತವಾದ ಜಾಗಕ್ಕೆ ಹೋಗಿ, ಫೋನನ್ನು ಹತ್ತಿರ ಹಿಡಿದು ಪದಗಳನ್ನು ಪಿಸುಗುಟ್ಟಿ.
 - id: how_many_digits
   during: possession_code
-  keywords: [how many digits, how many numbers, how many, kitne digit, kitne number, estu digit, estu number]
+  keywords: [how many digits, how many numbers, how many, kitne digit, kitne number, estu digit, estu number,
+             कितने अंक, ಎಷ್ಟು ಅಂಕಿ]
   answer: It's six digits. Please read them one at a time.
+  answer_hi: छह अंक हैं। कृपया एक-एक करके पढ़िए।
+  answer_kn: ಆರು ಅಂಕಿಗಳು. ದಯವಿಟ್ಟು ಒಂದೊಂದಾಗಿ ಓದಿ.
 - id: type_code
   during: possession_code
-  keywords: [type, write, enter the code, keypad, type karu, type madla]
+  keywords: [type, write, enter the code, keypad, type karu, type madla, टाइप, ಟೈಪ್]
   answer: >-
     Please say the code out loud. If you can't speak it, say "use the app" and you can approve the request
     in the bank app instead.
+  answer_hi: >-
+    कृपया कोड बोलकर सुनाइए। अगर बोल नहीं सकते, तो कहिए "ऐप से करना है", फिर आप बैंक ऐप में ही रिक्वेस्ट मंज़ूर कर
+    सकते हैं।
+  answer_kn: >-
+    ದಯವಿಟ್ಟು ಕೋಡ್ ಅನ್ನು ಓದಿ ಹೇಳಿ. ಹೇಳಲು ಆಗದಿದ್ದರೆ, "ಆ್ಯಪ್ ಮೂಲಕ ಮಾಡಿ" ಎಂದು ಹೇಳಿ, ಆಗ ನೀವು ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲೇ
+    ರಿಕ್ವೆಸ್ಟ್‌ಗೆ ಒಪ್ಪಿಗೆ ನೀಡಬಹುದು.
 - id: code_expired
   during: possession_code
-  keywords: [expired, expire, code gone, disappeared, time over, invalid]
+  keywords: [expired, expire, code gone, disappeared, time over, invalid, एक्सपायर, ಎಕ್ಸ್‌ಪೈರ್, ಅವಧಿ ಮುಗಿ*]
   answer: >-
     Codes are valid for two minutes. If yours has run out, say "use the app" and I'll send an approval
     to your bank app instead.
+  answer_hi: >-
+    कोड दो मिनट तक मान्य रहते हैं। अगर आपका कोड खत्म हो गया है, तो कहिए "ऐप से करना है", मैं आपके बैंक ऐप पर
+    मंज़ूरी का अनुरोध भेज दूँगी।
+  answer_kn: >-
+    ಕೋಡ್‌ಗಳು ಎರಡು ನಿಮಿಷ ಮಾತ್ರ ಮಾನ್ಯ. ನಿಮ್ಮ ಕೋಡ್‌ನ ಅವಧಿ ಮುಗಿದಿದ್ದರೆ, "ಆ್ಯಪ್ ಮೂಲಕ ಮಾಡಿ" ಎಂದು ಹೇಳಿ, ನಾನು
+    ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ಗೆ ಒಪ್ಪಿಗೆಯ ವಿನಂತಿ ಕಳುಹಿಸುತ್ತೇನೆ.
 - id: code_app_trouble
   during: possession_code
   keywords: [app not open, app not working, app problem, app crash, app nahi khul, app band, app open aagtilla,
-             app work aagtilla, login, log in, asking for password, forgot app password]
+             app work aagtilla, login, log in, asking for password, forgot app password, ऐप नहीं खुल*, ऐप नहीं चल*,
+             ಆ್ಯಪ್ ತೆರೆಯುತ್ತಿಲ್ಲ, ಆ್ಯಪ್ ಓಪನ್ ಆಗ್ತಿಲ್ಲ]
   answer: >-
     If your bank app won't open, I can't confirm the code. Say "talk to an officer" and a bank officer will verify
     you another way.
+  answer_hi: >-
+    अगर आपका बैंक ऐप नहीं खुल रहा, तो मैं कोड की पुष्टि नहीं कर सकती। कहिए "अधिकारी से बात करनी है", और एक बैंक
+    अधिकारी दूसरे तरीके से आपकी पहचान की पुष्टि करेंगे।
+  answer_kn: >-
+    ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್ ತೆರೆಯದಿದ್ದರೆ, ನಾನು ಕೋಡ್ ಖಚಿತಪಡಿಸಲು ಆಗುವುದಿಲ್ಲ. "ಅಧಿಕಾರಿ ಜೊತೆ ಮಾತಾಡಬೇಕು" ಎಂದು ಹೇಳಿ,
+    ಒಬ್ಬ ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿ ಬೇರೆ ರೀತಿಯಲ್ಲಿ ನಿಮ್ಮನ್ನು ಪರಿಶೀಲಿಸುತ್ತಾರೆ.
 - id: how_long
   keywords: [how long, how much time, kitna time, time lagega, takes long, estu time, ಎಷ್ಟು ಸಮಯ, कितना समय]
   answer: >-
     The checks usually take less than twenty seconds, and only for risky requests like transfers or SIM changes.
+  answer_hi: >-
+    ये जाँच आमतौर पर बीस सेकंड से कम में हो जाती है, और सिर्फ़ जोखिम वाले कामों के लिए, जैसे ट्रांसफर या सिम बदलना।
+  answer_kn: >-
+    ಈ ಪರಿಶೀಲನೆ ಸಾಮಾನ್ಯವಾಗಿ ಇಪ್ಪತ್ತು ಸೆಕೆಂಡ್‌ಗಿಂತ ಕಡಿಮೆ ಸಮಯದಲ್ಲಿ ಮುಗಿಯುತ್ತದೆ, ಮತ್ತು ಟ್ರಾನ್ಸ್‌ಫರ್ ಅಥವಾ ಸಿಮ್
+    ಬದಲಾವಣೆಯಂತಹ ಅಪಾಯದ ಕೆಲಸಗಳಿಗೆ ಮಾತ್ರ.
 - id: fail_check
   keywords: [fail, failed, what if wrong, get it wrong, galat ho, tappu aadre, ತಪ್ಪಾದರೆ, गलत हो]
   answer: >-
     If a check doesn't go through, I may ask you one more, or you can approve the request in the bank app instead.
     If we still can't confirm it's you, the request is stopped for your safety, and you can visit your branch.
+  answer_hi: >-
+    अगर कोई जाँच पूरी नहीं होती, तो मैं एक और जाँच कर सकती हूँ, या आप बैंक ऐप में रिक्वेस्ट मंज़ूर कर सकते हैं। फिर
+    भी पुष्टि न हो पाए, तो आपकी सुरक्षा के लिए रिक्वेस्ट रोक दी जाती है, और आप अपनी ब्रांच जा सकते हैं।
+  answer_kn: >-
+    ಒಂದು ಪರಿಶೀಲನೆ ಸರಿಯಾಗದಿದ್ದರೆ, ನಾನು ಇನ್ನೊಂದು ಕೇಳಬಹುದು, ಅಥವಾ ನೀವು ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ರಿಕ್ವೆಸ್ಟ್‌ಗೆ ಒಪ್ಪಿಗೆ
+    ನೀಡಬಹುದು. ಆಗಲೂ ನೀವೇ ಎಂದು ಖಚಿತವಾಗದಿದ್ದರೆ, ನಿಮ್ಮ ಸುರಕ್ಷತೆಗಾಗಿ ರಿಕ್ವೆಸ್ಟ್ ನಿಲ್ಲಿಸಲಾಗುತ್ತದೆ, ಮತ್ತು ನೀವು
+    ನಿಮ್ಮ ಬ್ರಾಂಚ್‌ಗೆ ಭೇಟಿ ನೀಡಬಹುದು.
 - id: genuine_call
   keywords: [genuine, real bank, really the bank, really from the bank, fake call, is this the bank, how do i know,
              trust, secure line, how secure, is this safe, is it safe, safe, asli, nakli, sach mein bank, nijavada,
-             surakshit,
-             ನಿಜವಾದ ಬ್ಯಾಂಕ್, ಸುರಕ್ಷಿತ, असली, सुरक्षित]
+             surakshit, ನಿಜವಾದ ಬ್ಯಾಂಕ್, ಸುರಕ್ಷಿತ, असली, सुरक्षित, भरोसा, ನಂಬಿಕೆ]
   answer: >-
     This is your bank's secure line. We never ask for your PIN, password or OTP, and the only code I'll ask for
     is the one shown in your own bank app. If you're ever unsure, hang up and call the number on the back of your card.
+  answer_hi: >-
+    यह आपके बैंक की सुरक्षित लाइन है। हम कभी आपका पिन, पासवर्ड या ओटीपी नहीं माँगते, और मैं सिर्फ़ वही कोड पूछूँगी
+    जो आपके अपने बैंक ऐप में दिख रहा है। अगर कभी शक हो, तो फ़ोन काटिए और अपने कार्ड के पीछे लिखे नंबर पर कॉल कीजिए।
+  answer_kn: >-
+    ಇದು ನಿಮ್ಮ ಬ್ಯಾಂಕಿನ ಸುರಕ್ಷಿತ ಲೈನ್. ನಾವು ಎಂದಿಗೂ ನಿಮ್ಮ ಪಿನ್, ಪಾಸ್‌ವರ್ಡ್ ಅಥವಾ ಒಟಿಪಿ ಕೇಳುವುದಿಲ್ಲ, ಮತ್ತು ನಿಮ್ಮ
+    ಸ್ವಂತ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಕಾಣುವ ಕೋಡ್ ಮಾತ್ರ ನಾನು ಕೇಳುತ್ತೇನೆ. ಯಾವಾಗಲಾದರೂ ಅನುಮಾನ ಬಂದರೆ, ಕರೆ ಕಟ್ ಮಾಡಿ ನಿಮ್ಮ
+    ಕಾರ್ಡಿನ ಹಿಂಭಾಗದಲ್ಲಿರುವ ನಂಬರ್‌ಗೆ ಕರೆ ಮಾಡಿ.
 - id: voice_stored
   keywords: [record my voice, voice stored, store my voice, voiceprint, recording, record, privacy, data safe,
              keep my voice, copy of my voice, save my voice, awaaz record, awaaz save, dhvani record, ಧ್ವನಿ,
-             आवाज़ रिकॉर्ड]
+             आवाज़ रिकॉर्ड, आवाज रिकॉर्ड, आवाज़ सेव, ರೆಕಾರ್ಡ್]
   answer: >-
     No. We never store your voice or a voiceprint. Your answers are checked during the call and then deleted.
+  answer_hi: >-
+    नहीं। हम आपकी आवाज़ या वॉइसप्रिंट कभी सेव नहीं करते। कॉल के दौरान आपके जवाब जाँचे जाते हैं और फिर मिटा दिए
+    जाते हैं।
+  answer_kn: >-
+    ಇಲ್ಲ. ನಾವು ನಿಮ್ಮ ಧ್ವನಿಯನ್ನಾಗಲೀ ವಾಯ್ಸ್‌ಪ್ರಿಂಟ್ ಅನ್ನಾಗಲೀ ಎಂದಿಗೂ ಉಳಿಸಿಕೊಳ್ಳುವುದಿಲ್ಲ. ಕರೆಯ ಸಮಯದಲ್ಲಿ ನಿಮ್ಮ
+    ಉತ್ತರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ ನಂತರ ಅಳಿಸಲಾಗುತ್ತದೆ.
 - id: what_is_this
   keywords: [what is this, who are you, who is this, who am i talking, kaun ho, kaun hai, kisse baat, robot,
              are you human, are you a person, real person, bot, ai, machine, computer, neevu yaaru, yaaru,
-             yaara jothe, ನೀವು ಯಾರು, आप कौन]
+             yaara jothe, ನೀವು ಯಾರು, ಮನುಷ್ಯರಾ, ಯಂತ್ರ, आप कौन, मशीन, इंसान हो]
   answer: >-
     I'm the bank's automated voice assistant on the secure line. For risky requests I run a quick
     live check so nobody can misuse a copy of your voice.
+  answer_hi: >-
+    मैं सुरक्षित लाइन पर बैंक की ऑटोमैटिक वॉइस असिस्टेंट हूँ। जोखिम वाले कामों के लिए मैं एक छोटी सी लाइव जाँच
+    करती हूँ, ताकि कोई आपकी आवाज़ की नकल का गलत इस्तेमाल न कर सके।
+  answer_kn: >-
+    ನಾನು ಸುರಕ್ಷಿತ ಲೈನ್‌ನಲ್ಲಿರುವ ಬ್ಯಾಂಕಿನ ಸ್ವಯಂಚಾಲಿತ ವಾಯ್ಸ್ ಅಸಿಸ್ಟೆಂಟ್. ಅಪಾಯದ ಕೆಲಸಗಳಿಗೆ ನಾನು ಒಂದು ಚಿಕ್ಕ ಲೈವ್
+    ಪರಿಶೀಲನೆ ಮಾಡುತ್ತೇನೆ, ಯಾರೂ ನಿಮ್ಮ ಧ್ವನಿಯ ನಕಲನ್ನು ದುರುಪಯೋಗ ಮಾಡದಂತೆ.
 - id: languages
   keywords: [kannada, hindi, english, language, bhasha, ಭಾಷೆ, ಕನ್ನಡ, भाषा, हिंदी]
   answer: >-
     You can speak in Kannada, Hindi or English, or mix them. The security phrase also mixes all three.
+  answer_hi: >-
+    आप कन्नड़, हिंदी या अंग्रेज़ी में बात कर सकते हैं, या इन्हें मिलाकर भी। सुरक्षा वाला वाक्य भी तीनों भाषाओं को
+    मिलाता है।
+  answer_kn: >-
+    ನೀವು ಕನ್ನಡ, ಹಿಂದಿ ಅಥವಾ ಇಂಗ್ಲಿಷ್‌ನಲ್ಲಿ ಮಾತನಾಡಬಹುದು, ಅಥವಾ ಬೆರೆಸಿಯೂ ಮಾತನಾಡಬಹುದು. ಭದ್ರತಾ ವಾಕ್ಯವೂ ಮೂರೂ
+    ಭಾಷೆಗಳನ್ನು ಬೆರೆಸುತ್ತದೆ.
 
 # --- safety -----------------------------------------------------------------------------
 - id: fraud_report
   report: true
   keywords: [fraud, scam, cheated, dhoka, money lost, lost money, money is gone, report fraud, cyber crime, hacked,
              hack, someone used, did not make, didn't make, not done by me, without my permission, without asking me,
-             unauthorised, unauthorized, unknown transaction,
-             hana kaledu, hana hogide, ವಂಚನೆ, ಹಣ ಕಳೆದು, धोखा, ठगी]
+             unauthorised, unauthorized, unknown transaction, hana kaledu, hana hogide,
+             ವಂಚನೆ, ಹಣ ಕಳೆದು, ಮೋಸ, धोखा, ठगी, फ्रॉड, ಫ್ರಾಡ್]
   answer: >-
     If you have lost money to fraud, call the national cyber crime helpline 1930 right away, or report it
     at cybercrime dot gov dot in. I can also connect you to a bank officer.
+  answer_hi: >-
+    अगर धोखाधड़ी में आपके पैसे गए हैं, तो तुरंत राष्ट्रीय साइबर क्राइम हेल्पलाइन एक नौ तीन शून्य पर कॉल कीजिए, या
+    साइबरक्राइम डॉट जीओवी डॉट इन पर शिकायत कीजिए। मैं आपको किसी बैंक अधिकारी से भी जोड़ सकती हूँ।
+  answer_kn: >-
+    ವಂಚನೆಯಿಂದ ನಿಮ್ಮ ಹಣ ಹೋಗಿದ್ದರೆ, ತಕ್ಷಣ ರಾಷ್ಟ್ರೀಯ ಸೈಬರ್ ಕ್ರೈಮ್ ಸಹಾಯವಾಣಿ ಒಂದು ಒಂಬತ್ತು ಮೂರು ಸೊನ್ನೆಗೆ ಕರೆ ಮಾಡಿ,
+    ಅಥವಾ ಸೈಬರ್‌ಕ್ರೈಮ್ ಡಾಟ್ ಜಿಒವಿ ಡಾಟ್ ಇನ್‌ನಲ್ಲಿ ದೂರು ನೀಡಿ. ನಾನು ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೂ ಕನೆಕ್ಟ್
+    ಮಾಡಬಹುದು.
 - id: failed_debit
   report: true
   keywords: [money deducted, amount deducted, deducted, debited, failed transaction, payment failed, money taken,
-             paisa kat, paise kat, kat gaya, hana cut, ಹಣ ಕಟ್, पैसे कट, पैसा कट]
+             paisa kat, paise kat, kat gaya, hana cut, ಹಣ ಕಟ್, ಹಣ ಕಡಿತ, पैसे कट, पैसा कट, पेमेंट फ़ेल]
   answer: >-
     If money was taken for a payment that failed, it usually comes back to your account on its own within a few
     working days. If it doesn't, raise a complaint in the bank app, or I can connect you to a bank officer.
+  answer_hi: >-
+    अगर किसी फ़ेल हुए पेमेंट के लिए पैसे कट गए हैं, तो वे आमतौर पर कुछ कामकाजी दिनों में अपने आप आपके खाते में
+    वापस आ जाते हैं। अगर न आएँ, तो बैंक ऐप में शिकायत दर्ज कीजिए, या मैं आपको किसी बैंक अधिकारी से जोड़ सकती हूँ।
+  answer_kn: >-
+    ವಿಫಲವಾದ ಪೇಮೆಂಟ್‌ಗೆ ಹಣ ಕಡಿತವಾಗಿದ್ದರೆ, ಅದು ಸಾಮಾನ್ಯವಾಗಿ ಕೆಲವು ಕೆಲಸದ ದಿನಗಳಲ್ಲಿ ತಾನಾಗಿಯೇ ನಿಮ್ಮ ಖಾತೆಗೆ ವಾಪಸ್
+    ಬರುತ್ತದೆ. ಬರದಿದ್ದರೆ, ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ದೂರು ನೀಡಿ, ಅಥವಾ ನಾನು ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೆ ಕನೆಕ್ಟ್
+    ಮಾಡಬಹುದು.
 - id: phishing
   report: true
   keywords: [suspicious, link, fake message, strange message, lottery, prize, kyc message, someone called, unknown call,
              fake call, called me, a man called, a woman called, said he is from the bank, said she is from the bank,
-             asked for my card number, wanted my card number, ಲಿಂಕ್, लिंक]
+             asked for my card number, wanted my card number, ಲಿಂಕ್, लिंक, लॉटरी, ಲಾಟರಿ]
   answer: >-
     Don't open links or call numbers from messages like that, and never share your PIN, password or OTP; your bank
     never asks for them. If you already shared something, call 1930 now, or I can connect you to a bank officer.
+  answer_hi: >-
+    ऐसे मैसेज के लिंक मत खोलिए और उनमें दिए नंबरों पर कॉल मत कीजिए, और अपना पिन, पासवर्ड या ओटीपी कभी किसी को
+    मत बताइए; आपका बैंक इन्हें कभी नहीं माँगता। अगर आपने कुछ बता दिया है, तो अभी एक नौ तीन शून्य पर कॉल कीजिए,
+    या मैं आपको किसी बैंक अधिकारी से जोड़ सकती हूँ।
+  answer_kn: >-
+    ಅಂತಹ ಮೆಸೇಜ್‌ಗಳಲ್ಲಿನ ಲಿಂಕ್ ತೆರೆಯಬೇಡಿ, ಅವುಗಳಲ್ಲಿರುವ ನಂಬರ್‌ಗಳಿಗೆ ಕರೆ ಮಾಡಬೇಡಿ, ಮತ್ತು ನಿಮ್ಮ ಪಿನ್, ಪಾಸ್‌ವರ್ಡ್
+    ಅಥವಾ ಒಟಿಪಿಯನ್ನು ಯಾರಿಗೂ ಹೇಳಬೇಡಿ; ನಿಮ್ಮ ಬ್ಯಾಂಕ್ ಅವುಗಳನ್ನು ಎಂದಿಗೂ ಕೇಳುವುದಿಲ್ಲ. ಈಗಾಗಲೇ ಏನಾದರೂ ಹೇಳಿದ್ದರೆ,
+    ಈಗಲೇ ಒಂದು ಒಂಬತ್ತು ಮೂರು ಸೊನ್ನೆಗೆ ಕರೆ ಮಾಡಿ, ಅಥವಾ ನಾನು ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೆ ಕನೆಕ್ಟ್ ಮಾಡಬಹುದು.
 - id: otp_safety
   keywords: [otp share, share otp, someone asked otp, pin share, give pin, password share, ask pin, ask for pin,
              ask otp, ask for otp, ask my password, otp dena, otp kisi, otp batana, pin batana, otp kodu, otp heli,
@@ -159,159 +292,334 @@
   answer: >-
     Never share a PIN, password or OTP with anyone, including bank staff. On this line I only ask you to
     read the code from your own bank app back to me.
+  answer_hi: >-
+    अपना पिन, पासवर्ड या ओटीपी कभी किसी को मत बताइए, बैंक के कर्मचारियों को भी नहीं। इस लाइन पर मैं सिर्फ़ आपके
+    अपने बैंक ऐप का कोड पढ़कर सुनाने को कहती हूँ।
+  answer_kn: >-
+    ನಿಮ್ಮ ಪಿನ್, ಪಾಸ್‌ವರ್ಡ್ ಅಥವಾ ಒಟಿಪಿಯನ್ನು ಯಾರಿಗೂ ಹೇಳಬೇಡಿ, ಬ್ಯಾಂಕ್ ಸಿಬ್ಬಂದಿಗೂ ಸಹ. ಈ ಲೈನ್‌ನಲ್ಲಿ ನಿಮ್ಮ ಸ್ವಂತ
+    ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿರುವ ಕೋಡ್ ಅನ್ನು ಮಾತ್ರ ಓದಿ ಹೇಳಲು ನಾನು ಕೇಳುತ್ತೇನೆ.
 - id: upi_safety
-  keywords: [upi safe, safe upi, online payment safe, upi pin]
+  keywords: [upi safe, safe upi, online payment safe, upi pin, यूपीआई, ಯುಪಿಐ]
   answer: >-
     Yes, as long as only you use your phone and UPI PIN. Never share your UPI PIN or OTP, and remember you never
     need to enter a PIN to receive money.
+  answer_hi: >-
+    हाँ, बशर्ते आपका फ़ोन और यूपीआई पिन सिर्फ़ आप इस्तेमाल करें। अपना यूपीआई पिन या ओटीपी कभी किसी को मत बताइए,
+    और याद रखिए कि पैसे पाने के लिए कभी पिन डालने की ज़रूरत नहीं होती।
+  answer_kn: >-
+    ಹೌದು, ನಿಮ್ಮ ಫೋನ್ ಮತ್ತು ಯುಪಿಐ ಪಿನ್ ಅನ್ನು ನೀವು ಮಾತ್ರ ಬಳಸುತ್ತಿದ್ದರೆ. ನಿಮ್ಮ ಯುಪಿಐ ಪಿನ್ ಅಥವಾ ಒಟಿಪಿಯನ್ನು ಯಾರಿಗೂ
+    ಹೇಳಬೇಡಿ, ಮತ್ತು ಹಣ ಪಡೆಯಲು ಪಿನ್ ಹಾಕುವ ಅಗತ್ಯವೇ ಇಲ್ಲ ಎಂಬುದನ್ನು ನೆನಪಿಡಿ.
 - id: lost_phone
   keywords: [lost phone, phone lost, phone stolen, lost my mobile, mobile kho gaya, phone kho gaya, no phone,
-             phone kaledu, ಫೋನ್ ಕಳೆದು, फोन खो]
+             phone kaledu, ಫೋನ್ ಕಳೆದು, फोन खो, फ़ोन खो]
   answer: >-
     If your registered phone is lost, I can't send you a code, so I'll connect you to a bank officer
     who can verify you another way and block the old number.
+  answer_hi: >-
+    अगर आपका रजिस्टर्ड फ़ोन खो गया है, तो मैं आपको कोड नहीं भेज सकती, इसलिए मैं आपको एक बैंक अधिकारी से जोड़ूँगी,
+    जो दूसरे तरीके से आपकी पहचान की पुष्टि करके पुराना नंबर ब्लॉक कर सकते हैं।
+  answer_kn: >-
+    ನಿಮ್ಮ ನೋಂದಾಯಿತ ಫೋನ್ ಕಳೆದುಹೋಗಿದ್ದರೆ, ನಾನು ನಿಮಗೆ ಕೋಡ್ ಕಳುಹಿಸಲು ಆಗುವುದಿಲ್ಲ, ಹಾಗಾಗಿ ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್
+    ಅಧಿಕಾರಿಗೆ ಕನೆಕ್ಟ್ ಮಾಡುತ್ತೇನೆ; ಅವರು ಬೇರೆ ರೀತಿಯಲ್ಲಿ ನಿಮ್ಮನ್ನು ಪರಿಶೀಲಿಸಿ ಹಳೆಯ ನಂಬರ್ ಬ್ಲಾಕ್ ಮಾಡಬಹುದು.
 - id: card_block
   keywords: [block card, card lost, lost card, card stolen, card band, card kho, card kaledu, ಕಾರ್ಡ್ ಕಳೆದು, कार्ड खो]
   answer: >-
     You can block a card instantly in the bank app. If you want me to do it on this call, say
     "block my card" and I'll verify you first.
+  answer_hi: >-
+    आप बैंक ऐप में तुरंत कार्ड ब्लॉक कर सकते हैं। अगर चाहते हैं कि मैं इसी कॉल पर करूँ, तो कहिए "मेरा कार्ड ब्लॉक
+    करो", मैं पहले आपकी पहचान की पुष्टि करूँगी।
+  answer_kn: >-
+    ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ನೀವು ತಕ್ಷಣ ಕಾರ್ಡ್ ಬ್ಲಾಕ್ ಮಾಡಬಹುದು. ಈ ಕರೆಯಲ್ಲೇ ನಾನು ಮಾಡಬೇಕೆಂದರೆ, "ನನ್ನ ಕಾರ್ಡ್ ಬ್ಲಾಕ್
+    ಮಾಡಿ" ಎಂದು ಹೇಳಿ, ಮೊದಲು ನಾನು ನಿಮ್ಮನ್ನು ಪರಿಶೀಲಿಸುತ್ತೇನೆ.
 - id: card_kept_by_atm
-  keywords: [swallowed, atm kept, atm took, card stuck, stuck in atm, card retained, card atm mein, card atm alli]
+  keywords: [swallowed, atm kept, atm took, card stuck, stuck in atm, card retained, card atm mein, card atm alli,
+             एटीएम में फँस*, ಎಟಿಎಂನಲ್ಲಿ ಸಿಕ್ಕಿ*]
   answer: >-
     If an ATM kept your card, block it in the bank app right away and order a new one, or say "block my card"
     and I'll verify you first.
+  answer_hi: >-
+    अगर एटीएम ने आपका कार्ड रख लिया है, तो बैंक ऐप में उसे तुरंत ब्लॉक करके नया कार्ड मँगवाइए, या कहिए "मेरा कार्ड
+    ब्लॉक करो", मैं पहले आपकी पहचान की पुष्टि करूँगी।
+  answer_kn: >-
+    ಎಟಿಎಂ ನಿಮ್ಮ ಕಾರ್ಡ್ ಇಟ್ಟುಕೊಂಡಿದ್ದರೆ, ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ತಕ್ಷಣ ಅದನ್ನು ಬ್ಲಾಕ್ ಮಾಡಿ ಹೊಸ ಕಾರ್ಡ್‌ಗೆ ಆರ್ಡರ್ ಮಾಡಿ,
+    ಅಥವಾ "ನನ್ನ ಕಾರ್ಡ್ ಬ್ಲಾಕ್ ಮಾಡಿ" ಎಂದು ಹೇಳಿ, ಮೊದಲು ನಾನು ನಿಮ್ಮನ್ನು ಪರಿಶೀಲಿಸುತ್ತೇನೆ.
 - id: complaint
   keywords: [complain, complaint, grievance, shikayat, doori, ದೂರು, शिकायत]
   answer: >-
     You can raise a complaint in the bank app under help or support, and you'll get a reference number to track it.
     I can also connect you to a bank officer now.
+  answer_hi: >-
+    आप बैंक ऐप में हेल्प या सपोर्ट वाले हिस्से में शिकायत दर्ज कर सकते हैं, और उसे ट्रैक करने के लिए आपको एक रेफ़रेंस
+    नंबर मिलेगा। मैं अभी आपको किसी बैंक अधिकारी से भी जोड़ सकती हूँ।
+  answer_kn: >-
+    ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನ ಹೆಲ್ಪ್ ಅಥವಾ ಸಪೋರ್ಟ್ ವಿಭಾಗದಲ್ಲಿ ನೀವು ದೂರು ನೀಡಬಹುದು, ಅದನ್ನು ಟ್ರ್ಯಾಕ್ ಮಾಡಲು ನಿಮಗೆ ಒಂದು
+    ರೆಫರೆನ್ಸ್ ನಂಬರ್ ಸಿಗುತ್ತದೆ. ನಾನು ಈಗಲೇ ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೂ ಕನೆಕ್ಟ್ ಮಾಡಬಹುದು.
 - id: on_behalf
   keywords: [on behalf, calling for, someone else's account, mother's account, father's account, wife's account,
-             husband's account]
+             husband's account, की तरफ़ से, के लिए कॉल, ಪರವಾಗಿ]
   answer: >-
     For safety I can only help the account holder, on their own registered phone. They can call us themselves,
     or visit the branch with you.
+  answer_hi: >-
+    सुरक्षा के लिए मैं सिर्फ़ खाताधारक की मदद कर सकती हूँ, उन्हीं के रजिस्टर्ड फ़ोन पर। वे खुद हमें कॉल कर सकते हैं,
+    या आपके साथ ब्रांच आ सकते हैं।
+  answer_kn: >-
+    ಸುರಕ್ಷತೆಗಾಗಿ ನಾನು ಖಾತೆದಾರರಿಗೆ ಮಾತ್ರ, ಅವರ ಸ್ವಂತ ನೋಂದಾಯಿತ ಫೋನ್‌ನಲ್ಲಿ, ಸಹಾಯ ಮಾಡಬಹುದು. ಅವರೇ ನಮಗೆ ಕರೆ
+    ಮಾಡಬಹುದು, ಅಥವಾ ನಿಮ್ಮ ಜೊತೆ ಬ್ರಾಂಚ್‌ಗೆ ಬರಬಹುದು.
 - id: card_blocked_why
-  keywords: [why card blocked, card blocked, card not working, card declined, card band ho gaya, card kaam nahi]
+  keywords: [why card blocked, card blocked, card not working, card declined, card band ho gaya, card kaam nahi,
+             कार्ड ब्लॉक क्यों, कार्ड काम नहीं, ಕಾರ್ಡ್ ಬ್ಲಾಕ್ ಆಗಿದೆ, ಕಾರ್ಡ್ ಕೆಲಸ ಮಾಡ್ತಿಲ್ಲ]
   answer: >-
     I can't see account details on this line. Cards are usually blocked after several wrong PIN tries or a fraud
     alert. The bank app shows the reason and lets you unblock it, or say "unblock my card" and I'll verify you first.
+  answer_hi: >-
+    मैं इस लाइन पर खाते की जानकारी नहीं देख सकती। कार्ड आमतौर पर कई बार गलत पिन डालने या धोखाधड़ी के अलर्ट के बाद
+    ब्लॉक होते हैं। बैंक ऐप में वजह दिखती है और आप वहीं उसे अनब्लॉक कर सकते हैं, या कहिए "मेरा कार्ड अनब्लॉक करो",
+    मैं पहले आपकी पहचान की पुष्टि करूँगी।
+  answer_kn: >-
+    ಈ ಲೈನ್‌ನಲ್ಲಿ ನಾನು ಖಾತೆಯ ವಿವರಗಳನ್ನು ನೋಡಲು ಆಗುವುದಿಲ್ಲ. ಹಲವು ಬಾರಿ ತಪ್ಪು ಪಿನ್ ಹಾಕಿದಾಗ ಅಥವಾ ವಂಚನೆಯ ಅಲರ್ಟ್
+    ಬಂದಾಗ ಸಾಮಾನ್ಯವಾಗಿ ಕಾರ್ಡ್ ಬ್ಲಾಕ್ ಆಗುತ್ತದೆ. ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಕಾರಣ ಕಾಣುತ್ತದೆ ಮತ್ತು ಅಲ್ಲೇ ಅನ್‌ಬ್ಲಾಕ್
+    ಮಾಡಬಹುದು, ಅಥವಾ "ನನ್ನ ಕಾರ್ಡ್ ಅನ್‌ಬ್ಲಾಕ್ ಮಾಡಿ" ಎಂದು ಹೇಳಿ, ಮೊದಲು ನಾನು ನಿಮ್ಮನ್ನು ಪರಿಶೀಲಿಸುತ್ತೇನೆ.
 
 # --- banking in general ------------------------------------------------------------------
 - id: timings
   keywords: [timing, timings, branch hours, working hours, holiday, opening time, closing time, branch open,
              bank open, bank close, what time, open on saturday, open on sunday, kab khulta, kab khulti, branch kab,
-             kitne baje, band hota, branch yavaga, ಸಮಯ, ಬ್ರಾಂಚ್ ಯಾವಾಗ, ब्रांच कब, कितने बजे]
+             kitne baje, band hota, branch yavaga, ಸಮಯ, ಬ್ರಾಂಚ್ ಯಾವಾಗ, ಬ್ಯಾಂಕ್ ಯಾವಾಗ, ब्रांच कब, बैंक कब, कितने बजे]
   answer: >-
     Most branches open on weekdays and on some Saturdays. Exact hours depend on your branch; the bank app
     shows timings for the branch nearest you.
+  answer_hi: >-
+    ज़्यादातर ब्रांच कामकाजी दिनों में और कुछ शनिवार को खुलती हैं। सही समय आपकी ब्रांच पर निर्भर करता है; बैंक ऐप में
+    आपके पास वाली ब्रांच का समय दिखता है।
+  answer_kn: >-
+    ಹೆಚ್ಚಿನ ಬ್ರಾಂಚ್‌ಗಳು ವಾರದ ಕೆಲಸದ ದಿನಗಳಲ್ಲಿ ಮತ್ತು ಕೆಲವು ಶನಿವಾರಗಳಂದು ತೆರೆದಿರುತ್ತವೆ. ನಿಖರವಾದ ಸಮಯ ನಿಮ್ಮ
+    ಬ್ರಾಂಚ್ ಮೇಲೆ ಅವಲಂಬಿತವಾಗಿದೆ; ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ನಿಮ್ಮ ಹತ್ತಿರದ ಬ್ರಾಂಚ್‌ನ ಸಮಯ ಕಾಣುತ್ತದೆ.
 - id: branch_atm
   keywords: [nearest branch, nearest atm, near me, atm, where is the branch, branch near, branch kahan, branch elli,
-             ಎಟಿಎಂ, एटीएम]
+             ಎಟಿಎಂ, एटीएम, ब्रांच कहाँ, ಬ್ರಾಂಚ್ ಎಲ್ಲಿ]
   answer: The bank app has a branch and ATM finder that shows the ones nearest you, with directions.
+  answer_hi: >-
+    बैंक ऐप में ब्रांच और एटीएम ढूँढने की सुविधा है, जो आपके सबसे पास वाले रास्ते के साथ दिखाती है।
+  answer_kn: >-
+    ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಬ್ರಾಂಚ್ ಮತ್ತು ಎಟಿಎಂ ಹುಡುಕುವ ಸೌಲಭ್ಯವಿದೆ, ಅದು ನಿಮ್ಮ ಹತ್ತಿರದವುಗಳನ್ನು ದಾರಿಯೊಂದಿಗೆ ತೋರಿಸುತ್ತದೆ.
 - id: rates
   keywords: [interest, rate, fd rate, loan rate, emi, byaj, ಬಡ್ಡಿ, ब्याज]
   answer: >-
     Rates change often, so I won't quote one on this line. The bank app and website show today's interest
     rates, or I can connect you to an officer.
+  answer_hi: >-
+    दरें अक्सर बदलती रहती हैं, इसलिए मैं इस लाइन पर कोई दर नहीं बताऊँगी। आज की ब्याज दरें बैंक ऐप और वेबसाइट पर
+    दिखती हैं, या मैं आपको किसी अधिकारी से जोड़ सकती हूँ।
+  answer_kn: >-
+    ದರಗಳು ಆಗಾಗ ಬದಲಾಗುತ್ತವೆ, ಹಾಗಾಗಿ ಈ ಲೈನ್‌ನಲ್ಲಿ ನಾನು ಯಾವುದೇ ದರ ಹೇಳುವುದಿಲ್ಲ. ಇಂದಿನ ಬಡ್ಡಿ ದರಗಳು ಬ್ಯಾಂಕ್ ಆ್ಯಪ್
+    ಮತ್ತು ವೆಬ್‌ಸೈಟ್‌ನಲ್ಲಿ ಕಾಣುತ್ತವೆ, ಅಥವಾ ನಾನು ನಿಮ್ಮ ಕರೆಯನ್ನು ಅಧಿಕಾರಿಗೆ ಕನೆಕ್ಟ್ ಮಾಡಬಹುದು.
 - id: loans
-  keywords: [loan, home loan, car loan, personal loan, gold loan, education loan, karz, ಸಾಲ, लोन, ऋण]
+  keywords: [loan, home loan, car loan, personal loan, gold loan, education loan, karz, ಸಾಲ, ಲೋನ್, लोन, ऋण]
   answer: >-
     You can see loan options and apply in the bank app or at your branch, where an officer will explain eligibility
     and documents. I can also connect you to a bank officer now.
+  answer_hi: >-
+    आप बैंक ऐप में या अपनी ब्रांच में लोन के विकल्प देखकर आवेदन कर सकते हैं, जहाँ अधिकारी योग्यता और ज़रूरी कागज़ात
+    समझाएँगे। मैं अभी आपको किसी बैंक अधिकारी से भी जोड़ सकती हूँ।
+  answer_kn: >-
+    ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಅಥವಾ ನಿಮ್ಮ ಬ್ರಾಂಚ್‌ನಲ್ಲಿ ಸಾಲದ ಆಯ್ಕೆಗಳನ್ನು ನೋಡಿ ಅರ್ಜಿ ಹಾಕಬಹುದು; ಅಲ್ಲಿ ಅಧಿಕಾರಿಗಳು
+    ಅರ್ಹತೆ ಮತ್ತು ಬೇಕಾದ ದಾಖಲೆಗಳನ್ನು ವಿವರಿಸುತ್ತಾರೆ. ನಾನು ಈಗಲೇ ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೂ ಕನೆಕ್ಟ್ ಮಾಡಬಹುದು.
 - id: open_account
   keywords: [open account, new account, open an account, open a new account, khata khol*, account khol*,
-             account open, ಖಾತೆ ತೆರೆ, खाता खोल]
+             account open, ಖಾತೆ ತೆರೆ*, ಅಕೌಂಟ್ ಓಪನ್, खाता खोल*, अकाउंट खोल*]
   answer: >-
     You can open a new account in the bank app with your Aadhaar and PAN, or at any branch.
+  answer_hi: >-
+    आप अपने आधार और पैन से बैंक ऐप में नया खाता खोल सकते हैं, या किसी भी ब्रांच में।
+  answer_kn: >-
+    ನಿಮ್ಮ ಆಧಾರ್ ಮತ್ತು ಪ್ಯಾನ್ ಬಳಸಿ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಅಥವಾ ಯಾವುದೇ ಬ್ರಾಂಚ್‌ನಲ್ಲಿ ಹೊಸ ಖಾತೆ ತೆರೆಯಬಹುದು.
 - id: kyc
-  keywords: [kyc, documents, document, aadhaar, pan card, kyc update, ದಾಖಲೆ, दस्तावेज]
+  keywords: [kyc, documents, document, aadhaar, pan card, kyc update, ದಾಖಲೆ, ಕೆವೈಸಿ, दस्तावेज, केवाईसी]
   answer: >-
     For KYC you usually need an identity proof and an address proof, such as Aadhaar and PAN. You can update KYC
     in the bank app or at your branch. The bank never asks you to update KYC through a link in a message.
+  answer_hi: >-
+    केवाईसी के लिए आमतौर पर एक पहचान का प्रमाण और एक पते का प्रमाण चाहिए, जैसे आधार और पैन। आप बैंक ऐप में या अपनी
+    ब्रांच में केवाईसी अपडेट कर सकते हैं। बैंक कभी भी मैसेज के लिंक से केवाईसी अपडेट करने को नहीं कहता।
+  answer_kn: >-
+    ಕೆವೈಸಿಗೆ ಸಾಮಾನ್ಯವಾಗಿ ಒಂದು ಗುರುತಿನ ಪುರಾವೆ ಮತ್ತು ಒಂದು ವಿಳಾಸದ ಪುರಾವೆ ಬೇಕು, ಉದಾಹರಣೆಗೆ ಆಧಾರ್ ಮತ್ತು ಪ್ಯಾನ್.
+    ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಅಥವಾ ನಿಮ್ಮ ಬ್ರಾಂಚ್‌ನಲ್ಲಿ ಕೆವೈಸಿ ಅಪ್‌ಡೇಟ್ ಮಾಡಬಹುದು. ಮೆಸೇಜ್‌ನಲ್ಲಿನ ಲಿಂಕ್ ಮೂಲಕ ಕೆವೈಸಿ
+    ಅಪ್‌ಡೇಟ್ ಮಾಡಲು ಬ್ಯಾಂಕ್ ಎಂದಿಗೂ ಹೇಳುವುದಿಲ್ಲ.
 - id: charges
-  keywords: [charges, charge, fee, fees, service charge, shulk, kitna charge, ಶುಲ್ಕ, शुल्क]
+  keywords: [charges, charge, fee, fees, service charge, shulk, kitna charge, ಶುಲ್ಕ, ಚಾರ್ಜ್, शुल्क, चार्ज]
   answer: >-
     Charges depend on your account type and change from time to time, so I won't quote one on this line.
     The bank app and website list the current charges.
+  answer_hi: >-
+    चार्ज आपके खाते के प्रकार पर निर्भर करते हैं और समय-समय पर बदलते हैं, इसलिए मैं इस लाइन पर कोई रकम नहीं बताऊँगी।
+    मौजूदा चार्ज बैंक ऐप और वेबसाइट पर दिए गए हैं।
+  answer_kn: >-
+    ಶುಲ್ಕಗಳು ನಿಮ್ಮ ಖಾತೆಯ ಪ್ರಕಾರವನ್ನು ಅವಲಂಬಿಸಿರುತ್ತವೆ ಮತ್ತು ಆಗಾಗ ಬದಲಾಗುತ್ತವೆ, ಹಾಗಾಗಿ ಈ ಲೈನ್‌ನಲ್ಲಿ ನಾನು ಯಾವುದೇ
+    ಮೊತ್ತ ಹೇಳುವುದಿಲ್ಲ. ಈಗಿನ ಶುಲ್ಕಗಳು ಬ್ಯಾಂಕ್ ಆ್ಯಪ್ ಮತ್ತು ವೆಬ್‌ಸೈಟ್‌ನಲ್ಲಿವೆ.
 - id: limits
   keywords: [transfer limit, upi limit, daily limit, limit per day, maximum transfer, how much can i transfer,
-             kitna bhej sakte, limit kitna, ಮಿತಿ, सीमा]
+             kitna bhej sakte, limit kitna, ಮಿತಿ, ಲಿಮಿಟ್, सीमा, लिमिट]
   answer: >-
     Limits depend on your account and the type of payment; the bank app shows yours and lets you change them.
     If you want to make a transfer now, just tell me and I'll verify you first.
+  answer_hi: >-
+    लिमिट आपके खाते और पेमेंट के प्रकार पर निर्भर करती है; बैंक ऐप में आपकी लिमिट दिखती है और आप उसे बदल भी सकते
+    हैं। अगर अभी ट्रांसफर करना है, तो बस बताइए, मैं पहले आपकी पहचान की पुष्टि करूँगी।
+  answer_kn: >-
+    ಮಿತಿಗಳು ನಿಮ್ಮ ಖಾತೆ ಮತ್ತು ಪೇಮೆಂಟ್ ಪ್ರಕಾರವನ್ನು ಅವಲಂಬಿಸಿರುತ್ತವೆ; ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ನಿಮ್ಮ ಮಿತಿ ಕಾಣುತ್ತದೆ ಮತ್ತು
+    ಅದನ್ನು ಬದಲಾಯಿಸಬಹುದು. ಈಗಲೇ ಟ್ರಾನ್ಸ್‌ಫರ್ ಮಾಡಬೇಕೆಂದರೆ ಹೇಳಿ, ಮೊದಲು ನಾನು ನಿಮ್ಮನ್ನು ಪರಿಶೀಲಿಸುತ್ತೇನೆ.
 - id: minimum_balance
-  keywords: [minimum balance, min balance, average balance, kam se kam balance, ಕನಿಷ್ಠ ಬ್ಯಾಲೆನ್ಸ್, न्यूनतम]
+  keywords: [minimum balance, min balance, average balance, kam se kam balance, ಕನಿಷ್ಠ ಬ್ಯಾಲೆನ್ಸ್, न्यूनतम, मिनिमम बैलेंस]
   answer: >-
     The minimum balance depends on your account type, and the bank app shows the amount for your account.
+  answer_hi: >-
+    न्यूनतम बैलेंस आपके खाते के प्रकार पर निर्भर करता है, और बैंक ऐप में आपके खाते के लिए रकम दिखती है।
+  answer_kn: >-
+    ಕನಿಷ್ಠ ಬ್ಯಾಲೆನ್ಸ್ ನಿಮ್ಮ ಖಾತೆಯ ಪ್ರಕಾರವನ್ನು ಅವಲಂಬಿಸಿರುತ್ತದೆ, ಮತ್ತು ನಿಮ್ಮ ಖಾತೆಗೆ ಎಷ್ಟು ಎಂದು ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ
+    ಕಾಣುತ್ತದೆ.
 - id: cheque_clearing
-  keywords: [cheque clear, check clear, clearing, cheque deposit, cheque kab, cheque status]
+  keywords: [cheque clear, check clear, clearing, cheque deposit, cheque kab, cheque status, चेक क्लियर, ಚೆಕ್ ಕ್ಲಿಯರ್]
   answer: >-
     Clearing times vary. The bank app shows the status of a cheque you deposited and when the money is credited.
+  answer_hi: >-
+    क्लियरिंग का समय अलग-अलग होता है। बैंक ऐप में आपके जमा किए चेक का स्टेटस दिखता है, और यह भी कि पैसे कब आए।
+  answer_kn: >-
+    ಕ್ಲಿಯರಿಂಗ್ ಸಮಯ ಬೇರೆ ಬೇರೆ ಇರುತ್ತದೆ. ನೀವು ಜಮಾ ಮಾಡಿದ ಚೆಕ್‌ನ ಸ್ಟೇಟಸ್ ಮತ್ತು ಹಣ ಯಾವಾಗ ಜಮೆಯಾಯಿತು ಎಂಬುದು ಬ್ಯಾಂಕ್
+    ಆ್ಯಪ್‌ನಲ್ಲಿ ಕಾಣುತ್ತದೆ.
 - id: payment_types
   keywords: [what is neft, what is rtgs, what is imps, neft rtgs, rtgs neft, neft and imps, difference neft,
-             difference rtgs]
+             difference rtgs, एनईएफटी क्या, ಎನ್‌ಇಎಫ್‌ಟಿ ಎಂದರೆ]
   answer: >-
     NEFT, RTGS and IMPS are ways to send money to another bank account. IMPS is instant, RTGS is for large amounts,
     and NEFT works for any amount. If you want to make a transfer now, just tell me.
+  answer_hi: >-
+    एनईएफटी, आरटीजीएस और आईएमपीएस दूसरे बैंक खाते में पैसे भेजने के तरीके हैं। आईएमपीएस तुरंत होता है, आरटीजीएस बड़ी
+    रकम के लिए है, और एनईएफटी किसी भी रकम के लिए। अगर अभी ट्रांसफर करना है, तो बस बताइए।
+  answer_kn: >-
+    ಎನ್‌ಇಎಫ್‌ಟಿ, ಆರ್‌ಟಿಜಿಎಸ್ ಮತ್ತು ಐಎಂಪಿಎಸ್ ಬೇರೆ ಬ್ಯಾಂಕ್ ಖಾತೆಗೆ ಹಣ ಕಳುಹಿಸುವ ವಿಧಾನಗಳು. ಐಎಂಪಿಎಸ್ ತಕ್ಷಣ ಆಗುತ್ತದೆ,
+    ಆರ್‌ಟಿಜಿಎಸ್ ದೊಡ್ಡ ಮೊತ್ತಕ್ಕೆ, ಮತ್ತು ಎನ್‌ಇಎಫ್‌ಟಿ ಯಾವುದೇ ಮೊತ್ತಕ್ಕೆ. ಈಗಲೇ ಟ್ರಾನ್ಸ್‌ಫರ್ ಮಾಡಬೇಕೆಂದರೆ ಹೇಳಿ.
 - id: offers
-  keywords: [offer, offers, cashback, discount]
+  keywords: [offer, offers, cashback, discount, ऑफ़र, ऑफर, ಆಫರ್]
   answer: Current offers on cards, loans and deposits are listed in the bank app and on the website.
+  answer_hi: कार्ड, लोन और जमा पर मौजूदा ऑफ़र बैंक ऐप और वेबसाइट पर दिए गए हैं।
+  answer_kn: ಕಾರ್ಡ್, ಸಾಲ ಮತ್ತು ಠೇವಣಿಗಳ ಮೇಲಿನ ಈಗಿನ ಆಫರ್‌ಗಳು ಬ್ಯಾಂಕ್ ಆ್ಯಪ್ ಮತ್ತು ವೆಬ್‌ಸೈಟ್‌ನಲ್ಲಿವೆ.
 - id: ifsc
-  keywords: [ifsc, ifsc code, branch code, micr]
+  keywords: [ifsc, ifsc code, branch code, micr, आईएफएससी, ಐಎಫ್‌ಎಸ್‌ಸಿ]
   answer: >-
     The IFSC code is printed on your cheque book and passbook, and the bank app shows it under your account details.
+  answer_hi: >-
+    आईएफएससी कोड आपकी चेक बुक और पासबुक पर छपा होता है, और बैंक ऐप में खाते की जानकारी में भी दिखता है।
+  answer_kn: >-
+    ಐಎಫ್‌ಎಸ್‌ಸಿ ಕೋಡ್ ನಿಮ್ಮ ಚೆಕ್ ಬುಕ್ ಮತ್ತು ಪಾಸ್‌ಬುಕ್‌ನಲ್ಲಿ ಮುದ್ರಿತವಾಗಿರುತ್ತದೆ, ಮತ್ತು ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನ ಖಾತೆ
+    ವಿವರಗಳಲ್ಲೂ ಕಾಣುತ್ತದೆ.
 - id: customer_care
   keywords: [customer care number, customer care, helpline, contact number, toll free, phone number of the bank,
-             bank number, ಸಹಾಯವಾಣಿ, हेल्पलाइन]
+             bank number, ಸಹಾಯವಾಣಿ, ಕಸ್ಟಮರ್ ಕೇರ್, हेल्पलाइन, कस्टमर केयर]
   answer: >-
     The bank's customer care number is on the back of your debit card and in the bank app. For fraud, the national
     cyber crime helpline is 1930. I can also connect you to a bank officer now.
+  answer_hi: >-
+    बैंक का कस्टमर केयर नंबर आपके डेबिट कार्ड के पीछे और बैंक ऐप में है। धोखाधड़ी के लिए राष्ट्रीय साइबर क्राइम
+    हेल्पलाइन एक नौ तीन शून्य है। मैं अभी आपको किसी बैंक अधिकारी से भी जोड़ सकती हूँ।
+  answer_kn: >-
+    ಬ್ಯಾಂಕಿನ ಕಸ್ಟಮರ್ ಕೇರ್ ನಂಬರ್ ನಿಮ್ಮ ಡೆಬಿಟ್ ಕಾರ್ಡಿನ ಹಿಂಭಾಗದಲ್ಲಿ ಮತ್ತು ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿದೆ. ವಂಚನೆಗಾಗಿ ರಾಷ್ಟ್ರೀಯ
+    ಸೈಬರ್ ಕ್ರೈಮ್ ಸಹಾಯವಾಣಿ ಒಂದು ಒಂಬತ್ತು ಮೂರು ಸೊನ್ನೆ. ನಾನು ಈಗಲೇ ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೂ ಕನೆಕ್ಟ್ ಮಾಡಬಹುದು.
 - id: net_banking
   keywords: [net banking, internet banking, netbanking, forgot login, login problem, can't login, cannot login,
-             can't log in, user id, ನೆಟ್ ಬ್ಯಾಂಕಿಂಗ್, नेट बैंकिंग]
+             can't log in, user id, ನೆಟ್ ಬ್ಯಾಂಕಿಂಗ್, नेट बैंकिंग, लॉगिन]
   answer: >-
     You can register for net banking or reset your login in the bank app. If you want me to reset your password
     on this call, say "reset my password" and I'll verify you first.
+  answer_hi: >-
+    आप बैंक ऐप में नेट बैंकिंग के लिए रजिस्टर कर सकते हैं या अपना लॉगिन रीसेट कर सकते हैं। अगर चाहते हैं कि मैं इसी
+    कॉल पर आपका पासवर्ड रीसेट करूँ, तो कहिए "मेरा पासवर्ड रीसेट करो", मैं पहले आपकी पहचान की पुष्टि करूँगी।
+  answer_kn: >-
+    ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ನೀವು ನೆಟ್ ಬ್ಯಾಂಕಿಂಗ್‌ಗೆ ನೋಂದಾಯಿಸಬಹುದು ಅಥವಾ ನಿಮ್ಮ ಲಾಗಿನ್ ರೀಸೆಟ್ ಮಾಡಬಹುದು. ಈ ಕರೆಯಲ್ಲೇ
+    ನಾನು ನಿಮ್ಮ ಪಾಸ್‌ವರ್ಡ್ ರೀಸೆಟ್ ಮಾಡಬೇಕೆಂದರೆ, "ನನ್ನ ಪಾಸ್‌ವರ್ಡ್ ರೀಸೆಟ್ ಮಾಡಿ" ಎಂದು ಹೇಳಿ, ಮೊದಲು ನಾನು ನಿಮ್ಮನ್ನು
+    ಪರಿಶೀಲಿಸುತ್ತೇನೆ.
 - id: download_app
-  keywords: [download app, download the app, install app, install the app, get the app, app download, app kaise]
+  keywords: [download app, download the app, install app, install the app, get the app, app download, app kaise,
+             ऐप डाउनलोड, ಆ್ಯಪ್ ಡೌನ್‌ಲೋಡ್]
   answer: >-
     Download your bank's official app from the Play Store or the App Store, and check that the developer is your bank
     before you install it.
+  answer_hi: >-
+    अपने बैंक का आधिकारिक ऐप प्ले स्टोर या ऐप स्टोर से डाउनलोड कीजिए, और इंस्टॉल करने से पहले देख लीजिए कि डेवलपर
+    आपका बैंक ही है।
+  answer_kn: >-
+    ನಿಮ್ಮ ಬ್ಯಾಂಕಿನ ಅಧಿಕೃತ ಆ್ಯಪ್ ಅನ್ನು ಪ್ಲೇ ಸ್ಟೋರ್ ಅಥವಾ ಆ್ಯಪ್ ಸ್ಟೋರ್‌ನಿಂದ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ, ಮತ್ತು ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡುವ
+    ಮೊದಲು ಡೆವಲಪರ್ ನಿಮ್ಮ ಬ್ಯಾಂಕೇ ಎಂದು ಪರಿಶೀಲಿಸಿ.
 - id: app_trouble
-  keywords: [app not working, app not opening, app problem, app crash, app nahi khul, app nahi chal, app band]
+  keywords: [app not working, app not opening, app problem, app crash, app nahi khul, app nahi chal, app band,
+             ऐप नहीं खुल*, ऐप नहीं चल*, ಆ್ಯಪ್ ತೆರೆಯುತ್ತಿಲ್ಲ, ಆ್ಯಪ್ ಓಪನ್ ಆಗ್ತಿಲ್ಲ]
   answer: >-
     Try updating the bank app from the Play Store or the App Store and restarting your phone. If it still doesn't work,
     I can connect you to a bank officer.
+  answer_hi: >-
+    प्ले स्टोर या ऐप स्टोर से बैंक ऐप अपडेट करके फ़ोन रीस्टार्ट कीजिए। फिर भी न चले, तो मैं आपको किसी बैंक अधिकारी से
+    जोड़ सकती हूँ।
+  answer_kn: >-
+    ಪ್ಲೇ ಸ್ಟೋರ್ ಅಥವಾ ಆ್ಯಪ್ ಸ್ಟೋರ್‌ನಿಂದ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ, ಫೋನ್ ರೀಸ್ಟಾರ್ಟ್ ಮಾಡಿ ನೋಡಿ. ಆಗಲೂ ಕೆಲಸ
+    ಮಾಡದಿದ್ದರೆ, ನಾನು ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೆ ಕನೆಕ್ಟ್ ಮಾಡಬಹುದು.
 - id: credit_card
   keywords: [credit card apply, get a credit card, get credit card, apply for a card, apply card, card apply,
-             credit card eligibility, ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ಬೇಕು]
+             credit card eligibility, ಕ್ರೆಡಿಟ್ ಕಾರ್ಡ್ ಬೇಕು, क्रेडिट कार्ड चाहिए]
   answer: You can see card offers and apply in the bank app or at your branch.
+  answer_hi: आप बैंक ऐप में या अपनी ब्रांच में कार्ड के ऑफ़र देखकर आवेदन कर सकते हैं।
+  answer_kn: ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಅಥವಾ ನಿಮ್ಮ ಬ್ರಾಂಚ್‌ನಲ್ಲಿ ಕಾರ್ಡ್ ಆಫರ್‌ಗಳನ್ನು ನೋಡಿ ಅರ್ಜಿ ಹಾಕಬಹುದು.
 - id: account_details
   keywords: [account number, my account number, salary, credited, did my, has my, status, transaction status,
-             statement, last transaction, khata number, ಖಾತೆ ಸಂಖ್ಯೆ, खाता नंबर]
+             statement, last transaction, khata number, ಖಾತೆ ಸಂಖ್ಯೆ, ಸಂಬಳ, खाता नंबर, सैलरी, स्टेटमेंट]
   answer: >-
     For your safety I don't read out account details on this line. The bank app shows your transactions and the
     status of your requests, and if you say "check my balance" I'll send your balance to the bank app.
+  answer_hi: >-
+    आपकी सुरक्षा के लिए मैं इस लाइन पर खाते की जानकारी नहीं बताती। बैंक ऐप में आपके लेन-देन और आपकी रिक्वेस्ट का
+    स्टेटस दिखता है, और अगर आप कहें "मेरा बैलेंस चेक करो", तो मैं आपका बैलेंस बैंक ऐप पर भेज दूँगी।
+  answer_kn: >-
+    ನಿಮ್ಮ ಸುರಕ್ಷತೆಗಾಗಿ ಈ ಲೈನ್‌ನಲ್ಲಿ ನಾನು ಖಾತೆಯ ವಿವರಗಳನ್ನು ಹೇಳುವುದಿಲ್ಲ. ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ನಿಮ್ಮ ವಹಿವಾಟುಗಳು
+    ಮತ್ತು ರಿಕ್ವೆಸ್ಟ್‌ಗಳ ಸ್ಟೇಟಸ್ ಕಾಣುತ್ತದೆ, ಮತ್ತು "ನನ್ನ ಬ್ಯಾಲೆನ್ಸ್ ಚೆಕ್ ಮಾಡಿ" ಎಂದು ಹೇಳಿದರೆ, ನಿಮ್ಮ ಬ್ಯಾಲೆನ್ಸ್ ಅನ್ನು
+    ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ಗೆ ಕಳುಹಿಸುತ್ತೇನೆ.
 
 # --- small talk ---------------------------------------------------------------------------
 - id: hello
   small_talk: true
-  keywords: [hello, hallo, hi, anyone there, are you there, can you hear me, namaste, namaskara, ನಮಸ್ಕಾರ, नमस्ते]
+  keywords: [hello, hallo, hi, anyone there, are you there, can you hear me, namaste, namaskara, ನಮಸ್ಕಾರ, ಹಲೋ,
+             नमस्ते, हैलो, हेलो]
   answer: Yes, I'm here and I can hear you.
+  answer_hi: जी, मैं यहीं हूँ और आपकी आवाज़ सुन पा रही हूँ।
+  answer_kn: ಹೌದು, ನಾನು ಇಲ್ಲೇ ಇದ್ದೇನೆ, ನಿಮ್ಮ ಮಾತು ಕೇಳಿಸುತ್ತಿದೆ.
 - id: thanks
   small_talk: true
-  keywords: [thank you, thanks, shukriya, ok thanks]
+  keywords: [thank you, thanks, shukriya, ok thanks, शुक्रिया, ಥ್ಯಾಂಕ್ಸ್]
   answer: You're welcome.
+  answer_hi: जी, कोई बात नहीं।
+  answer_kn: ಪರವಾಗಿಲ್ಲ, ಸಂತೋಷ.
 - id: capabilities
   small_talk: true
-  keywords: [what can you do, help, options, what are my options, what services, kya kar sakte, enu madabahudu]
+  keywords: [what can you do, help, options, what are my options, what services, kya kar sakte, enu madabahudu,
+             क्या कर सकती, क्या कर सकते, ಏನು ಮಾಡಬಹುದು, ಸಹಾಯ]
   answer: >-
     I can check your balance, add a payee, change your SIM or password, transfer money, or make other changes to
     your account, and answer banking questions. What would you like to do?
+  answer_hi: >-
+    मैं आपका बैलेंस चेक कर सकती हूँ, पेयी जोड़ सकती हूँ, सिम या पासवर्ड बदल सकती हूँ, पैसे ट्रांसफर कर सकती हूँ, या खाते
+    में दूसरे बदलाव कर सकती हूँ, और बैंकिंग के सवालों के जवाब दे सकती हूँ। आप क्या करना चाहेंगे?
+  answer_kn: >-
+    ನಾನು ನಿಮ್ಮ ಬ್ಯಾಲೆನ್ಸ್ ಚೆಕ್ ಮಾಡಬಹುದು, ಪೇಯೀ ಸೇರಿಸಬಹುದು, ಸಿಮ್ ಅಥವಾ ಪಾಸ್‌ವರ್ಡ್ ಬದಲಾಯಿಸಬಹುದು, ಹಣ ಟ್ರಾನ್ಸ್‌ಫರ್
+    ಮಾಡಬಹುದು, ಅಥವಾ ಖಾತೆಯಲ್ಲಿ ಬೇರೆ ಬದಲಾವಣೆಗಳನ್ನು ಮಾಡಬಹುದು, ಮತ್ತು ಬ್ಯಾಂಕಿಂಗ್ ಪ್ರಶ್ನೆಗಳಿಗೆ ಉತ್ತರಿಸಬಹುದು.
+    ನಿಮಗೆ ಏನು ಬೇಕು?
 - id: off_topic
   small_talk: true
-  keywords: [cricket, weather, joke, movie, song, news, politics, match score]
+  keywords: [cricket, weather, joke, movie, song, news, politics, match score, क्रिकेट, मौसम, ಕ್ರಿಕೆಟ್, ಹವಾಮಾನ]
   answer: >-
     I can only help with banking on this line. You can ask me a banking question, or ask to check your balance,
     add a payee, change your SIM or password, or transfer money.
+  answer_hi: >-
+    इस लाइन पर मैं सिर्फ़ बैंकिंग में मदद कर सकती हूँ। आप मुझसे बैंकिंग का कोई सवाल पूछ सकते हैं, या बैलेंस चेक करने,
+    पेयी जोड़ने, सिम या पासवर्ड बदलने, या पैसे ट्रांसफर करने को कह सकते हैं।
+  answer_kn: >-
+    ಈ ಲೈನ್‌ನಲ್ಲಿ ನಾನು ಬ್ಯಾಂಕಿಂಗ್‌ಗೆ ಮಾತ್ರ ಸಹಾಯ ಮಾಡಬಲ್ಲೆ. ನೀವು ಬ್ಯಾಂಕಿಂಗ್ ಪ್ರಶ್ನೆ ಕೇಳಬಹುದು, ಅಥವಾ ಬ್ಯಾಲೆನ್ಸ್ ಚೆಕ್
+    ಮಾಡಲು, ಪೇಯೀ ಸೇರಿಸಲು, ಸಿಮ್ ಅಥವಾ ಪಾಸ್‌ವರ್ಡ್ ಬದಲಾಯಿಸಲು, ಅಥವಾ ಹಣ ಟ್ರಾನ್ಸ್‌ಫರ್ ಮಾಡಲು ಹೇಳಬಹುದು.

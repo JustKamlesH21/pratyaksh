@@ -16,7 +16,7 @@ import logging
 import math
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from importlib import resources
 from typing import Protocol
@@ -25,7 +25,7 @@ import httpx
 import yaml
 
 from ..domain import ChallengeKind, RequestKind
-from ..language import fold
+from ..language import fold, language_of
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ class Understanding:
     request: RequestKind | None = None
     reply: str | None = None  # what to say back (answers to questions, clarifications)
     wants_app_approval: bool = False
+    language: str = "en"  # what the Caller spoke (en, hi, kn); replies are in it
 
 
 @dataclass(frozen=True)
@@ -125,7 +126,8 @@ _REQUESTS: list[tuple[RequestKind, _Keys]] = [
 # alone folds to "ap", which collides with Hindi "aap" (you); a bare "can't" may be "can't hear".
 _APP = _Keys([
     "bank app", "in the app", "on the app", "use the app", "app approval", "approve in app",
-    "app se", "app mein", "app par", "app nalli",
+    "app se", "app mein", "app par", "app nalli", "ऐप से", "ऐप में", "ऐप पर", "ಆ್ಯಪ್ ಮೂಲಕ", "ಆಪ್ ಮೂಲಕ", "ಆ್ಯಪ್‌ನಲ್ಲಿ",
+    "ಆ್ಯಪ್ ನಲ್ಲಿ",
     "can't whisper", "cannot whisper", "can not whisper", "can't speak", "cannot speak", "can't talk",
     "can't do this", "can't do it", "can't do that", "cannot do this", "cannot do it", "unable to",
     "not comfortable", "uncomfortable", "sore throat", "nahi kar", "nahi bol", "agalla", "agolla",
@@ -184,16 +186,28 @@ NO_ANSWER = (
     "I can't answer that on this secure line, but the bank app has the details, "
     "or I can connect you to a bank officer."
 )
+_NO_ANSWER_IN = {
+    "hi": "इस सुरक्षित लाइन पर मैं इसका जवाब नहीं दे सकती, लेकिन बैंक ऐप में पूरी जानकारी है, "
+          "या मैं आपको किसी बैंक अधिकारी से जोड़ सकती हूँ।",
+    "kn": "ಈ ಸುರಕ್ಷಿತ ಲೈನ್‌ನಲ್ಲಿ ನಾನು ಅದಕ್ಕೆ ಉತ್ತರಿಸಲು ಆಗುವುದಿಲ್ಲ, ಆದರೆ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಎಲ್ಲಾ ವಿವರಗಳಿವೆ, "
+          "ಅಥವಾ ನಾನು ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೆ ಕನೆಕ್ಟ್ ಮಾಡಬಹುದು.",
+}
 
 
 @dataclass(frozen=True)
 class _Entry:
     id: str
     keys: list[_Phrase]
-    answer: str
+    answers: dict[str, str]  # by language: en, and hi and kn where written
     during: ChallengeKind | None  # only during this Challenge
     small_talk: bool
     report: bool  # a problem report: answered even when it mentions a Request
+
+    def answer_in(self, language: str) -> str:
+        return self.answers.get(language) or self.answers["en"]
+
+
+_ANSWER_KEYS = {"en": "answer", "hi": "answer_hi", "kn": "answer_kn"}
 
 
 class Faq:
@@ -204,7 +218,7 @@ class Faq:
             _Entry(
                 e["id"],
                 [k for k in (_phrase(str(k), stems_from=4) for k in e["keywords"]) if k],  # "record" ~ "recorded"
-                " ".join(e["answer"].split()),
+                {lang: " ".join(str(e[key]).split()) for lang, key in _ANSWER_KEYS.items() if e.get(key)},
                 ChallengeKind(e["during"]) if e.get("during") else None,
                 bool(e.get("small_talk")),
                 bool(e.get("report")),
@@ -235,7 +249,7 @@ class Faq:
         return best
 
     def as_prompt(self) -> str:
-        return "\n".join(f"- {answer}" for answer in dict.fromkeys(e.answer for e in self.entries))
+        return "\n".join(f"- {answer}" for answer in dict.fromkeys(e.answers["en"] for e in self.entries))
 
 
 class Interpreter:
@@ -248,7 +262,12 @@ class Interpreter:
 
         During a Challenge only off-script turns are reported (QUESTION, CHAT, REPEAT, WAIT,
         APP_APPROVAL, HUMAN); anything else is UNCLEAR and the Verifier scores it as the Response.
+        Answers are in the language the Caller spoke.
         """
+        language = language_of(transcript)
+        return replace(self._understand(transcript, context, language), language=language)
+
+    def _understand(self, transcript: str, context: Context, language: str) -> Understanding:
         text = transcript.strip()
         if not text:
             return Understanding(TurnKind.UNCLEAR)
@@ -260,7 +279,7 @@ class Interpreter:
             return Understanding(TurnKind.REPEAT)
         question = "?" in text or _QUESTION_MARKERS.found_in(said)
         if context.challenge is not None:
-            return self._during_challenge(text, said, question, wants_app, context)
+            return self._during_challenge(text, said, question, wants_app, context, language)
 
         answer = self._faq.match(said)
         request = next((kind for kind, keys in _REQUESTS if keys.found_in(said)), None)
@@ -269,8 +288,8 @@ class Interpreter:
             # money from my account" is a fraud report. "Is this safe? I want to transfer 6 lakh" is
             # both: answer it, then carry on with the Request.
             if request and _DO_IT.found_in(said):
-                return Understanding(TurnKind.REQUEST, request, answer.answer, wants_app)
-            return Understanding(TurnKind.QUESTION, reply=answer.answer)
+                return Understanding(TurnKind.REQUEST, request, answer.answer_in(language), wants_app)
+            return Understanding(TurnKind.QUESTION, reply=answer.answer_in(language))
         if request:
             return Understanding(TurnKind.REQUEST, request, wants_app_approval=wants_app)
         if wants_app:
@@ -280,23 +299,23 @@ class Interpreter:
         if _WAIT.found_in(said):
             return Understanding(TurnKind.WAIT)
         if answer:  # "I lost my phone", "there's a transaction I didn't make"
-            return Understanding(TurnKind.QUESTION, reply=answer.answer)
+            return Understanding(TurnKind.QUESTION, reply=answer.answer_in(language))
         if _GOODBYE.found_in(said):
             return Understanding(TurnKind.GOODBYE)
         if self._llm is not None:  # before canned small talk: it handles "hello, my money went…" better
-            return self._ask_llm(text, context)
+            return self._ask_llm(text, context, language)
         chat = self._faq.match(said, small_talk=True)
         if chat:
-            return Understanding(TurnKind.CHAT, reply=chat.answer)
+            return Understanding(TurnKind.CHAT, reply=chat.answer_in(language))
         if question:
-            return Understanding(TurnKind.QUESTION, reply=NO_ANSWER)
+            return Understanding(TurnKind.QUESTION, reply=_NO_ANSWER_IN.get(language, NO_ANSWER))
         return Understanding(TurnKind.UNCLEAR)
 
     def _during_challenge(self, text: str, said: list[str], question: bool, wants_app: bool,
-                          context: Context) -> Understanding:
+                          context: Context, language: str) -> Understanding:
         answer = self._faq.match(said, context.challenge)
         if answer and answer.during is not None:  # about this Challenge: "I didn't get the code"
-            return Understanding(TurnKind.QUESTION, reply=answer.answer)
+            return Understanding(TurnKind.QUESTION, reply=answer.answer_in(language))
         if wants_app:
             return Understanding(TurnKind.APP_APPROVAL, wants_app_approval=True)
         if _REPEAT.found_in(said):
@@ -304,21 +323,21 @@ class Interpreter:
         if _WAIT.found_in(said):
             return Understanding(TurnKind.WAIT)
         if answer and (question or answer.report):
-            return Understanding(TurnKind.QUESTION, reply=answer.answer)
+            return Understanding(TurnKind.QUESTION, reply=answer.answer_in(language))
         chat = self._faq.match(said, small_talk=True)
         if chat:
-            return Understanding(TurnKind.CHAT, reply=chat.answer)
+            return Understanding(TurnKind.CHAT, reply=chat.answer_in(language))
         if not question:
             return Understanding(TurnKind.UNCLEAR)
         if self._llm is not None:  # only Questions, Repeats and Waits: keywords alone change the Call's path
-            u = self._ask_llm(text, context)
+            u = self._ask_llm(text, context, language)
             if u.kind in (TurnKind.REPEAT, TurnKind.WAIT):
                 return Understanding(u.kind)
             if u.kind is TurnKind.QUESTION and u.reply:
                 return u
-        return Understanding(TurnKind.QUESTION, reply=NO_ANSWER)
+        return Understanding(TurnKind.QUESTION, reply=_NO_ANSWER_IN.get(language, NO_ANSWER))
 
-    def _ask_llm(self, text: str, context: Context) -> Understanding:
+    def _ask_llm(self, text: str, context: Context, language: str) -> Understanding:
         system = (
             "You are the voice assistant on a bank's secure phone line in India. The caller may mix Kannada, "
             "Hindi and English, possibly romanised. Classify the caller's words and reply with JSON only:\n"
@@ -350,7 +369,7 @@ class Interpreter:
             if kind is TurnKind.REQUEST and request is None:
                 kind = TurnKind.UNCLEAR
             if kind in (TurnKind.QUESTION, TurnKind.CHAT) and not reply:
-                kind, reply = TurnKind.QUESTION, NO_ANSWER
+                kind, reply = TurnKind.QUESTION, _NO_ANSWER_IN.get(language, NO_ANSWER)
             return Understanding(kind, request if kind is TurnKind.REQUEST else None, reply)
         except Exception as e:  # the LLM is optional; never let it break a Call
             log.warning("LLM interpretation failed: %r", e)

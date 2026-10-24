@@ -132,11 +132,11 @@ ANSWERS = [  # (what the Caller asks before any Request, words the answer must c
     ("did my salary come?", "don't read out account details"),
     ("there is a transaction I did not make", "1930"),
     ("I got a suspicious message with a link", "Don't open links"),
-    ("mera paisa kat gaya, kya karu?", "comes back to your account"),
-    ("OTP kisi ko dena chahiye?", "Never share"),
-    ("ब्रांच कब खुलती है?", "branch"),
-    ("nanna hana kaledu hogide", "1930"),
-    ("ನನ್ನ ಖಾತೆ ಸಂಖ್ಯೆ ಏನು?", "don't read out account details"),
+    ("mera paisa kat gaya, kya karu?", "अपने आप आपके खाते में वापस"),
+    ("OTP kisi ko dena chahiye?", "कभी किसी को मत बताइए"),
+    ("ब्रांच कब खुलती है?", "ब्रांच"),
+    ("nanna hana kaledu hogide", "ಒಂದು ಒಂಬತ್ತು ಮೂರು ಸೊನ್ನೆ"),
+    ("ನನ್ನ ಖಾತೆ ಸಂಖ್ಯೆ ಏನು?", "ಖಾತೆಯ ವಿವರಗಳನ್ನು ಹೇಳುವುದಿಲ್ಲ"),
 ]
 
 
@@ -203,9 +203,9 @@ def test_hold_on_is_not_scored_but_cannot_stall_a_challenge():
     h = Harness()
     call_id = start(h)
     h.say(call_id, "add a payee")
-    for wait in ("hold on", "ek minute"):
+    for wait, reply in (("hold on", "Sure, take your time."), ("ek minute", "ज़रूर, आराम से।")):
         step = h.say(call_id, wait, voiced(), 900)
-        assert step.say.startswith("Sure, take your time.") and h.verifier.call(call_id)["evidence"] == []
+        assert step.say.startswith(reply) and h.verifier.call(call_id)["evidence"] == []
     h.say(call_id, "ondu nimisha", voiced(), 900)  # third off-script turn: scored as the Response
     assert len(h.verifier.call(call_id)["evidence"]) == 1
 
@@ -239,3 +239,56 @@ def test_a_wrong_answer_to_a_challenge_is_scored_not_taken_as_a_side_turn(answer
     h.say(call_id, "add a payee")
     h.say(call_id, answer, voiced(), 900)
     assert len(h.verifier.call(call_id)["evidence"]) == 1
+
+
+@pytest.mark.parametrize("asked, answer, anything_else", [
+    ("is my voice being recorded?", "never store your voice", "anything else I can help you with?"),
+    ("kya meri awaaz record ho rahi hai?", "कभी सेव नहीं करते", "और कोई मदद कर सकती हूँ?"),
+    ("ನನ್ನ ಧ್ವನಿಯನ್ನು ಉಳಿಸುತ್ತೀರಾ?", "ಎಂದಿಗೂ ಉಳಿಸಿಕೊಳ್ಳುವುದಿಲ್ಲ", "ಇನ್ನೇನಾದರೂ ಸಹಾಯ ಮಾಡಬಹುದೇ?"),
+    ("ನನ್ನ ಧ್ವನಿ record ಆಗುತ್ತಾ? is my voice stored?", "never store your voice", "anything else I can help you with?"),
+])
+def test_answers_come_in_the_language_the_caller_asked_in(asked, answer, anything_else):
+    h = Harness()
+    step = h.say(start(h), asked)
+    assert answer in step.say and step.say.endswith(anything_else)
+
+
+def test_help_during_a_challenge_comes_in_the_callers_language():
+    h = Harness()
+    call_id = start(h)
+    h.say(call_id, "add a payee")
+    h.say(call_id, h.current_phrase(call_id), whispered(), 700)
+    assert "एसएमएस में नहीं" in h.say(call_id, "कोड नहीं आया", voiced(), 900).say
+    assert h.say(call_id, "ondu nimisha", voiced(), 900).say.startswith("ಪರವಾಗಿಲ್ಲ, ನಿಧಾನವಾಗಿ ಮಾಡಿ.")
+
+
+def test_every_answer_is_written_in_english_hindi_and_kannada():
+    import re
+    from importlib import resources
+
+    import yaml
+
+    entries = yaml.safe_load(resources.files("pratyaksh").joinpath("knowledge.yaml").read_text(encoding="utf-8"))
+    for e in entries:
+        assert e.get("answer") and e.get("answer_hi") and e.get("answer_kn"), e["id"]
+        # Native script only, so the voice can read it (loanwords too: ऐप, ಆ್ಯಪ್).
+        assert re.search("[\u0900-\u097f]", e["answer_hi"]) and not re.search("[A-Za-z0-9]", e["answer_hi"]), e["id"]
+        assert re.search("[\u0c80-\u0cff]", e["answer_kn"]) and not re.search("[A-Za-z0-9]", e["answer_kn"]), e["id"]
+
+
+def test_what_the_answers_tell_callers_to_say_is_understood():
+    for use_the_app in ("ऐप से करना है", "ಆ್ಯಪ್ ಮೂಲಕ ಮಾಡಿ"):
+        h = Harness()
+        call_id = start(h)
+        h.say(call_id, "add a payee")
+        assert h.say(call_id, use_the_app, voiced(), 900).wait
+    for said, kind in [("मेरा कार्ड ब्लॉक करो", "account_service"), ("ನನ್ನ ಕಾರ್ಡ್ ಬ್ಲಾಕ್ ಮಾಡಿ", "account_service"),
+                       ("मेरा पासवर्ड रीसेट करो", "sim_swap"), ("ನನ್ನ ಪಾಸ್‌ವರ್ಡ್ ರೀಸೆಟ್ ಮಾಡಿ", "sim_swap"),
+                       ("मेरा बैलेंस चेक करो", "balance_enquiry"), ("ನನ್ನ ಬ್ಯಾಲೆನ್ಸ್ ಚೆಕ್ ಮಾಡಿ", "balance_enquiry")]:
+        h = Harness()
+        call_id = start(h)
+        h.say(call_id, said)
+        assert h.verifier.call(call_id)["request"] == kind, said
+    for officer in ("अधिकारी से बात करनी है", "ಅಧಿಕಾರಿ ಜೊತೆ ಮಾತಾಡಬೇಕು"):
+        h = Harness()
+        assert h.say(start(h), officer).outcome is Outcome.HANDED_TO_AGENT
