@@ -25,6 +25,8 @@ signals:
   spoof_score:
     mode: enforce        # enforce | advisory | off
     block_at: 0.85       # enforce mode: P(synthetic) at or above this is a hard fail
+  code_match:
+    max_digits: 8        # a readout with more digits never matches: a long run of digits would try many codes
 
 weights:                 # combined into a Liveness Score per Response
   task_match: 0.30
