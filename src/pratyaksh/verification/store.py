@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Iterator
@@ -143,11 +144,12 @@ class Database:
         self.engine = create_engine(url, **kwargs)
         self._sessions = sessionmaker(self.engine, expire_on_commit=False)
 
-    def create_schema(self) -> None:
+    def create_schema(self) -> list[str]:
+        """Create the tables and the Audit Trail triggers. Returns the triggers that could not be added."""
         Base.metadata.create_all(self.engine)
-        self._protect_audit_trail()
+        return self._protect_audit_trail()
 
-    def _protect_audit_trail(self) -> None:
+    def _protect_audit_trail(self) -> list[str]:
         dialect = self.engine.dialect.name
         existing: set[str] = set()
         if dialect == "mysql":
@@ -155,6 +157,7 @@ class Database:
                 existing = set(conn.execute(text(
                     "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()"
                 )).scalars())
+        missing, cause = [], None
         for name, ddl in _AUDIT_TRIGGERS.get(dialect, {}).items():
             if name in existing:
                 continue
@@ -162,7 +165,18 @@ class Database:
                 with self.engine.begin() as conn:
                     conn.execute(text(ddl))
             except Exception as e:  # e.g. the MySQL user lacks the TRIGGER privilege
-                log.warning("could not add %s (Audit Trail still insert-only in code): %s", name, e)
+                missing.append(name)
+                cause = getattr(e, "orig", e)
+        if missing:
+            db = self.engine.url.database
+            log.error(
+                "Audit Trail is NOT protected in the database: could not add %s: %s. "
+                "Fix as MySQL root: GRANT TRIGGER ON %s.* TO the app user; SET PERSIST "
+                "log_bin_trust_function_creators = 1; then run pratyaksh-seed again. "
+                "Until then the Audit Trail is insert-only in code only.",
+                ", ".join(missing), cause, db,
+            )
+        return missing
 
     def seed_demo_customers(self) -> None:
         with self.session() as s:
@@ -213,10 +227,12 @@ def seed_main() -> None:
     parser.add_argument("--database-url", default=None)
     args = parser.parse_args()
     db = Database(args.database_url or Settings().database_url)
-    db.create_schema()
+    missing = db.create_schema()
     db.seed_demo_customers()
-    print("schema ready, demo customers seeded")
+    print("tables ready, demo customers seeded" if missing else "schema ready, demo customers seeded")
     print("\nBank App pairing links (open each on that Customer's phone; keep them private):")
     with db.session() as s:
         for c in s.scalars(select(CustomerRow).order_by(CustomerRow.id)).all():
             print(f"  {c.name:14s} /bank?customer={c.id}&device={c.device_token}")
+    if missing:
+        sys.exit("\nAudit Trail triggers are missing (see the error above); fix it and run pratyaksh-seed again.")

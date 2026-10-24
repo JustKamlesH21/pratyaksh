@@ -4,7 +4,7 @@ import base64
 import json
 
 import pytest
-from conftest import voiced, whispered
+from conftest import database_url, voiced, whispered
 from fastapi.testclient import TestClient
 
 from pratyaksh.api.app import create_app
@@ -19,7 +19,7 @@ C = "cust-rahul"
 def api(tmp_path):
     settings = Settings(
         _env_file=None,
-        database_url="sqlite://",
+        database_url=database_url(),
         speech_backend="scripted",
         tts_backend="tone",
         tts_cache_dir=str(tmp_path / "tts"),
