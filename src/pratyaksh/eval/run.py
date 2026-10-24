@@ -124,6 +124,7 @@ def _share(rows: list[dict], pred) -> float | None:
 # Audit kinds written exactly once per posted Response (keeps recordings and events aligned).
 _RESPONSE_EVENTS = {
     "caller_said", "challenge_repeated", "code_retry", "app_approval_asked", "response_scored", "processing_error",
+    "response_ignored",
 }
 
 
