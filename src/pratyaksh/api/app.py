@@ -13,6 +13,7 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import numpy as np
 from fastapi import (
     Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect,
 )
@@ -22,8 +23,9 @@ from pydantic import BaseModel, Field
 
 from ..config import Settings
 from ..domain import Audio, Response
+from ..signals import whisper_score
 from ..verification import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
-from .container import FIXED_PROMPTS, Container, build
+from .container import FIXED_PROMPTS, Container, build, llm_configured
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +68,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         for cust in c.verifier.customers():
             log.info("Bank App pairing for %s: /bank?customer=%s&device=%s",
                      cust["name"], cust["id"], c.verifier.pairing(cust["id"]))
-        if settings.warm_up_models and settings.speech_backend == "local":
+        if settings.warm_up_models:
             asyncio.get_running_loop().run_in_executor(None, _warm_up, c)
         yield
 
@@ -104,6 +106,44 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @app.get("/healthz")
     def healthz():
         return {"ok": True}
+
+    @app.get("/v1/status")
+    def status(request: Request):
+        """Is this setup ready for a real Call? Read it before the demo: warnings say what to fix."""
+        cont = c(request)
+        s = cont.settings
+        try:
+            with cont.db.engine.connect() as conn:
+                conn.exec_driver_sql("SELECT 1")
+            db_ok = True
+        except Exception:
+            db_ok = False
+        llm = llm_configured(s)
+        warnings = [w for ok, w in [
+            (db_ok, "The database is not reachable."),
+            (not cont.missing_triggers, "Audit Trail triggers are missing: fix the grants named in the API log, then run pratyaksh-seed."),
+            (bool(s.agent_key), "AGENT_KEY is empty: any laptop on the network can post Responses."),
+            (bool(s.console_key), "CONSOLE_KEY is empty: anyone can decide Agent Reviews and fetch Verification Receipts."),
+            (cont.warm, "Models are still warming up: the first Call will be slow."),
+            (s.speech_backend == "local", "Speech models are scripted: this is not a real Call setup."),
+            (s.tts_backend == "parler", "The Voice Agent beeps instead of speaking (TTS_BACKEND=tone)."),
+            (llm, "No LLM is configured: unusual questions get the fallback answer."),
+            (not s.retain_audio, "RETAIN_AUDIO is on: Response audio is being kept (consented Eval recordings only)."),
+        ] if not ok]
+        return {
+            "ready": db_ok and not cont.missing_triggers and cont.warm,
+            "database": {"ok": db_ok, "dialect": cont.db.engine.dialect.name, "audit_triggers": not cont.missing_triggers},
+            "speech": {"backend": s.speech_backend, "whisper_model": s.whisper_model, "warm": cont.warm},
+            "voice": s.tts_backend,
+            "llm": {"configured": llm, "model": s.ollama_model if llm else None},
+            "keys": {"agent": bool(s.agent_key), "console": bool(s.console_key),
+                     "receipts": cont.verifier.receipt_key()["kid"]},
+            "warnings": warnings,
+        }
+
+    @app.get("/v1/stats")
+    def stats(request: Request):
+        return c(request).verifier.stats()
 
     # -- Voice Agent ---------------------------------------------------------------
 
@@ -263,10 +303,14 @@ def create_app(settings: Settings | None = None, container: Container | None = N
 
 def _warm_up(c: Container) -> None:
     try:
+        # The whisper DSP compiles on first use (~1 s); do it now, not on the first Caller's whisper.
+        rng = np.random.default_rng(0)
+        whisper_score(Audio((0.1 * rng.standard_normal(16_000)).astype(np.float32)))
         warm = getattr(c.speech, "warm_up", None)
         if warm:
             warm()
         c.voice.prewarm(FIXED_PROMPTS)
+        c.warm = True
         log.info("models warm")
     except Exception:
         log.exception("model warm-up failed; models will load on first use")

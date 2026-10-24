@@ -172,3 +172,20 @@ def test_verification_receipts_over_http_check_with_any_jwt_library(api):
     jwk = api.get("/v1/receipts/key").json()["keys"][0]
     key = jwt.PyJWK(jwk).key
     assert jwt.decode(issued["receipt"], key, algorithms=["EdDSA"])["call_id"] == call_id
+
+
+def test_status_says_what_to_fix_before_the_demo(api):
+    status = api.get("/v1/status").json()
+    assert status["database"] == {"ok": True, "dialect": status["database"]["dialect"], "audit_triggers": True}
+    assert status["ready"] is False  # this test setup never warms models
+    assert any("AGENT_KEY is empty" in w for w in status["warnings"])
+    assert any("scripted" in w for w in status["warnings"])
+    assert not any("CONSOLE_KEY" in w for w in status["warnings"])  # the fixture sets one
+    assert len(status["keys"]["receipts"]) == 16
+
+
+def test_stats_count_outcomes_and_added_time(api):
+    test_a_full_call_over_http(api)
+    stats = api.get("/v1/stats").json()
+    assert stats["calls"] >= 1 and stats["by_outcome"].get("passed_pending_review", 0) + stats["by_outcome"].get("passed", 0) >= 1
+    assert stats["avg_added_seconds"] is not None and stats["avg_added_seconds"] >= 0

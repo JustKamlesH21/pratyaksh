@@ -13,6 +13,7 @@ Reads:
     audit_check(call_id) -> {intact, events, broken_at, head}   (recomputes the Audit Trail's hash chain)
     receipt(call_id) -> {receipt, claims}   (signed Verification Receipt of a closed Call)
     verify_receipt(receipt) -> {valid, reason, claims}, receipt_key() -> public JWK
+    stats() -> {calls, by_outcome, blocked, avg_added_seconds}   (live numbers for the Console)
     pairing(customer_id) -> device token (shown only on the operator's machine)
 
 Errors: CallNotFound, UnknownCustomer, NotAllowed, DeviceNotPaired.
