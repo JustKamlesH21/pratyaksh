@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import random
 from datetime import datetime, timedelta
 
@@ -10,6 +11,22 @@ from pratyaksh.domain import SAMPLE_RATE, Audio, Response
 from pratyaksh.policy import Policy
 from pratyaksh.signals import ScriptedSpeechModels, SignalExtractor
 from pratyaksh.verification import Database, EventHub, Interpreter, Verifier
+from pratyaksh.verification.store import Base
+
+
+def database_url(default: str = "sqlite://") -> str:
+    """The database a test runs on: SQLite, or MySQL when PRATYAKSH_TEST_DATABASE_URL is set.
+
+    MySQL tables are dropped first so every test starts empty (DROP is the only way to clear
+    the Audit Trail; its triggers reject DELETE).
+    """
+    url = os.environ.get("PRATYAKSH_TEST_DATABASE_URL")
+    if not url:
+        return default
+    engine = Database(url).engine
+    Base.metadata.drop_all(engine)
+    engine.dispose()
+    return url
 
 
 def voiced(seconds: float = 1.5, f0: float = 140.0, seed: int = 0) -> Audio:
@@ -49,10 +66,10 @@ class Clock:
 
 
 class Harness:
-    """A Verifier on in-memory SQLite with scripted speech models."""
+    """A Verifier on in-memory SQLite (or the test MySQL) with scripted speech models."""
 
     def __init__(self, spoof=None, llm=None):
-        self.db = Database("sqlite://")
+        self.db = Database(database_url())
         self.db.create_schema()
         self.db.seed_demo_customers()
         self.models = ScriptedSpeechModels(spoof=spoof)

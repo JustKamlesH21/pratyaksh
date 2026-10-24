@@ -24,7 +24,7 @@ Architecture rules:
 - Policy numbers (weights, thresholds, latency bounds) live in `policy.yaml` and are tuned from Eval Runs, never hard-coded.
 - Python 3.11, FastAPI, SQLAlchemy 2, MySQL. Frontend is Vite + React + TypeScript + Tailwind 4. Do not add new frameworks without asking.
 
-Where things stand (Oct 24): the verifier, Voice Agent, web apps, Eval Runs and red-team tools are written; 51 pytest tests pass and the web app builds; a scripted call ran end to end through a real LiveKit server. Never run yet: the real speech models (faster-whisper, the spoof classifier, Indic Parler-TTS), MySQL itself, and IndicF5. The Voice Agent understands any utterance through `verification/interpreter.py` (keyword rules, then the Ollama LLM) and answers Questions from `src/pratyaksh/knowledge.yaml`.
+Where things stand (Oct 24): the verifier, Voice Agent, web apps, Eval Runs and red-team tools are written; 51 pytest tests pass and the web app builds; a scripted call ran end to end through a real LiveKit server. MySQL 8.0 (native install) ran the whole pytest suite and 7 parallel Calls with a live Console, Audit Trail triggers included; the Docker `mysql:8.4` image has not been run. Never run yet: the real speech models (faster-whisper, the spoof classifier, Indic Parler-TTS) and IndicF5. The Voice Agent understands any utterance through `verification/interpreter.py` (keyword rules, then the Ollama LLM) and answers Questions from `src/pratyaksh/knowledge.yaml`.
 
 Open work, in order:
 1. On the GPU laptop: install the `ml` extra, run MySQL + LiveKit + API + agent, make one real call, fix what breaks.

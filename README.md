@@ -69,9 +69,9 @@ Native install: create the database and user, then grant them:
 CREATE DATABASE pratyaksh CHARACTER SET utf8mb4;
 CREATE USER 'pratyaksh'@'%' IDENTIFIED BY 'pratyaksh-dev';
 GRANT ALL PRIVILEGES ON pratyaksh.* TO 'pratyaksh'@'%';
-SET GLOBAL log_bin_trust_function_creators = 1;   -- lets the app add the Audit Trail triggers
+SET PERSIST log_bin_trust_function_creators = 1;  -- lets the app add the Audit Trail triggers; survives restarts
 ```
-Then `pratyaksh-seed` creates the tables, triggers and three demo Customers (the API also does this on start).
+Then `pratyaksh-seed` creates the tables, triggers and three demo Customers (the API also does this on start). If it cannot add the Audit Trail triggers it says why and exits with an error; fix the grant or setting it names and run it again.
 
 ### 3. LiveKit server
 
@@ -130,6 +130,11 @@ Try going off-script too: ask "why should I whisper?" in the middle of a Challen
 ```bash
 pytest            # Policy, Signals, whole Calls through the Verifier, HTTP interface, call loop, Eval Runs
 cd web && npm run build
+```
+The same suite runs on MySQL (tables in that database are dropped before each test, so use a spare one):
+```bash
+mysql -uroot -p -e "CREATE DATABASE pratyaksh_test CHARACTER SET utf8mb4; GRANT ALL PRIVILEGES ON pratyaksh_test.* TO 'pratyaksh'@'%';"
+PRATYAKSH_TEST_DATABASE_URL=mysql+pymysql://pratyaksh:pratyaksh-dev@127.0.0.1:3306/pratyaksh_test pytest
 ```
 The Voice Agent's LiveKit adapter was verified against a local `livekit-server` with a scripted caller; it is not part of `pytest` because it needs the server binary.
 

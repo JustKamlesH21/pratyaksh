@@ -1,6 +1,6 @@
 """Record Calls with RETAIN_AUDIO, export them to a manifest, and run an Eval Run on it."""
 
-from conftest import voiced, whispered
+from conftest import database_url, voiced, whispered
 from fastapi.testclient import TestClient
 
 from pratyaksh.api.app import create_app
@@ -36,9 +36,9 @@ def _call(client, models, genuine: bool):
 
 
 def test_record_export_and_evaluate(tmp_path, monkeypatch):
-    db_path = tmp_path / "eval.db"
+    db_url = database_url(f"sqlite:///{tmp_path / 'eval.db'}")
     settings = Settings(
-        _env_file=None, database_url=f"sqlite:///{db_path}", speech_backend="scripted", tts_backend="tone",
+        _env_file=None, database_url=db_url, speech_backend="scripted", tts_backend="tone",
         tts_cache_dir=str(tmp_path / "tts"), warm_up_models=False, retain_audio=True,
         audio_dir=str(tmp_path / "rec"),
     )
@@ -66,6 +66,6 @@ def test_record_export_and_evaluate(tmp_path, monkeypatch):
     assert s["avg_added_seconds_real"] > 8
 
     # The CLI stores the run where the Eval page reads it.
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setenv("DATABASE_URL", db_url)
     main(["run", str(manifest), "--speech", "scripted", "--label", "test run"])
     assert container.db.latest_eval_run()["label"] == "test run"
