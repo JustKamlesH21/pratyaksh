@@ -1,0 +1,6 @@
+numpy
+soundfile
+sounddevice
+torch
+transformers
+# IndicF5 pulls its own code via trust_remote_code; if it asks for more packages, install what it names.

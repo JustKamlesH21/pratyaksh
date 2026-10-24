@@ -1,0 +1,10 @@
+# LiveKit server for a LAN demo (ADR-0005). Keys come from LIVEKIT_KEYS or --keys.
+port: 7880
+bind_addresses: ["0.0.0.0"]
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50200
+  use_external_ip: false
+logging:
+  level: info

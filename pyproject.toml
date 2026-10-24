@@ -1,0 +1,61 @@
+[project]
+name = "pratyaksh"
+version = "0.1.0"
+description = "Live-human verification for bank calls without voiceprints (FET Aavishkar 2026, Team Omnitrons)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",
+    "sqlalchemy>=2.0",
+    "pymysql>=1.1",
+    "cryptography>=42",          # PyMySQL needs it for MySQL 8 auth
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "pyyaml>=6.0",
+    "numpy>=1.26",
+    "soundfile>=0.12",
+    "librosa>=0.10",
+    "rapidfuzz>=3.9",
+    "indic-transliteration>=2.3",
+    "httpx>=0.27",
+    "livekit-api>=1.0",
+]
+
+[project.optional-dependencies]
+# Real speech models for the verifier. Install on the GPU laptop.
+ml = [
+    "faster-whisper>=1.1",
+    "torch>=2.3",
+    "transformers>=4.44",
+    "parler-tts @ git+https://github.com/huggingface/parler-tts.git",
+]
+# The LiveKit voice agent worker.
+agent = [
+    "livekit-agents>=1.8,<2",
+    "livekit-plugins-silero>=1.8,<2",
+]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+pratyaksh-api = "pratyaksh.api.app:main"
+pratyaksh-agent = "pratyaksh.agent.worker:main"
+pratyaksh-eval = "pratyaksh.eval.run:main"
+pratyaksh-seed = "pratyaksh.verification.store:seed_main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pratyaksh = ["*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

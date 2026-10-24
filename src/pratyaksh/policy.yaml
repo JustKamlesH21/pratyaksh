@@ -1,0 +1,36 @@
+# Pratyaksh Policy. Banks tune this file; code reads it through pratyaksh.policy.Policy.
+# Tune weights and thresholds from Eval Runs (pratyaksh-eval), not by guesswork.
+
+requests:
+  balance_enquiry:
+    challenges: []
+  add_payee:
+    challenges: [whisper_phrase, possession_code]
+  sim_swap:
+    challenges: [whisper_phrase, whisper_phrase, possession_code]
+  high_value_transfer:
+    challenges: [whisper_phrase, whisper_phrase, possession_code]
+    agent_review: true
+
+signals:
+  task_match:
+    min: 0.70            # below this the phrase was not said
+  whisper_score:
+    min: 0.60            # below this the phrase was not whispered
+  reply_latency:
+    human_ms: 1200       # at or below: full credit
+    machine_ms: 3000     # at or above: no credit
+  spoof_score:
+    mode: enforce        # enforce | advisory | off
+    block_at: 0.85       # enforce mode: P(synthetic) at or above this is a hard fail
+
+weights:                 # combined into a Liveness Score per Response
+  task_match: 0.30
+  whisper_score: 0.20
+  reply_latency: 0.20
+  spoof_score: 0.30
+
+verdict:
+  pass_at: 0.75          # mean Liveness Score at or above: PASS
+  block_at: 0.45         # at or below: BLOCK; in between: STEP-UP
+  max_step_ups: 1        # extra Whisper Phrases before handing over to App Approval

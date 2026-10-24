@@ -1,0 +1,39 @@
+# MySQL and LiveKit for the demo laptop.
+#   cd infra && docker compose --env-file ../.env up -d
+#
+# LiveKit uses host networking so WebRTC media ports work without NAT trouble. Host networking
+# works on Linux; on Docker Desktop (Windows/macOS) run the LiveKit binary instead (see README).
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: pratyaksh
+      MYSQL_USER: pratyaksh
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-pratyaksh-dev}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-dev}
+    # Lets the app user create the Audit Trail triggers (ADR-0004).
+    command: ["--log-bin-trust-function-creators=1"]
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/grants.sql:/docker-entrypoint-initdb.d/01-grants.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root-dev}"]
+      interval: 5s
+      retries: 20
+
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    network_mode: host
+    command: ["--config", "/etc/livekit.yaml", "--node-ip", "${LAN_IP:-127.0.0.1}"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY:-pratyaksh}: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in .env}"
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+
+volumes:
+  mysql-data:

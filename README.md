@@ -1,0 +1,134 @@
+# Pratyaksh
+
+**Team Omnitrons · FET Aavishkar 2026 · Cybersecurity · #F1BBBA03 "Voice-clone consent verification protocol"**
+
+Pratyaksh decides whether the person on a bank call is a **live human holding the customer's registered phone**, not an AI voice clone, without storing anyone's voice. The Voice Agent asks random live Challenges (a whispered Kannada-Hindi-English phrase, a one-time code from the bank app), measures Signals from each reply, and returns a Verdict (PASS, STEP-UP or BLOCK) with plain-language Reasons.
+
+- Product plan, features, flows and the plan to the finale: [`docs/PRD.md`](docs/PRD.md)
+- Domain vocabulary (use these words in code and in the pitch): [`CONTEXT.md`](CONTEXT.md)
+- Decisions and why: [`docs/adr/`](docs/adr/)
+
+## Repository map
+
+```
+src/pratyaksh/
+  domain.py            value types (Step, Signals, Verdict…)
+  policy.py + .yaml    Requests → Challenges, Signals → Verdict + Reasons
+  signals.py           SignalExtractor + speech model adapters (faster-whisper, spoof classifier)
+  language.py          Kannada/Devanagari/Latin folding, spoken digits
+  phrases.py           Whisper Phrase bank
+  verification/        Verifier: Call state machine, Possession Codes, Device Inbox, Audit Trail
+  voice.py             PromptVoice: Indic Parler-TTS with a disk cache
+  api/                 FastAPI verifier (HTTP + WebSocket)
+  agent/               LiveKit Voice Agent worker (thin; ADR-0001)
+  eval/                Eval Runs: export recordings, measure Catch Rate
+web/                   Vite + React + TS: Console, Caller app, Bank App, Eval page
+attacker/              red-team Clone tools (separate laptop, consent only)
+infra/                 docker-compose for MySQL + LiveKit
+tests/                 pytest, all through module interfaces
+```
+
+## How the pieces run
+
+| Process | Where | Command |
+|---|---|---|
+| MySQL 8 | GPU laptop | Docker (`infra/`) or a native install |
+| LiveKit server | GPU laptop | `livekit-server` binary or Docker |
+| Verifier API (models live here) | GPU laptop | `pratyaksh-api` |
+| Voice Agent worker | GPU laptop | `pratyaksh-agent dev` |
+| Web app | any laptop | `npm run dev` in `web/` |
+| Clone tools | attacker laptop | `attacker/clone_speak.py` |
+
+## Setup on the GPU laptop
+
+Prerequisites: Python 3.11+, Node 20+, an NVIDIA driver with CUDA 12, Git, and either Docker or MySQL 8.
+
+### 1. Python
+
+```bash
+git clone https://github.com/JustKamlesH21/pratyaksh.git && cd pratyaksh
+python -m venv .venv
+source .venv/bin/activate                   # Windows: .venv\Scripts\activate
+pip install -e ".[agent,dev]"               # API, agent, tests
+pip install torch --index-url https://download.pytorch.org/whl/cu124   # CUDA build of torch first
+pip install -e ".[ml]"                      # faster-whisper, transformers, parler-tts
+cp .env.example .env                        # then edit LAN_IP, secrets, URLs
+pytest                                      # should be all green without a GPU
+```
+
+Indic Parler-TTS is a gated model on Hugging Face: accept its terms on the model page, then `huggingface-cli login` once.
+
+### 2. MySQL
+
+Docker: `cd infra && docker compose --env-file ../.env up -d mysql`
+
+Native install: create the database and user, then grant them:
+```sql
+CREATE DATABASE pratyaksh CHARACTER SET utf8mb4;
+CREATE USER 'pratyaksh'@'%' IDENTIFIED BY 'pratyaksh-dev';
+GRANT ALL PRIVILEGES ON pratyaksh.* TO 'pratyaksh'@'%';
+SET GLOBAL log_bin_trust_function_creators = 1;   -- lets the app add the Audit Trail triggers
+```
+Then `pratyaksh-seed` creates the tables, triggers and three demo Customers (the API also does this on start).
+
+### 3. LiveKit server
+
+Download `livekit-server` for your OS from https://github.com/livekit/livekit/releases, then:
+```bash
+livekit-server --bind 0.0.0.0 --node-ip <LAN_IP> --keys "pratyaksh: <LIVEKIT_API_SECRET>"
+```
+On Linux you can use `docker compose --env-file ../.env up -d livekit` from `infra/` instead. Allow TCP 7880–7881 and UDP 50000–50200 through the firewall.
+
+### 4. Verifier and Voice Agent
+
+Two terminals, both with the venv active:
+```bash
+pratyaksh-api             # http://<LAN_IP>:8000/docs ; first start downloads and warms the models
+pratyaksh-agent dev       # registers with LiveKit and waits for Calls
+```
+
+### 5. Web app
+
+```bash
+cd web
+npm install
+cp .env.example .env      # VITE_API_URL=http://<LAN_IP>:8000
+npm run dev               # http://localhost:5173
+```
+
+Open:
+- **Console** (projector): `http://localhost:5173/console`. Type `CONSOLE_KEY` into the Agent Review box when asked.
+- **Caller app**: `http://localhost:5173/call`
+- **Bank App** on the Customer's phone: the **pairing link** printed by `pratyaksh-seed` (and in the API log), opened as `http://<LAN_IP>:5173/bank?customer=…&device=…`. Without the link the Bank App shows nothing, which is the point: the attacker laptop can't read codes or approve requests.
+- **Eval**: `http://localhost:5173/eval`
+
+## First Call
+
+1. Caller app: pick *Ananya Rao*, press **Call**.
+2. Say *"I want to add a new payee"*.
+3. Whisper the phrase the Voice Agent asks for.
+4. Read out the code shown on the paired Bank App. A misread code gets one retry.
+5. Watch the Signals, Verdict and Reasons on the Console.
+
+Demo customers: `cust-ananya`, `cust-rahul`, `cust-meera`.
+
+## Gotchas
+
+- **Microphone needs a secure page.** Browsers allow the mic only on `https://` or `localhost`. Run the Caller app from `localhost` on each calling laptop (with `VITE_API_URL` pointing at the GPU laptop), or in Chrome add `http://<LAN_IP>:5173` under `chrome://flags/#unsafely-treat-insecure-origin-as-secure`. The Bank App needs no mic.
+- **HTTP proxies break the agent's WebSocket** to LiveKit. Unset `HTTP_PROXY`/`HTTPS_PROXY` for the agent if you see `405 Invalid response status`.
+- **Test whispers on day one.** If the agent treats a whisper as silence, lower `VAD_ACTIVATION` (try 0.25); if room noise triggers it, raise it.
+- **Calibrate Reply Latency on the real setup.** The default 1200/3000 ms bounds in `policy.yaml` are a starting point; run an Eval Run with the finale mics and adjust.
+- **Without a GPU** set `WHISPER_MODEL=small WHISPER_DEVICE=cpu WHISPER_COMPUTE_TYPE=int8 TTS_BACKEND=tone`. Calls work; the agent beeps instead of speaking.
+- **The LLM is optional.** With no `OLLAMA_API_KEY`, unclear Requests get a scripted clarification. Set `OLLAMA_MODEL` to a model your Ollama account can run.
+
+## Tests
+
+```bash
+pytest            # Policy, Signals, whole Calls through the Verifier, HTTP interface, call loop, Eval Runs
+cd web && npm run build
+```
+The Voice Agent's LiveKit adapter was verified against a local `livekit-server` with a scripted caller; it is not part of `pytest` because it needs the server binary.
+
+## Eval Runs
+
+See [`data/eval/README.md`](data/eval/README.md): record consented real and Clone Calls with `RETAIN_AUDIO=true`, export them, run `pratyaksh-eval run`, read the Eval page, tune `policy.yaml`.

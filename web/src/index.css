@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-ink: #1e1b4b;
+  --color-ink-soft: #3b3866;
+  --color-violet: #6b2fc1;
+  --color-amber: #f5a524;
+  --color-paper: #f6f5fb;
+  --color-pass: #0f766e;
+  --color-block: #b42318;
+  --color-stepup: #9a6700;
+}
+
+body {
+  @apply bg-paper text-ink font-sans antialiased;
+}

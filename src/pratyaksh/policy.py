@@ -1,0 +1,183 @@
+"""Policy: map Requests to Challenges, and Signals to a Verdict with Reasons.
+
+Interface:
+    Policy.load(path=None)                     -> Policy
+    policy.plan(request)                       -> Plan
+    policy.decide(evidence, step_ups_used)     -> Decision
+
+Pure and in-process: no I/O after loading.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from importlib import resources
+from pathlib import Path
+
+import yaml
+
+from .domain import ChallengeKind, Decision, Evidence, RequestKind, Signals, Verdict
+
+
+@dataclass(frozen=True)
+class Plan:
+    challenges: tuple[ChallengeKind, ...]
+    agent_review: bool
+
+
+class PolicyError(ValueError):
+    pass
+
+
+class Policy:
+    def __init__(self, raw: dict):
+        try:
+            self._plans = {
+                RequestKind(name): Plan(
+                    challenges=tuple(ChallengeKind(c) for c in spec.get("challenges", [])),
+                    agent_review=bool(spec.get("agent_review", False)),
+                )
+                for name, spec in raw["requests"].items()
+            }
+            s = raw["signals"]
+            self._task_min = float(s["task_match"]["min"])
+            self._whisper_min = float(s["whisper_score"]["min"])
+            self._human_ms = float(s["reply_latency"]["human_ms"])
+            self._machine_ms = float(s["reply_latency"]["machine_ms"])
+            self._spoof_mode = str(s["spoof_score"]["mode"])
+            self._spoof_block_at = float(s["spoof_score"]["block_at"])
+            self._weights = {k: float(v) for k, v in raw["weights"].items()}
+            v = raw["verdict"]
+            self._pass_at = float(v["pass_at"])
+            self._block_at = float(v["block_at"])
+            self._max_step_ups = int(v["max_step_ups"])
+        except (KeyError, TypeError, ValueError) as e:
+            raise PolicyError(f"invalid policy: {e!r}") from e
+        missing = set(RequestKind) - set(self._plans)
+        if missing:
+            raise PolicyError(f"policy has no plan for: {sorted(missing)}")
+        if self._spoof_mode not in {"enforce", "advisory", "off"}:
+            raise PolicyError("signals.spoof_score.mode must be enforce, advisory or off")
+        if not self._block_at < self._pass_at:
+            raise PolicyError("verdict.block_at must be lower than verdict.pass_at")
+        if self._machine_ms <= self._human_ms:
+            raise PolicyError("reply_latency.machine_ms must exceed human_ms")
+
+    @classmethod
+    def load(cls, path: str | Path | None = None) -> "Policy":
+        if path:
+            text = Path(path).read_text(encoding="utf-8")
+        else:
+            text = resources.files("pratyaksh").joinpath("policy.yaml").read_text(encoding="utf-8")
+        return cls(yaml.safe_load(text))
+
+    def plan(self, request: RequestKind) -> Plan:
+        return self._plans[request]
+
+    def decide(self, evidence: list[Evidence], step_ups_used: int = 0) -> Decision:
+        """Verdict over all answered Challenges of a Call."""
+        if not evidence:
+            return Decision(Verdict.PASS, None, ["No Challenges needed for this Request."])
+
+        reasons: list[str] = []
+        hard_fails: list[str] = []
+        scores: list[float] = []
+        failed = 0  # Whisper Phrases not completed (wrong words or not whispered)
+        for i, ev in enumerate(evidence, start=1):
+            score, why, hard, task_failed = self._assess(ev.kind, ev.signals)
+            scores.append(score)
+            failed += task_failed
+            label = f"Challenge {i} ({_kind_label(ev.kind)})"
+            reasons.extend(f"{label}: {w}" for w in why)
+            hard_fails.extend(f"{label}: {h}" for h in hard)
+
+        mean = sum(scores) / len(scores)
+        if hard_fails:
+            return Decision(Verdict.BLOCK, mean, hard_fails + reasons, scores)
+        if mean <= self._block_at:
+            return Decision(
+                Verdict.BLOCK, mean, [f"Liveness {mean:.2f} is at or below {self._block_at:.2f}."] + reasons, scores
+            )
+        # Each STEP-UP is one retry; a Whisper Phrase failed beyond that blocks, whatever the mean.
+        if failed > step_ups_used:
+            if step_ups_used < self._max_step_ups:
+                return Decision(
+                    Verdict.STEP_UP, mean, ["A Whisper Phrase was not completed; asking one more."] + reasons,
+                    scores, next_challenge=ChallengeKind.WHISPER_PHRASE,
+                )
+            return Decision(
+                Verdict.BLOCK, mean, [f"{failed} Whisper Phrase(s) not completed, even after a retry."] + reasons,
+                scores,
+            )
+        if mean >= self._pass_at:
+            return Decision(
+                Verdict.PASS, mean, [f"Liveness {mean:.2f} is at or above {self._pass_at:.2f}."] + reasons, scores
+            )
+        head = f"Liveness {mean:.2f} is inconclusive."
+        if step_ups_used < self._max_step_ups:
+            return Decision(
+                Verdict.STEP_UP, mean, [head, "Asking one more Whisper Phrase."] + reasons, scores,
+                next_challenge=ChallengeKind.WHISPER_PHRASE,
+            )
+        return Decision(
+            Verdict.STEP_UP, mean, [head, "Handing over to App Approval."] + reasons, scores,
+            offer_app_approval=True,
+        )
+
+    # -- internals -------------------------------------------------------------------
+
+    def _latency_component(self, ms: int | None) -> float:
+        if ms is None:
+            return 0.0
+        if ms <= self._human_ms:
+            return 1.0
+        if ms >= self._machine_ms:
+            return 0.0
+        return 1.0 - (ms - self._human_ms) / (self._machine_ms - self._human_ms)
+
+    def _assess(self, kind: ChallengeKind, s: Signals) -> tuple[float, list[str], list[str], bool]:
+        """Liveness Score for one Response, with Reasons, hard fails, and whether the task failed."""
+        why: list[str] = []
+        hard: list[str] = []
+        parts: dict[str, float] = {}
+        task_failed = False
+
+        if s.reply_latency_ms is None:
+            hard.append("no reply was heard.")
+        else:
+            parts["reply_latency"] = self._latency_component(s.reply_latency_ms)
+            if s.reply_latency_ms > self._human_ms:
+                why.append(f"slow reply ({s.reply_latency_ms} ms; people usually answer within {self._human_ms:.0f} ms).")
+
+        if kind is ChallengeKind.WHISPER_PHRASE:
+            tm = s.task_match if s.task_match is not None else 0.0
+            parts["task_match"] = tm
+            if tm < self._task_min:
+                task_failed = True
+                why.append(f"phrase did not match (match {tm:.2f}, needs {self._task_min:.2f}).")
+            ws = s.whisper_score if s.whisper_score is not None else 0.0
+            parts["whisper_score"] = ws
+            if ws < self._whisper_min:
+                task_failed = True
+                why.append(f"phrase was not whispered (whisper score {ws:.2f}, needs {self._whisper_min:.2f}).")
+        elif kind is ChallengeKind.POSSESSION_CODE:
+            if s.code_match is False:
+                hard.append("the code read out does not match the code sent to the Registered Device.")
+            elif s.code_match is None:
+                hard.append("no code was read out.")
+
+        if s.spoof_score is not None and self._spoof_mode != "off":
+            if self._spoof_mode == "enforce":
+                parts["spoof_score"] = 1.0 - s.spoof_score
+                if s.spoof_score >= self._spoof_block_at:
+                    hard.append(f"voice looks synthetic (spoof score {s.spoof_score:.2f}).")
+            if s.spoof_score >= 0.5:
+                why.append(f"spoof model leans synthetic ({s.spoof_score:.2f}).")
+
+        total_w = sum(self._weights.get(k, 0.0) for k in parts)
+        score = sum(self._weights.get(k, 0.0) * v for k, v in parts.items()) / total_w if total_w else 0.0
+        return score, why, hard, task_failed
+
+
+def _kind_label(kind: ChallengeKind) -> str:
+    return "Whisper Phrase" if kind is ChallengeKind.WHISPER_PHRASE else "Possession Code"
