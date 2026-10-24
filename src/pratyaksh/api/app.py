@@ -119,6 +119,9 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         except Exception:
             db_ok = False
         llm = llm_configured(s)
+        # Everything a real Call needs; the LLM is optional (keyword rules answer without it).
+        ready = (db_ok and not cont.missing_triggers and cont.warm and s.speech_backend == "local"
+                 and s.tts_backend == "parler" and bool(s.agent_key) and bool(s.console_key))
         warnings = [w for ok, w in [
             (db_ok, "The database is not reachable."),
             (not cont.missing_triggers, "Audit Trail triggers are missing: fix the grants named in the API log, then run pratyaksh-seed."),
@@ -131,7 +134,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             (not s.retain_audio, "RETAIN_AUDIO is on: Response audio is being kept (consented Eval recordings only)."),
         ] if not ok]
         return {
-            "ready": db_ok and not cont.missing_triggers and cont.warm,
+            "ready": ready,
             "database": {"ok": db_ok, "dialect": cont.db.engine.dialect.name, "audit_triggers": not cont.missing_triggers},
             "speech": {"backend": s.speech_backend, "whisper_model": s.whisper_model, "warm": cont.warm},
             "voice": s.tts_backend,

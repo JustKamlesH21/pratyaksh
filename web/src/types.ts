@@ -57,6 +57,54 @@ export interface CallView {
   created_at: string;
   updated_at: string;
   events?: AuditEvent[];
+  audit?: AuditCheck;
+}
+
+/** The Audit Trail's hash chain, recomputed by the verifier. */
+export interface AuditCheck {
+  intact: boolean;
+  events: number;
+  broken_at: number | null;
+  head: string | null;
+}
+
+export interface ReceiptClaims {
+  call_id: string;
+  sub: string;
+  request: RequestKind | null;
+  verdict: Verdict | null;
+  outcome: Outcome | null;
+  executable: boolean;
+  audit_events: number;
+  audit_head: string;
+  iat: number;
+  exp: number;
+}
+
+export interface Receipt {
+  receipt: string;
+  claims: ReceiptClaims;
+}
+
+export interface ReceiptCheck {
+  valid: boolean;
+  reason: string;
+  claims: ReceiptClaims | null;
+}
+
+export interface Status {
+  ready: boolean;
+  database: { ok: boolean; dialect: string; audit_triggers: boolean };
+  speech: { backend: string; whisper_model: string; warm: boolean };
+  llm: { configured: boolean; model: string | null };
+  warnings: string[];
+}
+
+export interface Stats {
+  calls: number;
+  by_outcome: Record<string, number>;
+  blocked: number;
+  avg_added_seconds: number | null;
 }
 
 export interface DeviceMessage {

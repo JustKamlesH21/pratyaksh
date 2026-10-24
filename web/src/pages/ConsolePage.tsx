@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, eventsUrl } from "../api";
 import { Card, ErrorNote, Meter, OutcomeLabel, VerdictBadge } from "../components";
-import type { CallView, Signals } from "../types";
+import type { AuditCheck, CallView, ReceiptCheck, Signals, Stats, Status } from "../types";
 import { REQUEST_LABEL } from "../types";
 
 // Mirrors the defaults in policy.yaml, for drawing threshold marks only.
@@ -54,30 +54,145 @@ export default function ConsolePage() {
   const call = list.find((c) => c.id === selected) ?? list[0];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[20rem_1fr]">
-      <Card title={<span>Calls <span className={connected ? "text-pass" : "text-block"}>{connected ? "● live" : "● offline"}</span></span>}>
-        {list.length === 0 && <p className="text-sm text-ink-soft/70">No calls yet. Place one from the Caller tab.</p>}
-        <ul className="flex flex-col gap-1">
-          {list.map((c) => (
-            <li key={c.id}>
-              <button
-                onClick={() => setSelected(c.id)}
-                className={`w-full rounded-lg px-3 py-2 text-left ${call?.id === c.id ? "bg-ink text-white" : "hover:bg-paper"}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold">{c.customer.name}</span>
-                  <VerdictBadge verdict={c.verdict} />
-                </div>
-                <div className="flex items-center justify-between text-xs opacity-80">
-                  <span>{c.request ? REQUEST_LABEL[c.request] : "listening…"}</span>
-                  <span>{new Date(c.created_at + "Z").toLocaleTimeString()}</span>
-                </div>
-              </button>
-            </li>
-          ))}
+    <div className="flex flex-col gap-6">
+      <StatusBar />
+      <div className="grid gap-6 lg:grid-cols-[20rem_1fr]">
+        <Card title={<span>Calls <span className={connected ? "text-pass" : "text-block"}>{connected ? "● live" : "● offline"}</span></span>}>
+          {list.length === 0 && <p className="text-sm text-ink-soft/70">No calls yet. Place one from the Caller tab.</p>}
+          <ul className="flex flex-col gap-1">
+            {list.map((c) => (
+              <li key={c.id}>
+                <button
+                  onClick={() => setSelected(c.id)}
+                  className={`w-full rounded-lg px-3 py-2 text-left ${call?.id === c.id ? "bg-ink text-white" : "hover:bg-paper"}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">{c.customer.name}</span>
+                    <VerdictBadge verdict={c.verdict} />
+                  </div>
+                  <div className="flex items-center justify-between text-xs opacity-80">
+                    <span>{c.request ? REQUEST_LABEL[c.request] : "listening…"}</span>
+                    <span>{new Date(c.created_at + "Z").toLocaleTimeString()}</span>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+        {call ? <CallDetail call={call} onUpdate={(c) => setCalls((p) => ({ ...p, [c.id]: c }))} /> : <div />}
+      </div>
+    </div>
+  );
+}
+
+/** Is the setup ready (GET /v1/status), and live numbers (GET /v1/stats). */
+function StatusBar() {
+  const [status, setStatus] = useState<Status | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      api.status().then((s) => alive && setStatus(s)).catch(() => alive && setStatus(null));
+      api.stats().then((s) => alive && setStats(s)).catch(() => undefined);
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+  const passed = (stats?.by_outcome.passed ?? 0) + (stats?.by_outcome.passed_pending_review ?? 0);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl bg-white px-4 py-3 text-sm shadow-sm">
+        <span className={`font-bold ${status?.ready ? "text-pass" : "text-stepup"}`}>
+          {status ? (status.ready ? "● Ready" : "● Not ready") : "● Verifier unreachable"}
+        </span>
+        {stats && (
+          <>
+            <span><b>{stats.calls}</b> Calls</span>
+            <span className="text-pass"><b>{passed}</b> passed</span>
+            <span className="text-block"><b>{stats.blocked}</b> blocked</span>
+            <span>Added Time <b>{stats.avg_added_seconds === null ? "—" : `${stats.avg_added_seconds.toFixed(1)} s`}</b></span>
+          </>
+        )}
+        {status && (
+          <span className="ml-auto text-xs text-ink-soft">
+            {status.database.dialect} · {status.speech.backend} {status.speech.whisper_model} · LLM {status.llm.model ?? "off"}
+          </span>
+        )}
+      </div>
+      {status && status.warnings.length > 0 && (
+        <ul className="list-disc rounded-xl bg-amber/15 px-8 py-2 text-sm">
+          {status.warnings.map((w) => <li key={w}>{w}</li>)}
         </ul>
-      </Card>
-      {call ? <CallDetail call={call} onUpdate={(c) => setCalls((p) => ({ ...p, [c.id]: c }))} /> : <div />}
+      )}
+    </div>
+  );
+}
+
+function AuditBadge({ audit }: { audit?: AuditCheck }) {
+  if (!audit) return null;
+  return audit.intact ? (
+    <p className="mt-3 text-sm">
+      <b className="text-pass">✓ Audit Trail intact</b>{" "}
+      <span className="text-ink-soft">· {audit.events} events, hash-chained · head <span className="font-mono">{audit.head?.slice(0, 12)}…</span></span>
+    </p>
+  ) : (
+    <p className="mt-3 text-sm font-bold text-block">✗ Audit Trail altered at event #{audit.broken_at}</p>
+  );
+}
+
+/** Fetch the signed Verification Receipt core banking would check, and check it. */
+function ReceiptPanel({ callId, consoleKey, onKey }: { callId: string; consoleKey: string; onKey: (k: string) => void }) {
+  const [check, setCheck] = useState<ReceiptCheck | null>(null);
+  const [token, setToken] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setCheck(null);
+    setToken("");
+    setError(null);
+  }, [callId]);
+  async function fetchReceipt() {
+    try {
+      const r = await api.receipt(callId, consoleKey);
+      setToken(r.receipt);
+      setCheck(await api.verifyReceipt(r.receipt));
+      setError(null);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+  const c = check?.claims;
+  return (
+    <div className="mt-4 rounded-lg bg-paper p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="font-semibold">Verification Receipt</span>
+        <input
+          type="password"
+          placeholder="console key"
+          className="ml-auto w-36 rounded-md border border-ink/20 bg-white px-2 py-1 text-sm"
+          value={consoleKey}
+          onChange={(e) => onKey(e.target.value)}
+        />
+        <button className="rounded-md bg-violet px-3 py-1.5 text-sm font-bold text-white" onClick={fetchReceipt}>
+          {check ? "Refresh" : "Issue & verify"}
+        </button>
+      </div>
+      {check && (
+        <p className="mt-2">
+          {check.valid ? <b className="text-pass">✓ Signature valid (Ed25519)</b> : <b className="text-block">✗ {check.reason}</b>}
+          {c && (
+            <>
+              {" · "}core banking may act: <b className={c.executable ? "text-pass" : "text-block"}>{c.executable ? "yes" : "no"}</b>
+              {" · "}expires {new Date(c.exp * 1000).toLocaleTimeString()}
+            </>
+          )}
+        </p>
+      )}
+      {token && <p className="mt-1 break-all font-mono text-[0.65rem] text-ink-soft">{token.slice(0, 120)}…</p>}
+      <ErrorNote error={error} />
     </div>
   );
 }
@@ -85,6 +200,7 @@ export default function ConsolePage() {
 function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView) => void }) {
   const [tab, setTab] = useState<"evidence" | "audit">("evidence");
   const [events, setEvents] = useState(call.events ?? []);
+  const [audit, setAudit] = useState(call.audit);
   const [error, setError] = useState<string | null>(null);
 
   const [consoleKey, setConsoleKey] = useState(() => {
@@ -98,10 +214,18 @@ function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView
   useEffect(() => {
     if (call.events) {
       setEvents(call.events);
+      setAudit(call.audit);
       return;
     }
     let current = true; // ignore a slow reply for a Call that is no longer selected
-    api.call(call.id).then((c) => current && setEvents(c.events ?? [])).catch(() => undefined);
+    api
+      .call(call.id)
+      .then((c) => {
+        if (!current) return;
+        setEvents(c.events ?? []);
+        setAudit(c.audit);
+      })
+      .catch(() => undefined);
     return () => {
       current = false;
     };
@@ -174,6 +298,8 @@ function CallDetail({ call, onUpdate }: { call: CallView; onUpdate: (c: CallView
         {call.review_status && call.review_status !== "pending" && (
           <p className="mt-3 text-sm">Agent Review: <b>{call.review_status}</b></p>
         )}
+        <AuditBadge audit={audit} />
+        {call.state === "closed" && <ReceiptPanel callId={call.id} consoleKey={consoleKey} onKey={saveKey} />}
         <ErrorNote error={error} />
       </Card>
 
