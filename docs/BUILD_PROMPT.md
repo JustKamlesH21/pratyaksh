@@ -25,13 +25,25 @@ Architecture rules:
 - Policy numbers (weights, thresholds, latency bounds) live in `policy.yaml` and are tuned from Eval Runs, never hard-coded.
 - Python 3.11, FastAPI, SQLAlchemy 2, MySQL. Frontend is Vite + React + TypeScript + Tailwind 4. Do not add new frameworks without asking.
 
-Where things stand (Oct 24): the verifier, Voice Agent, web apps, Eval Runs and red-team tools are written; 124 pytest tests pass (on SQLite and MySQL) and the web app builds; a scripted call ran end to end through a real LiveKit server. MySQL 8.0 (native install) ran the whole pytest suite and 7 parallel Calls with a live Console, Audit Trail triggers included; the Docker `mysql:8.4` image has not been run. Since then (PRD S4–S9): answers in English, Hindi and Kannada that fit the moment; Security Alert + Voice Pause after a BLOCK; hash-chained Audit Trail; signed Verification Receipts; `AGENT_KEY` on agent endpoints; 1,344 Whisper Phrases; `/v1/status` and `/v1/stats` on the Console. Performance: a Response is heard (speech models, LLM) outside any database transaction and applied under the row lock only if the Call did not change meanwhile (else `response_ignored`); the whisper DSP runs alongside speech-to-text and is compiled once before serving; Console reads are a constant number of queries. The web app was redesigned: neutral palette with one cobalt accent, dark mode, bundled Geist fonts, motion only under `prefers-reduced-motion: no-preference`, one chunk per page. The Hindi and Kannada answers need a native speaker's read. Never run yet: the real speech models (faster-whisper, the spoof classifier, Indic Parler-TTS) and IndicF5. The Voice Agent understands any utterance through `verification/interpreter.py` (keyword rules, then the Ollama LLM) and answers Questions from `src/pratyaksh/knowledge.yaml`.
+Where things stand (Oct 26): the MVP is code-complete (PRD M1–M13, S1–S12) on branch `claude/agent-handles-any-question`, which is not merged into `main` yet. 152 pytest tests pass on SQLite and on MySQL 8.0 (native install; the Docker `mysql:8.4` image has not been run) and the web app builds. Everything so far ran with scripted speech models: one scripted call end to end through a real LiveKit server, and 7 parallel Calls on MySQL with a live Console. **Never run yet:** the real speech models (faster-whisper `large-v3-turbo` in float16, the spoof classifier, Indic Parler-TTS), IndicF5, and the `gpt-oss:120b` LLM over Ollama Cloud (without it the agent uses keyword rules and `knowledge.yaml`). The Hindi and Kannada answers need a native speaker's read.
 
-Open work, in order:
-1. On the GPU laptop: install the `ml` extra, run MySQL + LiveKit + API + agent, make one real call, fix what breaks.
-2. Check that whispers are detected (tune `VAD_ACTIVATION`) and that `whisper_score` separates real whispers from normal speech on our mics.
-3. Record consented real and Clone calls, run `pratyaksh-eval`, and tune `policy.yaml`.
-4. Polish the Console for the projector and rehearse the demo in `docs/PRD.md` §13.
+What exists:
+- Verification: Risk Tiers from `policy.yaml`; Whisper Phrase (1,344 equally likely); Possession Code (one retry; a correct code read after it expired gets one fresh code, then App Approval); Verdicts with Reasons; STEP-UP, App Approval, Agent Review. A failed Whisper Phrase never PASSes until a STEP-UP phrase after it is completed.
+- Understanding: any utterance in English, Hindi or Kannada (`verification/interpreter.py`: keyword rules, then the LLM); LLM replies with numbers not in `knowledge.yaml`, outcome claims or asks for secrets are dropped (ADR-0002).
+- Protection: Security Alert + Voice Pause after a BLOCK; Attack Wave (blocked Calls for 3 Customers in 15 min put Agent Review on every risky Request); insert-only, hash-chained Audit Trail; Ed25519 Verification Receipts, redeemed once (`POST /v1/receipts/redeem`); `AGENT_KEY` on agent endpoints, `CONSOLE_KEY` on Console reads and the events WebSocket; uploads refused before they are read; SQLite takes its write lock per transaction.
+- Console: Transcript tab (both sides, language, Signals, hearing times, download), Customer risk strip, Attack Wave banner, `/v1/status` (says what to fix), `/v1/stats` (Added Time, hearing p50/p95).
+- Web: landing page with live numbers, dark by default, fonts bundled for the offline venue.
+
+Open work, the **hackathon-ready check**. It passes when all of these hold on the demo laptops, with no code changes during the run:
+1. The Console strip says **Ready**: real models loaded, no warnings.
+2. Genuine Callers PASS three times in a row, in English, Hindi and Kannada.
+3. The IndicF5 Clone is BLOCKed three times in a row; the Bank App shows the Security Alert; calling straight back is refused (Voice Pause).
+4. Hearing p95 ≤ 1.5 s and Added Time ≤ 20 s (PRD §11), read off the Console.
+5. An Eval Run on real, consented recordings (at least 10 real and 10 Clone Calls) gives a Catch Rate and False Reject Rate we are happy to show.
+6. The 5-minute demo script (PRD §13) runs end to end without a hitch.
+7. The branch is merged into `main`.
+
+Target: checks 1–5 by Oct 28, 6–7 by Oct 30. Policy numbers change only from measured data (Signals from our recordings or an Eval Run), with a test, after asking.
 
 My machine: an NVIDIA GPU laptop with 6–8 GB VRAM runs MySQL, LiveKit, the verifier API and the agent. Other laptops run the web app.
 
