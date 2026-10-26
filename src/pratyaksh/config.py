@@ -37,9 +37,12 @@ class Settings(BaseSettings):
     # Voice Agent's voice (PromptVoice)
     tts_backend: Literal["parler", "tone"] = "parler"
     parler_model: str = "ai4bharat/indic-parler-tts"
+    # A named speaker keeps the voice the same across separately generated sentences. Mary was the
+    # clearest in our listening test; Anu is the backup (see .env.example). The speech cache is keyed
+    # on this text, so changing it means running pratyaksh-voice-cache again.
     parler_description: str = (
-        "Divya speaks in a clear, calm and friendly voice at a moderate pace. "
-        "The recording is of very high quality with no background noise."
+        "Mary speaks in a calm, warm and friendly voice at a moderate pace with a moderate pitch. "
+        "Very clear audio, with a very close recording that has no background noise."
     )
     tts_cache_dir: str = "./.cache/tts"
 

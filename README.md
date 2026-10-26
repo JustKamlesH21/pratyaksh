@@ -98,6 +98,16 @@ pratyaksh-voice-cache     # ~2.5 h with Parler on a laptop GPU; stop and rerun a
 ```
 Parler takes about 6–7 s per sentence on an RTX 3060, so without this every Challenge prompt would add that to the Call. Speech is cached sentence by sentence, so a new lead-in in front of a cached prompt costs only the new sentence. Answers to Questions are voiced on first use and then cached.
 
+The default voice is Mary; Anu is the backup (`PARLER_DESCRIPTION` in `.env.example`). Each voice has its own cache, so run `pratyaksh-voice-cache` once per voice you may switch to.
+
+**Windows: one command for everything.** `scripts\windows\` starts and stops LiveKit, the API, the agent and the web app in the background, with logs in `.cache\run`:
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1        # -Only api|agent|web|livekit; -Online on the very first start
+powershell -ExecutionPolicy Bypass -File scripts\windows\stop.ps1
+powershell -ExecutionPolicy Bypass -File scripts\windows\set-lan-ip.ps1   # new Wi-Fi or the venue hotspot: then stop + start
+```
+Set `LIVEKIT_SERVER` to the path of `livekit-server.exe` once. Models load offline from the Hugging Face cache, which matters on slow Wi-Fi. On the RTX 3060 laptop in Turbo mode, `/v1/status` says Ready about 75 s after start: Whisper 7 s, spoof model 1.5 s, Parler 64 s.
+
 ### 5. Web app
 
 ```bash
