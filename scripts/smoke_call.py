@@ -12,6 +12,10 @@ as the Customer would, so the demo Customer is clean again.
 
 Reads AGENT_KEY, CONSOLE_KEY, VERIFIER_URL and DATABASE_URL from .env (run it from the repo root).
 Prints hearing time per step: upload to next Step, the PRD's verifier turnaround (target 1.5 s).
+
+Each run is a blocked Call on the record: runs for 3 different Customers within 15 minutes start an
+Attack Wave (every risky Request then needs Agent Review), and the Customer shows elevated risk for
+7 days. Before the demo, run `pratyaksh-seed --reset` (with the API stopped) for a clean slate.
 """
 
 from __future__ import annotations
@@ -92,8 +96,11 @@ def main() -> None:
                   if m["kind"] == "security_alert"]
         print(f"Security Alert on the Registered Device: {'yes' if alerts else 'NO'}")
         again = http.post("/v1/calls", json={"customer_id": args.customer, "room": "smoke-2"}, headers=agent).json()
-        again, _ = reply(again["call_id"], args.request)
+        again_id = again["call_id"]
+        again, _ = reply(again_id, args.request)
         print(f"calling straight back: {again['outcome']}: {again['say']}")
+        if not again["end"]:  # Voice Pause did not refuse it: do not leave the Call open
+            http.post(f"/v1/calls/{again_id}/hangup", headers=agent)
         if not args.keep_alert:
             n = http.post(f"/v1/customers/{args.customer}/alerts/dismiss", headers=device).json()["dismissed"]
             print(f"dismissed {n} Security Alert(s) as the Customer, on their Registered Device")

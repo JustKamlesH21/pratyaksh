@@ -20,20 +20,17 @@ New-Item -ItemType Directory -Force $T | Out-Null
 
 $envs = @{}
 foreach ($l in [IO.File]::ReadAllLines("$R\.env")) {
-    if ($l -match '^\s*([A-Za-z_]\w*)\s*=\s*(.*?)\s*(\s#.*)?$') { $envs[$matches[1]] = $matches[2] }
+    if ($l -match '^\s*([A-Za-z_]\w*)\s*=\s*(.*?)\s*(\s#.*)?$') { $envs[$matches[1]] = $matches[2].Trim('"', "'") }
 }
-function Running($name) {
-    $f = "$T\$name.pid"
-    if (-not (Test-Path $f)) { return $false }
-    return [bool](Get-Process -Id ([int](Get-Content $f)) -ErrorAction SilentlyContinue)
-}
+. "$PSScriptRoot\pidfile.ps1"
+function Running($name) { return [bool](Get-Started "$T\$name.pid") }
 function Launch($name, $exe, $argList, $dir) {
     if (Running $name) { "$name already running (pid $(Get-Content "$T\$name.pid"))"; return }
     $opts = @{ FilePath = $exe; WorkingDirectory = $dir; WindowStyle = 'Hidden'; PassThru = $true
                RedirectStandardOutput = "$T\$name.out.log"; RedirectStandardError = "$T\$name.log" }
     if ($argList) { $opts.ArgumentList = $argList }  # Start-Process refuses an empty list
     $p = Start-Process @opts
-    $p.Id | Set-Content "$T\$name.pid"
+    Save-Started "$T\$name.pid" $p
     "$name started (pid $($p.Id)); log $T\$name.log"
 }
 

@@ -17,6 +17,8 @@ $text = [IO.File]::ReadAllText($envPath)
 $old = [regex]::Match($text, '(?m)^LAN_IP=([^\r\n]*)').Groups[1].Value.Trim()
 if (-not $old) { throw "LAN_IP not found in $envPath" }
 if ($old -eq $Ip) { "LAN_IP is already $Ip"; exit 0 }
-[IO.File]::WriteAllText($envPath, $text.Replace($old, $Ip), $utf8)
+# Whole addresses only: replacing 10.0.0.1 must not also rewrite 10.0.0.10.
+$whole = '(?<![\d.])' + [regex]::Escape($old) + '(?![\d.]*\d)'
+[IO.File]::WriteAllText($envPath, [regex]::Replace($text, $whole, $Ip), $utf8)
 [IO.File]::WriteAllText((Join-Path $R 'web\.env'), "VITE_API_URL=http://${Ip}:8000`n", $utf8)
 "LAN IP changed: $old -> $Ip. Now restart: stop.ps1, then start.ps1; reopen the pairing link on the phone."
