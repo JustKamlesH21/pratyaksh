@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from dataclasses import dataclass, field
 
@@ -80,13 +81,22 @@ def voice_cache_main() -> None:
     settings = Settings()
     voice = PromptVoice(_synth(settings), settings.tts_cache_dir)  # no fallback: a failure must show
     lines = spoken_lines()
+    voice.prewarm([])  # load the model once, up front
+    failed = []
     start = time.perf_counter()
     for i, line in enumerate(lines, 1):
-        voice.render(line)
+        try:
+            voice.render(line)
+        except Exception as e:  # one bad line must not end a two-hour run; it is voiced on first use instead
+            failed.append(line)
+            log.warning("could not voice %r: %s", line[:60], e)
         if i % 25 == 0 or i == len(lines):
             took = time.perf_counter() - start
             log.info("voiced %d of %d lines (%.0f s so far, about %.0f min left)",
                      i, len(lines), took, took / i * (len(lines) - i) / 60)
+    if failed:
+        sys.exit(f"{len(failed)} lines could not be voiced; run pratyaksh-voice-cache again to retry them:\n  "
+                 + "\n  ".join(failed))
 
 
 def llm_configured(settings: Settings) -> bool:

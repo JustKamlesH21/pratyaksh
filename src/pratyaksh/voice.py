@@ -56,7 +56,7 @@ class PromptVoice:
             if path.exists():
                 return path.read_bytes()
             try:
-                samples, rate = self._synth.synthesise(text)
+                samples, rate = self._speak(text)
             except Exception:
                 if self._fallback is None:
                     raise
@@ -68,6 +68,16 @@ class PromptVoice:
             tmp.write_bytes(data)
             tmp.replace(path)
             return data
+
+    def _speak(self, text: str) -> tuple[np.ndarray, int]:
+        """Parler samples, and now and then generates no speech for a short sentence: ask once more."""
+        for attempt in (1, 2):
+            samples, rate = self._synth.synthesise(text)
+            samples = np.atleast_1d(np.asarray(samples, dtype=np.float32))
+            if len(samples) >= _MIN_SPEECH_S * rate:
+                return samples, rate
+            log.warning("the voice generated no speech for %r (try %d of 2)", text[:40], attempt)
+        raise RuntimeError(f"the voice generated no speech for {text[:40]!r}")
 
     def prewarm(self, texts: Iterable[str]) -> None:
         """Load the voice model and voice the texts. The model loads even when every text is cached, so
@@ -84,6 +94,7 @@ class PromptVoice:
 
 _SENTENCE_END = re.compile(r"(?<=[.!?।])\s+")
 _GAP_S = 0.15  # pause between sentences synthesised separately
+_MIN_SPEECH_S = 0.1  # shorter than any spoken sentence: the voice generated nothing
 
 
 def _sentences(text: str) -> list[str]:
@@ -148,7 +159,7 @@ class ParlerVoice:
             prompt_input_ids=prompt.input_ids,
             prompt_attention_mask=prompt.attention_mask,
         )
-        return out.float().cpu().numpy().squeeze(), int(model.config.sampling_rate)
+        return np.atleast_1d(out.float().cpu().numpy().squeeze()), int(model.config.sampling_rate)
 
 
 class ToneVoice:

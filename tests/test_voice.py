@@ -112,3 +112,33 @@ def test_warming_up_loads_the_voice_even_when_every_prompt_is_cached(tmp_path):
     synth = LoadingVoice()
     PromptVoice(synth, tmp_path).prewarm(["Namaskara.", "How can I help you today?"])  # after a restart
     assert synth.loaded and synth.said == []  # ready for the first line that is not cached yet
+
+
+class SometimesSilentVoice(CountingVoice):
+    """Like Parler, which samples and now and then generates no speech at all for a short sentence."""
+
+    def __init__(self, silent_times: int):
+        super().__init__()
+        self.silent_times = silent_times
+
+    def synthesise(self, text: str) -> tuple[np.ndarray, int]:
+        samples, rate = super().synthesise(text)
+        if self.silent_times:
+            self.silent_times -= 1
+            return np.zeros(1, dtype=np.float32), rate
+        return samples, rate
+
+
+def test_a_voice_that_generates_no_speech_is_asked_again(tmp_path):
+    synth = SometimesSilentVoice(silent_times=1)
+    voice = PromptVoice(synth, tmp_path)
+    assert abs(seconds(voice.render("Thank you.")) - 0.2) < 0.01
+    assert seconds(voice.render("Thank you.")) > 0.1 and synth.said == ["Thank you.", "Thank you."]
+
+
+def test_no_speech_twice_falls_back_and_is_not_cached(tmp_path):
+    synth = SometimesSilentVoice(silent_times=2)
+    voice = PromptVoice(synth, tmp_path, fallback=SlowTone())
+    assert abs(seconds(voice.render("Thank you.")) - 0.4) < 0.01  # the fallback's 2 words x 0.2 s
+    voice.render("Thank you.")
+    assert synth.said == ["Thank you.", "Thank you.", "Thank you."]  # tried again: nothing silent was cached
