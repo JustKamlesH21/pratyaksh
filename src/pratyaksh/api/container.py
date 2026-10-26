@@ -26,6 +26,7 @@ class Container:
     voice: PromptVoice
     missing_triggers: list[str] = field(default_factory=list)  # Audit Trail triggers the database lacks
     warm: bool = False  # models and the whisper DSP have been loaded once
+    warm_error: str | None = None  # why warm-up failed, for /v1/status
 
 
 FIXED_PROMPTS = [GREETING, CLARIFY]

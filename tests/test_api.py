@@ -1,6 +1,7 @@
 """The HTTP interface, end to end, with scripted speech models and the tone voice."""
 
 import base64
+import time
 import json
 
 import pytest
@@ -270,3 +271,27 @@ def test_core_banking_redeems_a_receipt_once(api):
     assert api.post("/v1/receipts/verify", json={"receipt": first}).json()["redeemed"] is True
     lines = api.get(f"/v1/calls/{call_id}/transcript").json()["lines"]
     assert lines[-1]["event"] == "receipt_redeemed"
+
+
+class BrokenSpeechModels(ScriptedSpeechModels):
+    """Speech models that cannot load, like faster-whisper missing a CUDA library."""
+
+    def warm_up(self) -> None:
+        raise RuntimeError("Library cublas64_12.dll is not found or cannot be loaded")
+
+
+def test_status_names_a_model_that_failed_to_load(tmp_path):
+    settings = Settings(
+        _env_file=None, database_url=database_url(), speech_backend="scripted", tts_backend="tone",
+        tts_cache_dir=str(tmp_path / "tts"), receipt_key_path=str(tmp_path / "key.pem"), ollama_api_key="",
+        warm_up_models=True,
+    )
+    container = build(settings, speech=BrokenSpeechModels())
+    with TestClient(create_app(container=container)) as client:
+        for _ in range(200):  # warm-up runs in the background
+            status = client.get("/v1/status").json()
+            if not any("still warming up" in w for w in status["warnings"]):
+                break
+            time.sleep(0.05)
+    assert status["ready"] is False
+    assert any("failed to load" in w and "cublas64_12.dll" in w for w in status["warnings"])

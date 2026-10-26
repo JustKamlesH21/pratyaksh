@@ -94,3 +94,21 @@ def test_every_challenge_prompt_the_verifier_issues_is_rendered_ahead_of_time(tm
     voice.render(step.say)  # the next Challenge after a completed Whisper Phrase
 
     assert synth.said[before:] == []
+
+
+class LoadingVoice(CountingVoice):
+    """A synthesiser with a slow model load, like Parler (about a minute on the laptop GPU)."""
+
+    def __init__(self):
+        super().__init__()
+        self.loaded = False
+
+    def warm_up(self) -> None:
+        self.loaded = True
+
+
+def test_warming_up_loads_the_voice_even_when_every_prompt_is_cached(tmp_path):
+    PromptVoice(CountingVoice(), tmp_path).prewarm(["Namaskara.", "How can I help you today?"])
+    synth = LoadingVoice()
+    PromptVoice(synth, tmp_path).prewarm(["Namaskara.", "How can I help you today?"])  # after a restart
+    assert synth.loaded and synth.said == []  # ready for the first line that is not cached yet

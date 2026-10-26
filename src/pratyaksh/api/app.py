@@ -139,7 +139,8 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             (not cont.missing_triggers, "Audit Trail triggers are missing: fix the grants named in the API log, then run pratyaksh-seed."),
             (bool(s.agent_key), "AGENT_KEY is empty: any laptop on the network can post Responses."),
             (bool(s.console_key), "CONSOLE_KEY is empty: anyone can decide Agent Reviews and fetch Verification Receipts."),
-            (cont.warm, "Models are still warming up: the first Call will be slow."),
+            (cont.warm or cont.warm_error is not None, "Models are still warming up: the first Call will be slow."),
+            (cont.warm_error is None, f"A model failed to load ({cont.warm_error}): fix it and restart pratyaksh-api."),
             (s.speech_backend == "local", "Speech models are scripted: this is not a real Call setup."),
             (s.tts_backend == "parler", "The Voice Agent beeps instead of speaking (TTS_BACKEND=tone)."),
             (llm, "No LLM is configured: unusual questions get the fallback answer."),
@@ -148,7 +149,8 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         return {
             "ready": ready,
             "database": {"ok": db_ok, "dialect": cont.db.engine.dialect.name, "audit_triggers": not cont.missing_triggers},
-            "speech": {"backend": s.speech_backend, "whisper_model": s.whisper_model, "warm": cont.warm},
+            "speech": {"backend": s.speech_backend, "whisper_model": s.whisper_model, "warm": cont.warm,
+                       "error": cont.warm_error},
             "voice": s.tts_backend,
             "llm": {"configured": llm, "model": s.ollama_model if llm else None},
             "keys": {"agent": bool(s.agent_key), "console": bool(s.console_key),
@@ -406,7 +408,8 @@ def _warm_up(c: Container) -> None:
         c.voice.prewarm(FIXED_PROMPTS)
         c.warm = True
         log.info("models warm")
-    except Exception:
+    except Exception as e:
+        c.warm_error = f"{type(e).__name__}: {e}"
         log.exception("model warm-up failed; models will load on first use")
 
 
