@@ -5,6 +5,7 @@
 Pratyaksh decides whether the person on a bank call is a **live human holding the customer's registered phone**, not an AI voice clone, without storing anyone's voice. The Voice Agent asks random live Challenges (a whispered Kannada-Hindi-English phrase, a one-time code from the bank app), measures Signals from each reply, and returns a Verdict (PASS, STEP-UP or BLOCK) with plain-language Reasons.
 
 - Product plan, features, flows and the plan to the finale: [`docs/PRD.md`](docs/PRD.md)
+- Why banks would buy it, who else would, and the plan after the hackathon: [`docs/BUSINESS.md`](docs/BUSINESS.md)
 - Domain vocabulary (use these words in code and in the pitch): [`CONTEXT.md`](CONTEXT.md)
 - Decisions and why: [`docs/adr/`](docs/adr/)
 
