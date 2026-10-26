@@ -25,7 +25,7 @@ from ..domain import (
     Step,
     Verdict,
 )
-from ..phrases import random_phrase, speakable
+from ..phrases import all_phrases, random_phrase, speakable
 from ..policy import Policy
 from ..signals import SignalExtractor
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
@@ -86,6 +86,32 @@ CLARIFY = (
     "Sorry, I didn't catch that. You can ask me a question, or ask to check your balance, add a payee, "
     "change your SIM or password, transfer money, or make another change to your account."
 )
+
+
+CODE_PROMPT = "I've sent a six-digit code to the bank app on your registered phone. Please read it out."
+
+
+def _whisper_prompt(phrase: str) -> str:
+    return f"Please whisper these words: {speakable(phrase)}."
+
+
+def _intro(request: RequestKind, n: int) -> str:
+    return (
+        f"Sure, I can help you {_REQUEST_NAMES[request]}. "
+        f"For your security I'll ask you {n} quick thing{'s' if n > 1 else ''}."
+    )
+
+
+def spoken_lines() -> list[str]:
+    """What the Voice Agent can say on a Call, apart from answers to Questions, for voicing ahead of time.
+    Every Whisper Phrase prompt is here, so no Challenge waits for speech synthesis."""
+    fixed = [
+        GREETING, CLARIFY, HANDOFF, ANYTHING_ELSE, TAKE_YOUR_TIME, WHEN_READY, CODE_PROMPT,
+        *_REASK.values(), *_DONE.values(), *(line for lang in _IN_LANGUAGE.values() for line in lang.values()),
+        "Thank you.", "Thank you. I need one more check.", "I need one more confirmation.",
+    ]
+    intros = [_intro(r, n) for r in _REQUEST_NAMES for n in (1, 2, 3)]
+    return fixed + intros + [_whisper_prompt(p) for p in all_phrases()]
 
 
 def _utcnow() -> datetime:
@@ -667,12 +693,7 @@ class Verifier:
         call.state = CallState.CHALLENGING
         if heard.wants_app_approval:
             return self._start_app_approval(s, call, f"{answered}You asked to use the app.")
-        n = len(plan.challenges)
-        intro = (
-            f"{answered}Sure, I can help you {_REQUEST_NAMES[request]}. "
-            f"For your security I'll ask you {n} quick thing{'s' if n > 1 else ''}."
-        )
-        return self._issue_next(s, call, intro)
+        return self._issue_next(s, call, f"{answered}{_intro(request, len(plan.challenges))}")
 
     def _hand_over(self, s: Session, call: CallRow, lead_in: str) -> Step:
         """A Bank Agent takes over. Evidence that already says BLOCK still blocks."""
@@ -842,11 +863,11 @@ class Verifier:
         now = self._now()
         if kind is ChallengeKind.WHISPER_PHRASE:
             phrase = random_phrase(self._rng)
-            prompt = f"Please whisper these words: {speakable(phrase)}."
+            prompt = _whisper_prompt(phrase)
             record = {"kind": kind.value, "prompt": prompt, "phrase": phrase, "issued_at": now.isoformat()}
         else:
             self._send_code(s, call)
-            prompt = "I've sent a six-digit code to the bank app on your registered phone. Please read it out."
+            prompt = CODE_PROMPT
             record = {"kind": kind.value, "prompt": prompt, "phrase": "", "issued_at": now.isoformat()}
         call.challenges = list(call.challenges) + [record]
         self._audit(s, call, "challenge_issued", {k: v for k, v in record.items() if k != "issued_at"})

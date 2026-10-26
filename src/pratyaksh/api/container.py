@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass, field
 
 from ..config import Settings
 from ..policy import Policy
 from ..signals import LocalSpeechModels, ScriptedSpeechModels, SignalExtractor, SpeechModels
 from ..verification import Database, EventHub, Interpreter, OllamaChat, ReceiptSigner, Verifier
-from ..verification.verifier import CLARIFY, GREETING
+from ..verification.verifier import CLARIFY, GREETING, spoken_lines
 from ..voice import ParlerVoice, PromptVoice, ToneVoice
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -57,13 +61,31 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
         signer=ReceiptSigner.load_or_create(settings.receipt_key_path),
         receipt_ttl_s=settings.receipt_ttl_seconds,
     )
-    synth = (
-        ParlerVoice(settings.parler_model, settings.parler_description, settings.whisper_device)
-        if settings.tts_backend == "parler"
-        else ToneVoice()
-    )
-    voice = PromptVoice(synth, settings.tts_cache_dir, fallback=ToneVoice())
+    voice = PromptVoice(_synth(settings), settings.tts_cache_dir, fallback=ToneVoice())
     return Container(settings, db, events, speech, verifier, voice, missing_triggers)
+
+
+def _synth(settings: Settings):
+    if settings.tts_backend == "parler":
+        return ParlerVoice(settings.parler_model, settings.parler_description, settings.whisper_device)
+    return ToneVoice()
+
+
+def voice_cache_main() -> None:
+    """pratyaksh-voice-cache: voice every line the Voice Agent can say (all Whisper Phrase prompts
+    included) into the TTS cache, so Calls never wait for speech synthesis. Lines already cached are
+    skipped, so it can be stopped and run again. With Parler on the laptop GPU this takes about 2 hours."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    settings = Settings()
+    voice = PromptVoice(_synth(settings), settings.tts_cache_dir)  # no fallback: a failure must show
+    lines = spoken_lines()
+    start = time.perf_counter()
+    for i, line in enumerate(lines, 1):
+        voice.render(line)
+        if i % 25 == 0 or i == len(lines):
+            took = time.perf_counter() - start
+            log.info("voiced %d of %d lines (%.0f s so far, about %.0f min left)",
+                     i, len(lines), took, took / i * (len(lines) - i) / 60)
 
 
 def llm_configured(settings: Settings) -> bool:

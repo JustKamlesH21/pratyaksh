@@ -6,6 +6,7 @@ Internal to the Verifier; exposed only for the Eval Run tooling.
 
 from __future__ import annotations
 
+import itertools
 import random
 
 # (template, meaning) — words: Kannada, Hindi, English. {d} is a spoken digit; every other
@@ -40,6 +41,16 @@ def random_phrase(rng: random.Random) -> str:
     (template, _), = rng.choices(TEMPLATES, weights=[_variants(t) for t, _ in TEMPLATES])
     words = {slot: rng.choice(options) for slot, options in WORDS.items()}
     return template.format(d=rng.choice(DIGITS), **words)
+
+
+def all_phrases() -> list[str]:
+    """Every Whisper Phrase random_phrase() can produce, so their prompts can be voiced ahead of time."""
+    out = []
+    for template, _ in TEMPLATES:
+        slots = [s for s in WORDS if "{" + s + "}" in template]
+        for d, words in itertools.product(DIGITS, itertools.product(*(WORDS[s] for s in slots))):
+            out.append(template.format(d=d, **dict(zip(slots, words))))
+    return out
 
 
 def phrase_count() -> int:
