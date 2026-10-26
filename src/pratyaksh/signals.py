@@ -207,11 +207,14 @@ class LocalSpeechModels:
         self._spoof_lock = threading.Lock()
 
     def warm_up(self) -> None:
-        # One short transcription: CUDA libraries load on first use, so a missing one fails here, at
-        # start-up, where /v1/status reports it, instead of on the first Caller's Response.
-        list(self._load_whisper().transcribe(np.zeros(16_000, dtype=np.float32), beam_size=1)[0])
+        # Run each model once: CUDA libraries load and GPU kernels compile on first use, so a missing
+        # library fails here, where /v1/status reports it, and the first Caller's Response is not the
+        # one that pays ~1.5 s extra for it (measured: 1,988 ms cold, then ~545 ms).
+        second = np.random.default_rng(0).standard_normal(SAMPLE_RATE).astype(np.float32) * 0.01
+        list(self._load_whisper().transcribe(second, beam_size=1)[0])
         if self._spoof_name:
             self._load_spoof()
+            self.spoof_probability(Audio(second))
 
     def _load_whisper(self):
         with self._load_lock:
