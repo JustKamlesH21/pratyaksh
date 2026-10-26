@@ -70,6 +70,11 @@ class PromptVoice:
             return data
 
     def prewarm(self, texts: Iterable[str]) -> None:
+        """Load the voice model and voice the texts. The model loads even when every text is cached, so
+        the first line that is not cached never waits for it; a model that cannot load raises."""
+        warm_up = getattr(self._synth, "warm_up", None)
+        if warm_up:
+            warm_up()
         for t in texts:
             try:
                 self.render(t)
@@ -130,6 +135,9 @@ class ParlerVoice:
             desc = desc_tok(self._description, return_tensors="pt").to(device)
             self._loaded = (model, tok, desc, device)
         return self._loaded
+
+    def warm_up(self) -> None:
+        self._load()
 
     def synthesise(self, text: str) -> tuple[np.ndarray, int]:
         model, tok, desc, device = self._load()

@@ -207,7 +207,9 @@ class LocalSpeechModels:
         self._spoof_lock = threading.Lock()
 
     def warm_up(self) -> None:
-        self._load_whisper()
+        # One short transcription: CUDA libraries load on first use, so a missing one fails here, at
+        # start-up, where /v1/status reports it, instead of on the first Caller's Response.
+        list(self._load_whisper().transcribe(np.zeros(16_000, dtype=np.float32), beam_size=1)[0])
         if self._spoof_name:
             self._load_spoof()
 
@@ -217,6 +219,11 @@ class LocalSpeechModels:
 
     def _load_whisper_locked(self):
         if self._whisper is None:
+            if self._device != "cpu":
+                try:  # on Windows, CTranslate2 finds cuBLAS 12 only if torch has already loaded its copy
+                    import torch  # noqa: F401
+                except ImportError:
+                    pass
             from faster_whisper import WhisperModel
 
             log.info("loading faster-whisper %s on %s", self._whisper_name, self._device)
