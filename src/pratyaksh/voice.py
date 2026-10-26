@@ -92,7 +92,8 @@ class PromptVoice:
                 log.warning("could not pre-render prompt %r: %r", t[:40], e)
 
 
-_SENTENCE_END = re.compile(r"(?<=[.!?।])\s+")
+# A sentence ends at . ! ? or the Devanagari danda, but not after an abbreviation such as "Rs.".
+_SENTENCE_END = re.compile(r"(?<=[.!?।])(?<!\bRs\.)(?<!\bNo\.)(?<!\bMr\.)(?<!\bMs\.)(?<!\bDr\.)(?<!\bSt\.)\s+")
 _GAP_S = 0.15  # pause between sentences synthesised separately
 _MIN_SPEECH_S = 0.1  # shorter than any spoken sentence: the voice generated nothing
 
@@ -125,8 +126,13 @@ class ParlerVoice:
         self._description = description
         self._device = device
         self._loaded = None
+        self._load_lock = threading.Lock()  # warm-up and a first /v1/voice request must not both load (OOM)
 
     def _load(self):
+        with self._load_lock:
+            return self._load_locked()
+
+    def _load_locked(self):
         if self._loaded is None:
             import torch
             from parler_tts import ParlerTTSForConditionalGeneration
@@ -136,7 +142,7 @@ class ParlerVoice:
             # bf16 halves the model to ~1.9 GB so it fits a 6 GB GPU next to Whisper (fp32 spilled into
             # system RAM at ~21 s a prompt); fp16 risks NaNs in its T5 text encoder. SDPA attention
             # in the decoder is ~25% faster; the T5 encoder only supports eager.
-            dtype = torch.bfloat16 if device != "cpu" else torch.float32
+            dtype = torch.bfloat16 if device != "cpu" and torch.cuda.is_bf16_supported() else torch.float32
             log.info("loading %s on %s (%s)", self._model_id, device, dtype)
             model = ParlerTTSForConditionalGeneration.from_pretrained(
                 self._model_id, torch_dtype=dtype, attn_implementation={"decoder": "sdpa", "text_encoder": "eager"},

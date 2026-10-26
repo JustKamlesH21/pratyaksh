@@ -5,8 +5,9 @@ import io
 import numpy as np
 import pytest
 import soundfile as sf
-from conftest import Harness, whispered
+from conftest import Harness, voiced, whispered
 
+from pratyaksh.domain import Audio, Outcome, Response
 from pratyaksh.verification.verifier import spoken_lines
 from pratyaksh.voice import PromptVoice
 
@@ -142,3 +143,65 @@ def test_no_speech_twice_falls_back_and_is_not_cached(tmp_path):
     assert abs(seconds(voice.render("Thank you.")) - 0.4) < 0.01  # the fallback's 2 words x 0.2 s
     voice.render("Thank you.")
     assert synth.said == ["Thank you.", "Thank you.", "Thank you."]  # tried again: nothing silent was cached
+
+
+@pytest.fixture(scope="module")
+def voiced_ahead(tmp_path_factory):
+    """Every line in spoken_lines() voiced once, shared by the tests below (about 1,400 small WAVs)."""
+    synth = CountingVoice()
+    voice = PromptVoice(synth, tmp_path_factory.mktemp("tts"))
+    voice.prewarm(spoken_lines())
+    return voice, synth
+
+
+def _no_synthesis_on_the_call(voiced_ahead, steps) -> list[str]:
+    voice, synth = voiced_ahead
+    before = len(synth.said)
+    for step in steps:
+        voice.render(step.say)
+    return synth.said[before:]
+
+
+def test_repeats_retries_and_endings_are_rendered_ahead_of_time(voiced_ahead):
+    h = Harness()
+    call_id = h.verifier.start_call("cust-ananya", "r").call_id
+    steps = [h.say(call_id, "I want to add a new payee")]
+    steps.append(h.verifier.respond(call_id, Response(Audio.silence(2.0), None)))  # heard nothing
+    steps.append(h.say(call_id, "sorry, can you repeat that?"))
+    steps.append(h.say(call_id, h.current_phrase(call_id), whispered(), 800))
+    steps.append(h.say(call_id, "one one one one one one", voiced(), 900))  # misread code
+    steps.append(h.say(call_id, h.code_on_device("cust-ananya"), voiced(), 900))
+    assert steps[-1].outcome is not None and steps[-1].end
+    assert _no_synthesis_on_the_call(voiced_ahead, steps) == []
+
+
+def test_a_step_up_and_a_block_are_rendered_ahead_of_time(voiced_ahead):
+    h = Harness()
+    call_id = h.verifier.start_call("cust-rahul", "r").call_id
+    steps = [h.say(call_id, "I want to change my SIM")]
+    for _ in range(6):
+        if steps[-1].end:
+            break
+        call = h.verifier.call(call_id)
+        if call["challenges"][-1]["kind"] == "possession_code":
+            steps.append(h.say(call_id, h.code_on_device("cust-rahul"), voiced(), 900))
+        else:
+            steps.append(h.say(call_id, h.current_phrase(call_id), voiced(), 800))  # said aloud, not whispered
+    assert steps[-1].outcome is Outcome.BLOCKED
+    assert _no_synthesis_on_the_call(voiced_ahead, steps) == []
+
+
+def test_app_approval_is_rendered_ahead_of_time(voiced_ahead):
+    h = Harness()
+    call_id = h.verifier.start_call("cust-meera", "r").call_id
+    steps = [h.say(call_id, "transfer 7 lakh to my brother")]
+    steps.append(h.say(call_id, "I can't do this, use the bank app"))
+    steps.append(h.approve(call_id, "cust-meera"))
+    assert steps[-1].end
+    assert _no_synthesis_on_the_call(voiced_ahead, steps) == []
+
+
+def test_an_abbreviation_does_not_end_a_sentence(tmp_path):
+    synth = CountingVoice()
+    PromptVoice(synth, tmp_path).render("Daily UPI transfers are capped at Rs. 1 lakh. Is there anything else?")
+    assert synth.said == ["Daily UPI transfers are capped at Rs. 1 lakh.", "Is there anything else?"]

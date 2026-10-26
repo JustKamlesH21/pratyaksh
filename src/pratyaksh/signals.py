@@ -225,7 +225,7 @@ class LocalSpeechModels:
             if self._device != "cpu":
                 try:  # on Windows, CTranslate2 finds cuBLAS 12 only if torch has already loaded its copy
                     import torch  # noqa: F401
-                except ImportError:
+                except Exception:  # not installed, or a broken DLL (OSError): Whisper may still load
                     pass
             from faster_whisper import WhisperModel
 
