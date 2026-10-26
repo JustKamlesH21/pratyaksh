@@ -9,11 +9,18 @@ These tools play a **Clone** of a teammate's voice into a Call so the demo can s
 
 ## Setup
 
+IndicF5 needs Python 3.10 and an NVIDIA GPU for live generation (the model is 1.4 GB; on a CPU each line takes far too long for a live Call).
+
 ```bash
 cd attacker
-python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+py -3.10 -m venv .venv && .venv\Scripts\activate       # macOS/Linux: python3.10 -m venv .venv && source .venv/bin/activate
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 ```
+
+`ai4bharat/IndicF5` is gated on Hugging Face: open the model page, accept its terms (approval is automatic), then `hf auth login` once with a read token.
+
+IndicF5 is trained on 11 Indian languages, not English. Type the Request in Hindi or Kannada for the most convincing Clone, and check how it says the English words in a Whisper Phrase before the demo.
 
 Install a virtual audio cable so the Clone's audio becomes the browser's microphone:
 
@@ -40,7 +47,7 @@ Record the teammate reading one sentence for 8–12 seconds in a quiet room, sav
 
 ## Backup clips
 
-Generate clips beforehand with `--save clips/`, then on stage:
+Generate clips beforehand with `--save clips/` (this needs the GPU once). Playing them needs only `soundfile` and `sounddevice`, so any laptop with the virtual cable can run the backup, even without a GPU. On stage:
 
 ```bash
 python play_clip.py clips/*.wav --device "CABLE Input"

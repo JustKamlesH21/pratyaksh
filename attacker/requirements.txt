@@ -1,6 +1,12 @@
-numpy
+# Attacker laptop, Python 3.10 (IndicF5's tested version).
+# Install the CUDA build of torch first, then this file:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+#   pip install -r requirements.txt
+# IndicF5's code and dependencies, pinned to the commit we tested (Sep 24, 2025).
+f5_tts @ git+https://github.com/AI4Bharat/IndicF5.git@13f7c4d627cc10111aea8fe9c0039462cacacdc7
+# IndicF5's requirements.txt pins these but its setup.py does not; newer versions break the model.
+transformers<4.50
+numpy<=1.26.4
+# Playing the Clone into the virtual cable.
 soundfile
 sounddevice
-torch
-transformers
-# IndicF5 pulls its own code via trust_remote_code; if it asks for more packages, install what it names.
