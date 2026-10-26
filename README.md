@@ -52,13 +52,16 @@ git clone https://github.com/JustKamlesH21/pratyaksh.git && cd pratyaksh
 python -m venv .venv
 source .venv/bin/activate                   # Windows: .venv\Scripts\activate
 pip install -e ".[agent,dev]"               # API, agent, tests
-pip install torch --index-url https://download.pytorch.org/whl/cu124   # CUDA build of torch first
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124   # CUDA builds first; a PyPI torchaudio crashes on import (WinError 127)
 pip install -e ".[ml]"                      # faster-whisper, transformers, parler-tts
+pip install -e ".[agent]" "protobuf>=6.33.5,<8"   # [ml] downgrades protobuf and LiveKit; this puts the agent's versions back
 cp .env.example .env                        # then edit LAN_IP, secrets, URLs
 pytest                                      # should be all green without a GPU
 ```
 
-Indic Parler-TTS is a gated model on Hugging Face: accept its terms on the model page, then `huggingface-cli login` once.
+The last line makes pip warn that `descript-audiotools` wants `protobuf<5`. That is safe to ignore: parler-tts needs audiotools only for its audio codec, and audiotools touches protobuf only through a tensorboard import used in training. LiveKit needs protobuf 5 or newer. The CUDA libraries faster-whisper needs (cuBLAS 12, cuDNN 9) ship inside the torch wheel, so no CUDA toolkit install is needed.
+
+Indic Parler-TTS is a gated model on Hugging Face: accept its terms on the model page, then `hf auth login` once.
 
 ### 2. MySQL
 
