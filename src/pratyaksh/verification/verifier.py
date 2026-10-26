@@ -87,6 +87,38 @@ CLARIFY = (
     "change your SIM or password, transfer money, or make another change to your account."
 )
 
+# Fixed lines the Voice Agent says. Named so spoken_lines() can voice them ahead of time.
+NOT_HEARD = "Sorry, I didn't hear you."
+OF_COURSE = "Of course."
+TROUBLE_HEARING = "Sorry, I had trouble hearing that."
+CODE_MISMATCH = "That didn't match. Please read the six digits from your bank app again, slowly."
+CODE_REISSUED = (
+    "That code had just expired, so I've sent a new one to your bank app. Please read out the new six-digit code."
+)
+APPROVAL_SENT = "I've sent an approval request to the bank app on your registered phone. Please approve it there."
+WHICH_REQUEST = (
+    "Sure, I can send it to your bank app. Which request is it: a payee, a SIM or password change, "
+    "a transfer, or another account change?"
+)
+BLOCKED = (
+    "We could not verify this call, so for your safety the request has been stopped. "
+    "Please use the bank app or visit your branch. Goodbye."
+)
+VERIFIED_DONE = "Thank you, you're verified and your request is done. Goodbye."
+VERIFIED_REVIEW = (
+    "Thank you, you're verified. Because this is a high-value request, a bank officer will confirm it shortly. Goodbye."
+)
+APPROVED_IN_APP = "Thank you. You approved this request in your bank app."
+OFFICER_WILL_CONFIRM = "A bank officer will confirm it shortly."
+DECLINED_IN_APP = "You declined this request in your bank app, so it has been stopped. Goodbye."
+APPROVAL_EXPIRED = "The approval request expired. For your safety nothing was changed. Goodbye."
+THANKS_GOODBYE = "Thank you for calling. Goodbye."
+# Lead-ins said in front of a Challenge, an App Approval request or a Hand-over.
+_CHALLENGE_LEADS = ("Thank you.", "Thank you. I need one more check.")
+_APPROVAL_LEADS = ("No problem.", "That code expired again.", "I need one more confirmation.", "You asked to use the app.")
+_HANDOVER_LEADS = ("Sure.", "I'm having trouble on this line.", "I'm sorry, I couldn't understand.",
+                   "You have a few questions, so")
+
 
 CODE_PROMPT = "I've sent a six-digit code to the bank app on your registered phone. Please read it out."
 
@@ -108,7 +140,11 @@ def spoken_lines() -> list[str]:
     fixed = [
         GREETING, CLARIFY, HANDOFF, ANYTHING_ELSE, TAKE_YOUR_TIME, WHEN_READY, CODE_PROMPT,
         *_REASK.values(), *_DONE.values(), *(line for lang in _IN_LANGUAGE.values() for line in lang.values()),
-        "Thank you.", "Thank you. I need one more check.", "I need one more confirmation.",
+        NOT_HEARD, OF_COURSE, TROUBLE_HEARING, CODE_MISMATCH, CODE_REISSUED, WHICH_REQUEST, BLOCKED,
+        VERIFIED_DONE, VERIFIED_REVIEW, APPROVED_IN_APP, OFFICER_WILL_CONFIRM, DECLINED_IN_APP, APPROVAL_EXPIRED,
+        THANKS_GOODBYE, "Sure.", "That's done.", *_CHALLENGE_LEADS,
+        *(f"{lead} {APPROVAL_SENT}" for lead in _APPROVAL_LEADS),
+        *(f"{lead} {HANDOFF}" for lead in _HANDOVER_LEADS),  # "…, so I'll connect you…" is one sentence
     ]
     intros = [_intro(r, n) for r in _REQUEST_NAMES for n in (1, 2, 3)]
     return fixed + intros + [_whisper_prompt(p) for p in all_phrases()]
@@ -263,10 +299,10 @@ class Verifier:
                 AuditEventRow.call_id == call.id, AuditEventRow.kind == "processing_error")))
             self._audit(s, call, "processing_error", {"attempt": errors + 1})
             if errors >= 1:
-                return self._hand_over(s, call, "I'm having trouble on this line.")
+                return self._hand_over(s, call, _HANDOVER_LEADS[1])
             last = self._pending(call)
             return self._set_step(s, call, Step(
-                call.id, f"Sorry, I had trouble hearing that. {_strip_lead(last.say)}", listen=True,
+                call.id, f"{TROUBLE_HEARING} {_strip_lead(last.say)}", listen=True,
                 long_reply=last.long_reply, state=CallState(call.state),
             ))
 
@@ -288,7 +324,7 @@ class Verifier:
                     self._audit(s, call, "app_approval_expired", {})
                     self._close(
                         s, call, Outcome.ABANDONED,
-                        "The approval request expired. For your safety nothing was changed. Goodbye.",
+                        APPROVAL_EXPIRED,
                     )
                     changed = True
             step = self._pending(call)
@@ -312,14 +348,14 @@ class Verifier:
             if approve:
                 if call.agent_review:
                     call.review_status = "pending"
-                say = "Thank you. You approved this request in your bank app."
+                say = APPROVED_IN_APP
                 if call.agent_review:
-                    say += " A bank officer will confirm it shortly."
+                    say += f" {OFFICER_WILL_CONFIRM}"
                 step = self._close(s, call, Outcome.APPROVED_IN_APP, say + " Goodbye.")
             else:
                 step = self._close(
                     s, call, Outcome.DECLINED_IN_APP,
-                    "You declined this request in your bank app, so it has been stopped. Goodbye.",
+                    DECLINED_IN_APP,
                 )
         self._publish_after(call_id)
         return step
@@ -645,13 +681,13 @@ class Verifier:
         )
 
         if heard.kind is TurnKind.HUMAN:
-            return self._hand_over(s, call, "Sure.")
+            return self._hand_over(s, call, _HANDOVER_LEADS[0])
         if heard.kind is TurnKind.GOODBYE:
-            return self._close(s, call, Outcome.ENDED, "Thank you for calling. Goodbye.")
+            return self._close(s, call, Outcome.ENDED, THANKS_GOODBYE)
         if heard.kind in (TurnKind.QUESTION, TurnKind.CHAT, TurnKind.REPEAT, TurnKind.WAIT):
             call.side_turns += 1
             if call.side_turns > MAX_SIDE_TURNS:
-                return self._hand_over(s, call, "You have a few questions, so")
+                return self._hand_over(s, call, _HANDOVER_LEADS[3])
             if heard.kind is TurnKind.REPEAT:
                 return listen(_strip_lead(self._pending(call).say))
             if heard.kind is TurnKind.WAIT:
@@ -660,12 +696,11 @@ class Verifier:
                 return listen(heard.reply)
             return listen(f"{heard.reply} {_said_in(heard, ANYTHING_ELSE)}")
         if heard.kind is TurnKind.APP_APPROVAL and heard.request is None:
-            return listen("Sure, I can send it to your bank app. Which request is it: a payee, a SIM or password change, "
-                          "a transfer, or another account change?")
+            return listen(WHICH_REQUEST)
         if heard.request is None:  # UNCLEAR
             call.request_attempts += 1
             if call.request_attempts >= MAX_REQUEST_ATTEMPTS:
-                return self._hand_over(s, call, "I'm sorry, I couldn't understand.")
+                return self._hand_over(s, call, _HANDOVER_LEADS[2])
             return listen(f"{heard.reply} {CLARIFY}" if heard.reply else CLARIFY)
 
         request = heard.request
@@ -689,10 +724,10 @@ class Verifier:
             call.reasons = ["No Challenges needed for this Request."]
             self._audit(s, call, "verdict", {"verdict": "PASS", "liveness": None, "reasons": call.reasons})
             done = _DONE.get(request, "That's done.")
-            return self._close(s, call, Outcome.PASSED, f"{answered}Sure. {done} Thank you for calling. Goodbye.")
+            return self._close(s, call, Outcome.PASSED, f"{answered}Sure. {done} {THANKS_GOODBYE}")
         call.state = CallState.CHALLENGING
         if heard.wants_app_approval:
-            return self._start_app_approval(s, call, f"{answered}You asked to use the app.")
+            return self._start_app_approval(s, call, f"{answered}{_APPROVAL_LEADS[3]}")
         return self._issue_next(s, call, f"{answered}{_intro(request, len(plan.challenges))}")
 
     def _hand_over(self, s: Session, call: CallRow, lead_in: str) -> Step:
@@ -714,7 +749,7 @@ class Verifier:
             call.challenges = call.challenges[:-1] + [{**issued, "repeated": True}]
             self._audit(s, call, "challenge_repeated", {"reason": "no speech heard"})
             return self._set_step(
-                s, call, Step(call.id, f"Sorry, I didn't hear you. {challenge.prompt}", listen=True,
+                s, call, Step(call.id, f"{NOT_HEARD} {challenge.prompt}", listen=True,
                            long_reply=challenge.kind is ChallengeKind.POSSESSION_CODE, state=CallState.CHALLENGING),
             )
         signals = said.signals
@@ -729,12 +764,12 @@ class Verifier:
                     so_far = self._policy.decide(_evidence(call.evidence), call.step_ups)
                     if so_far.verdict is Verdict.BLOCK:
                         return self._block(s, call, so_far)
-                return self._start_app_approval(s, call, "No problem.")
+                return self._start_app_approval(s, call, _APPROVAL_LEADS[0])
             if heard.kind is TurnKind.HUMAN:
                 self._audit_heard(s, call, "caller_said", said, {
                     "transcript": signals.transcript, "kind": heard.kind.value, "language": heard.language,
                     "by_llm": heard.by_llm})
-                return self._hand_over(s, call, "Sure.")
+                return self._hand_over(s, call, _HANDOVER_LEADS[0])
             asked = int(issued.get("side_turns", 0))
             if asked < MAX_SIDE_TURNS_PER_CHALLENGE:  # QUESTION, CHAT, REPEAT or WAIT: reply, then ask again
                 call.challenges = call.challenges[:-1] + [{**issued, "side_turns": asked + 1}]
@@ -744,7 +779,7 @@ class Verifier:
                     "by_llm": heard.by_llm})
                 reask = _REASK.get(challenge.kind, challenge.prompt)
                 if heard.kind is TurnKind.REPEAT:
-                    say = f"Of course. {challenge.prompt}"
+                    say = f"{OF_COURSE} {challenge.prompt}"
                 elif heard.kind is TurnKind.WAIT:
                     say = f"{_said_in(heard, TAKE_YOUR_TIME)} {reask}"
                 else:
@@ -760,12 +795,11 @@ class Verifier:
             again = bool(issued.get("reissued"))
             self._audit_heard(s, call, "code_expired", said, {"transcript": signals.transcript, "reissued": not again})
             if again:
-                return self._start_app_approval(s, call, "That code expired again.")
+                return self._start_app_approval(s, call, _APPROVAL_LEADS[1])
             call.challenges = call.challenges[:-1] + [{**issued, "reissued": True, "retried": False}]
             self._send_code(s, call)
             return self._set_step(s, call, Step(
-                call.id, "That code had just expired, so I've sent a new one to your bank app. "
-                "Please read out the new six-digit code.", listen=True, long_reply=True, state=CallState.CHALLENGING,
+                call.id, CODE_REISSUED, listen=True, long_reply=True, state=CallState.CHALLENGING,
             ))
         if challenge.kind is ChallengeKind.POSSESSION_CODE:
             match = self._check_code(s, call, signals.spoken_digits, final=bool(issued.get("retried")))
@@ -775,7 +809,7 @@ class Verifier:
                 self._audit_heard(s, call, "code_retry", said,
                                   {"transcript": signals.transcript, "heard_digits": signals.spoken_digits})
                 return self._set_step(s, call, Step(
-                    call.id, "That didn't match. Please read the six digits from your bank app again, slowly.",
+                    call.id, CODE_MISMATCH,
                     listen=True, long_reply=True, state=CallState.CHALLENGING,
                 ))
             signals = _with_code_match(signals, match)
@@ -791,7 +825,7 @@ class Verifier:
         )
 
         if call.planned:  # more Challenges planned: keep going, decide at the end
-            return self._issue_next(s, call, "Thank you.")
+            return self._issue_next(s, call, _CHALLENGE_LEADS[0])
 
         call.verdict = decision.verdict.value
         call.liveness = None if decision.liveness is None else round(decision.liveness, 3)
@@ -805,17 +839,16 @@ class Verifier:
                 call.review_status = "pending"
                 return self._close(
                     s, call, Outcome.PASSED_PENDING_REVIEW,
-                    "Thank you, you're verified. Because this is a high-value request, "
-                    "a bank officer will confirm it shortly. Goodbye.",
+                    VERIFIED_REVIEW,
                 )
-            return self._close(s, call, Outcome.PASSED, "Thank you, you're verified and your request is done. Goodbye.")
+            return self._close(s, call, Outcome.PASSED, VERIFIED_DONE)
         if decision.verdict is Verdict.BLOCK:
             return self._block(s, call, decision)
         if decision.next_challenge is not None:
             call.step_ups += 1
             call.planned = [decision.next_challenge.value]
-            return self._issue_next(s, call, "Thank you. I need one more check.")
-        return self._start_app_approval(s, call, "I need one more confirmation.")
+            return self._issue_next(s, call, _CHALLENGE_LEADS[1])
+        return self._start_app_approval(s, call, _APPROVAL_LEADS[2])
 
     def _off_script(self, turn: _Turn, signals: Signals) -> Understanding | None:
         """The Caller said something other than an answer (a question, "repeat", "hold on",
@@ -852,8 +885,7 @@ class Verifier:
         self._audit(s, call, "security_alert_sent", {})
         return self._close(
             s, call, Outcome.BLOCKED,
-            "We could not verify this call, so for your safety the request has been stopped. "
-            "Please use the bank app or visit your branch. Goodbye.",
+            BLOCKED,
         )
 
     def _issue_next(self, s: Session, call: CallRow, lead_in: str) -> Step:
@@ -906,7 +938,7 @@ class Verifier:
             created_at=now, expires_at=now + self._approval_ttl,
         ))
         self._audit(s, call, "app_approval_requested", {"expires_in_s": int(self._approval_ttl.total_seconds())})
-        say = f"{lead_in} I've sent an approval request to the bank app on your registered phone. Please approve it there."
+        say = f"{lead_in} {APPROVAL_SENT}"
         return self._set_step(s, call, Step(call.id, say, wait=True, state=CallState.AWAITING_APP_APPROVAL))
 
     def _expired_code_read(self, s: Session, call: CallRow, spoken: str | None) -> bool:
@@ -1115,7 +1147,7 @@ def _said_in(heard, text: str) -> str:
 
 def _strip_lead(say: str) -> str:
     """Drop apology prefixes so repeated prompts don't stack ("Sorry… Sorry…")."""
-    for lead in ("Sorry, I had trouble hearing that. ", "Sorry, I didn't hear you. ", "Of course. "):
+    for lead in (f"{TROUBLE_HEARING} ", f"{NOT_HEARD} ", f"{OF_COURSE} "):
         while say.startswith(lead):
             say = say[len(lead):]
     return say
