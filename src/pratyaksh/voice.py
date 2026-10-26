@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import re
 import threading
 from pathlib import Path
 from typing import Iterable, Protocol
@@ -39,7 +40,14 @@ class PromptVoice:
         self._lock = threading.Lock()  # one synthesis at a time on the GPU
 
     def render(self, text: str) -> bytes:
-        text = " ".join(text.split())
+        """Each sentence is synthesised once and cached, so a prompt that only adds a new lead-in, or a
+        Whisper Phrase prompt rendered ahead of time, costs no synthesis on the Call."""
+        sentences = _sentences(text)
+        if len(sentences) == 1:
+            return self._sentence(sentences[0])
+        return _join([self._sentence(s) for s in sentences])
+
+    def _sentence(self, text: str) -> bytes:
         key = hashlib.sha1(f"{self._synth.name}|{text}".encode()).hexdigest()
         path = self._cache / f"{key}.wav"
         if path.exists():
@@ -69,6 +77,25 @@ class PromptVoice:
                 log.warning("could not pre-render prompt %r: %r", t[:40], e)
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?।])\s+")
+_GAP_S = 0.15  # pause between sentences synthesised separately
+
+
+def _sentences(text: str) -> list[str]:
+    return [s for s in _SENTENCE_END.split(" ".join(text.split())) if s] or [""]
+
+
+def _join(wavs: list[bytes]) -> bytes:
+    parts = [sf.read(io.BytesIO(w), dtype="float32") for w in wavs]
+    rate = parts[0][1]
+    out = []
+    for samples, r in parts:  # a fallback sentence may come at another sample rate
+        if r != rate:
+            samples = np.interp(np.arange(0, len(samples), r / rate), np.arange(len(samples)), samples)
+        out += [samples, np.zeros(int(_GAP_S * rate), dtype=np.float32)]
+    return _wav(np.concatenate(out[:-1]), rate)
+
+
 def _wav(samples: np.ndarray, rate: int) -> bytes:
     buf = io.BytesIO()
     sf.write(buf, samples.astype(np.float32), rate, format="WAV", subtype="PCM_16")
@@ -90,8 +117,14 @@ class ParlerVoice:
             from transformers import AutoTokenizer
 
             device = "cuda:0" if self._device in ("auto", "cuda") and torch.cuda.is_available() else "cpu"
-            log.info("loading %s on %s", self._model_id, device)
-            model = ParlerTTSForConditionalGeneration.from_pretrained(self._model_id).to(device)
+            # bf16 halves the model to ~1.9 GB so it fits a 6 GB GPU next to Whisper (fp32 spilled into
+            # system RAM at ~21 s a prompt); fp16 risks NaNs in its T5 text encoder. SDPA attention
+            # in the decoder is ~25% faster; the T5 encoder only supports eager.
+            dtype = torch.bfloat16 if device != "cpu" else torch.float32
+            log.info("loading %s on %s (%s)", self._model_id, device, dtype)
+            model = ParlerTTSForConditionalGeneration.from_pretrained(
+                self._model_id, torch_dtype=dtype, attn_implementation={"decoder": "sdpa", "text_encoder": "eager"},
+            ).to(device)
             tok = AutoTokenizer.from_pretrained(self._model_id)
             desc_tok = AutoTokenizer.from_pretrained(model.config.text_encoder._name_or_path)
             desc = desc_tok(self._description, return_tensors="pt").to(device)
@@ -107,7 +140,7 @@ class ParlerVoice:
             prompt_input_ids=prompt.input_ids,
             prompt_attention_mask=prompt.attention_mask,
         )
-        return out.cpu().numpy().squeeze(), int(model.config.sampling_rate)
+        return out.float().cpu().numpy().squeeze(), int(model.config.sampling_rate)
 
 
 class ToneVoice:

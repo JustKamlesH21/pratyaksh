@@ -92,6 +92,12 @@ pratyaksh-api             # http://<LAN_IP>:8000/docs ; first start downloads an
 pratyaksh-agent dev       # registers with LiveKit and waits for Calls
 ```
 
+Once per machine, with the API stopped, voice everything the Voice Agent can say into the cache (`.cache/tts`), including the prompt for every one of the 1,344 Whisper Phrases:
+```bash
+pratyaksh-voice-cache     # ~2.5 h with Parler on a laptop GPU; stop and rerun any time, cached lines are skipped
+```
+Parler takes about 6–7 s per sentence on an RTX 3060, so without this every Challenge prompt would add that to the Call. Speech is cached sentence by sentence, so a new lead-in in front of a cached prompt costs only the new sentence. Answers to Questions are voiced on first use and then cached.
+
 ### 5. Web app
 
 ```bash

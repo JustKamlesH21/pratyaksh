@@ -45,6 +45,7 @@ pratyaksh-api = "pratyaksh.api.app:main"
 pratyaksh-agent = "pratyaksh.agent.worker:main"
 pratyaksh-eval = "pratyaksh.eval.run:main"
 pratyaksh-seed = "pratyaksh.verification.store:seed_main"
+pratyaksh-voice-cache = "pratyaksh.api.container:voice_cache_main"
 
 [build-system]
 requires = ["setuptools>=69"]
