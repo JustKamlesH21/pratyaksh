@@ -2,11 +2,19 @@
 
 Interface:
     SignalExtractor(models)
-    .transcribe(audio)            -> str
-    .extract(challenge, response) -> Signals   (code_match is left None; the Verifier
-                                                compares spoken_digits to the stored hash)
+    .transcribe(audio, language=None)            -> str       (a Request, in the Customer's language)
+    .extract(challenge, response, language=None) -> Signals   (code_match is left None; the Verifier
+                                                               compares spoken_digits to the stored hash)
 
-Seam: SpeechModels (speech-to-text + spoof probability).
+Which language speech-to-text is told to use (measured Oct 27 with large-v3-turbo; Parler voices, indicative):
+    Request          the Customer's profile language. Detection heard Kannada as Hindi, Tamil or English in
+                     6 of 6 Requests; told "kn", it wrote Kannada. English stays English whatever it is told,
+                     and a forced language saves the detection pass (a second encoder run).
+    Whisper Phrase   "en" with the phrase as hotwords: the code-mixed phrase comes out in Latin letters.
+    Possession Code  "kn" for a Kannada Customer, else "en": Hindi digit words forced to Hindi came out as
+                     other words, in English as digits; Kannada digit words only survive in Kannada.
+
+Seam: SpeechModels (speech-to-text + spoof probability), steered by a TranscriptionHint.
     LocalSpeechModels    faster-whisper + a transformers audio classifier (GPU or CPU)
     ScriptedSpeechModels fixed transcripts and spoof scores, for tests
 """
@@ -16,6 +24,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections import deque
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Iterable, Protocol
 
@@ -24,12 +33,25 @@ from rapidfuzz import fuzz
 
 from .domain import SAMPLE_RATE, Audio, Challenge, ChallengeKind, Response, Signals
 from .language import fold_with_digits, spoken_digits
+from .phrases import speakable
 
 log = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class TranscriptionHint:
+    """What speech-to-text should expect from a Response.
+
+    language: transcribe in this language ("en", "hi", "kn"); None lets the model decide.
+    hotwords: words the Response should contain (a Whisper Phrase), to bias decoding toward them.
+    """
+
+    language: str | None = None
+    hotwords: str | None = None
+
+
 class SpeechModels(Protocol):
-    def transcribe(self, audio: Audio) -> str: ...
+    def transcribe(self, audio: Audio, hint: TranscriptionHint | None = None) -> str: ...
 
     def spoof_probability(self, audio: Audio) -> float | None:
         """P(audio is synthetic) in [0, 1], or None if no spoof model is loaded."""
@@ -40,12 +62,17 @@ class SignalExtractor:
     def __init__(self, models: SpeechModels):
         self._models = models
 
-    def transcribe(self, audio: Audio) -> str:
+    def transcribe(self, audio: Audio, language: str | None = None) -> str:
+        """A Request, heard in `language` (the Customer's profile language); None lets the model detect it."""
+        return self._transcribe(audio, TranscriptionHint(language=language))
+
+    def _transcribe(self, audio: Audio, hint: TranscriptionHint) -> str:
         if audio.seconds < 0.2:
             return ""
-        return self._models.transcribe(audio).strip()
+        return self._models.transcribe(audio, hint).strip()
 
-    def extract(self, challenge: Challenge, response: Response) -> Signals:
+    def extract(self, challenge: Challenge, response: Response, language: str | None = None) -> Signals:
+        """Signals of a Response; `language` is the Customer's profile language."""
         audio = response.audio
         if response.reply_latency_ms is None or audio.seconds < 0.2:
             return Signals(reply_latency_ms=None)
@@ -53,7 +80,13 @@ class SignalExtractor:
         # The whisper DSP is CPU work; speech-to-text and the spoof model release the GIL while they
         # infer, so the two overlap instead of adding up.
         whisper = _DSP.submit(whisper_score, audio) if challenge.kind is ChallengeKind.WHISPER_PHRASE else None
-        transcript = self.transcribe(audio)
+        if whisper is not None:
+            # The phrase mixes Kannada, Hindi and English words; asked for English, speech-to-text writes all
+            # of it in Latin letters, and the expected words steer it toward the right spelling.
+            hint = TranscriptionHint(language="en", hotwords=speakable(challenge.phrase))
+        else:
+            hint = TranscriptionHint(language=_CODE_LANGUAGE.get(language or "", "en"))
+        transcript = self._transcribe(audio, hint)
         spoof = self._models.spoof_probability(audio)
 
         if whisper is not None:
@@ -71,6 +104,10 @@ class SignalExtractor:
             spoof_score=spoof,
             spoken_digits=digits or None,
         )
+
+
+# The language a Possession Code readout is heard in, by the Customer's language (default "en").
+_CODE_LANGUAGE = {"kn": "kn"}
 
 
 def phrase_match(expected: str, transcript: str) -> float:
@@ -152,7 +189,8 @@ def _whisper_score(audio: Audio) -> float | None:
 
 
 class ScriptedSpeechModels:
-    """Test and demo-replay adapter: returns transcripts and spoof scores in order."""
+    """Test and demo-replay adapter: returns transcripts and spoof scores in order, and records the
+    TranscriptionHint of every transcription in .hints."""
 
     def __init__(
         self,
@@ -163,13 +201,15 @@ class ScriptedSpeechModels:
         self._queue = deque([] if callable(transcripts) else transcripts)
         self._spoof = deque(spoof) if isinstance(spoof, (list, tuple, deque)) else None
         self._spoof_const = None if self._spoof is not None else spoof
+        self.hints: list[TranscriptionHint] = []
 
     def push(self, transcript: str, spoof: float | None = None) -> None:
         self._queue.append(transcript)
         if self._spoof is not None:
             self._spoof.append(spoof)
 
-    def transcribe(self, audio: Audio) -> str:
+    def transcribe(self, audio: Audio, hint: TranscriptionHint | None = None) -> str:
+        self.hints.append(hint or TranscriptionHint())
         if self._transcribe:
             return self._transcribe(audio)
         return self._queue.popleft() if self._queue else ""
@@ -246,10 +286,12 @@ class LocalSpeechModels:
             self._spoof = pipeline("audio-classification", model=self._spoof_name, device=device)
         return self._spoof
 
-    def transcribe(self, audio: Audio) -> str:
+    def transcribe(self, audio: Audio, hint: TranscriptionHint | None = None) -> str:
+        hint = hint or TranscriptionHint()
         model = self._load_whisper()
         segments, _info = model.transcribe(
-            audio.samples, beam_size=1, vad_filter=False, condition_on_previous_text=False
+            audio.samples, beam_size=1, vad_filter=False, condition_on_previous_text=False,
+            language=hint.language, hotwords=hint.hotwords,
         )
         return " ".join(s.text.strip() for s in segments)
 

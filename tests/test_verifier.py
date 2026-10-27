@@ -6,6 +6,8 @@ import pytest
 from conftest import Harness, voiced, whispered
 
 from pratyaksh.domain import CallState, Outcome, Response
+from pratyaksh.phrases import speakable
+from pratyaksh.signals import TranscriptionHint
 from pratyaksh.verification import CallNotFound, Database, DeviceNotPaired, NotAllowed, UnknownCustomer
 
 C = "cust-ananya"
@@ -71,6 +73,32 @@ def test_synthetic_voice_alone_blocks_even_with_the_right_code():
     step = h.say(call_id, h.code_on_device(C), voiced(), 800)
     assert step.outcome is Outcome.BLOCKED
     assert any("synthetic" in r for r in h.verifier.call(call_id)["reasons"])
+
+
+def test_a_whisper_phrase_is_heard_in_latin_with_the_phrase_as_hotwords(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add payee please")
+    phrase = h.current_phrase(call_id)
+    whisper_back(h, call_id)
+    assert h.models.hints[-1] == TranscriptionHint(language="en", hotwords=speakable(phrase))
+
+
+@pytest.mark.parametrize("customer, language", [("cust-ananya", "kn"), ("cust-rahul", "hi"), ("cust-meera", "en")])
+def test_a_request_is_heard_in_the_customers_language(harness, customer, language):
+    call_id = harness.verifier.start_call(customer, "r").call_id
+    harness.say(call_id, "add a payee")
+    assert harness.models.hints == [TranscriptionHint(language=language)]
+
+
+@pytest.mark.parametrize("customer, language", [("cust-ananya", "kn"), ("cust-rahul", "en"), ("cust-meera", "en")])
+def test_a_possession_code_is_heard_in_the_language_its_digits_are_best_heard_in(harness, customer, language):
+    h = harness
+    call_id = h.verifier.start_call(customer, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    h.say(call_id, " ".join(h.code_on_device(customer)), voiced(), 900)
+    assert h.models.hints[-1] == TranscriptionHint(language=language)
 
 
 def test_inconclusive_responses_get_one_extra_whisper_phrase(harness):
