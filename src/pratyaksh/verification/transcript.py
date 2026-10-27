@@ -2,7 +2,7 @@
 in between. Built only from the Audit Trail, so a transcript is as tamper-evident as its events.
 
 Each line: {seq, at, event, speaker: "agent" | "caller" | "system", text, ...}. Caller lines may add
-understood (a TurnKind), language, by_llm, challenge, liveness, signals and timings_ms; system lines
+understood (a TurnKind), language, by_llm, by_variant, challenge, liveness, signals and timings_ms; system lines
 may add tone ("pass" | "stepup" | "block") for the Console's Verdict colours.
 """
 
@@ -100,6 +100,8 @@ def _caller(kind: str, d: dict) -> dict:
             line["language"] = d["language"]
         if d.get("by_llm"):
             line["by_llm"] = True
+        if d.get("by_variant"):
+            line["by_variant"] = True
     elif kind == "app_approval_asked":
         line["understood"] = "app_approval"
     elif kind == "code_retry":

@@ -674,7 +674,8 @@ class Verifier:
         self._audit_heard(
             s, call, "caller_said", said,
             {"transcript": transcript, "kind": heard.kind.value, "request": heard.request,
-             "wants_app_approval": heard.wants_app_approval, "language": heard.language, "by_llm": heard.by_llm},
+             "wants_app_approval": heard.wants_app_approval, "language": heard.language, "by_llm": heard.by_llm,
+             "by_variant": heard.by_variant},
         )
         listen = lambda say: self._set_step(  # noqa: E731
             s, call, Step(call.id, say, listen=True, state=CallState.AWAITING_REQUEST)

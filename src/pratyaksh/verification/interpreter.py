@@ -55,6 +55,7 @@ class Understanding:
     wants_app_approval: bool = False
     language: str = "en"  # what the Caller spoke (en, hi, kn); replies are in it
     by_llm: bool = False  # the LLM understood it (keyword rules did not); shown in the transcript
+    by_variant: bool = False  # the Request came from a mangled loanword ("पाई आड़"), not a keyword; shown too
 
 
 @dataclass(frozen=True)
@@ -252,17 +253,18 @@ _SOUNDS_LIKE = {
 }
 
 
-def _request_in(said: list[str], question: bool, do_it: bool) -> RequestKind | None:
-    """The riskiest Request said, by keyword or by a loanword that sounds like one. A Question that
-    only sounds like a risky Request ("पाई ऐड करने का तरीका क्या है?") is not taken as one."""
+def _request_in(said: list[str], question: bool, do_it: bool) -> tuple[RequestKind | None, bool]:
+    """The riskiest Request said, by keyword or by a loanword that sounds like one, and whether it
+    was the loanword. A Question that only sounds like a risky Request ("पाई ऐड करने का तरीका क्या
+    है?") is not taken as one."""
     for kind, keys in _REQUESTS:
         if keys.found_in(said):
-            return kind
+            return kind, False
         if kind in _SOUNDS_LIKE and _SOUNDS_LIKE[kind](said):
             if kind is RequestKind.BALANCE_ENQUIRY or do_it or not question:
-                return kind
-            return None
-    return None
+                return kind, True
+            return None, False
+    return None, False
 
 
 # Asking for the app, or saying a voice task is not possible. Multi-word on purpose: "app"
@@ -435,16 +437,17 @@ class Interpreter:
 
         answer = self._faq.match(said)
         do_it = _DO_IT.found_in(said)
-        request = _request_in(said, question, do_it)
+        request, by_variant = _request_in(said, question, do_it)
         if answer and (question or answer.report):
             # "Should I share my PIN?" is a Question, not a PIN reset Request, and "someone transferred
             # money from my account" is a fraud report. "Is this safe? I want to transfer 6 lakh" is
             # both: answer it, then carry on with the Request.
             if request and do_it:
-                return Understanding(TurnKind.REQUEST, request, answer.answer_in(language), wants_app)
+                return Understanding(TurnKind.REQUEST, request, answer.answer_in(language), wants_app,
+                                     by_variant=by_variant)
             return Understanding(TurnKind.QUESTION, reply=answer.answer_in(language))
         if request:
-            return Understanding(TurnKind.REQUEST, request, wants_app_approval=wants_app)
+            return Understanding(TurnKind.REQUEST, request, wants_app_approval=wants_app, by_variant=by_variant)
         if wants_app:
             return Understanding(TurnKind.APP_APPROVAL, wants_app_approval=True)
         if _REPEAT.found_in(said):

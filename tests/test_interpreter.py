@@ -28,7 +28,7 @@ MANGLED = [
     ("pei jodna hai", RequestKind.ADD_PAYEE),
     ("add a new pay please", RequestKind.ADD_PAYEE),
     ("ಹೊಸ ಪೇ ಆಡ್ ಮಾಡಬೇಕು", RequestKind.ADD_PAYEE),
-    ("ಹೊಸ ಪಾಯಿ ಸೇರಿಸಿ", RequestKind.ADD_PAYEE),
+    ("ಹೊಸ ಪೇ ಸೇರಿಸಿ", RequestKind.ADD_PAYEE),
     ("बेनिफिशरी ऐड करो", RequestKind.ADD_PAYEE),
     ("ಬೆನಿಫಿಷರಿ ಸೇರಿಸಬೇಕು", RequestKind.ADD_PAYEE),
     ("पासवड रिसेट करना है", RequestKind.SIM_SWAP),
@@ -57,7 +57,26 @@ MANGLED = [
 @pytest.mark.parametrize("said, kind", MANGLED)
 def test_mangled_loanwords_are_understood_offline(said, kind):
     u = Interpreter(NoLLM(), FAQ).understand(said)
-    assert (u.kind, u.request, u.by_llm) == (TurnKind.REQUEST, kind, False)
+    assert (u.kind, u.request, u.by_llm, u.by_variant) == (TurnKind.REQUEST, kind, False, True)
+
+
+@pytest.mark.parametrize("said", ["please add a new payee", "मुझे नया पेयी जोड़ना है", "मुझे पासवर्ड रिसेट करना है"])
+def test_a_request_matched_by_its_keywords_is_not_marked_as_a_variant(said):
+    u = Interpreter(NoLLM(), FAQ).understand(said)
+    assert u.kind is TurnKind.REQUEST and not u.by_variant
+
+
+def test_the_transcript_shows_a_request_understood_from_a_mangled_loanword():
+    from conftest import Harness
+
+    h = Harness()
+    for said, variant in [("मुझे नया पाई आड़ करना है", True), ("please add a new payee", False)]:
+        call_id = h.verifier.start_call("cust-ananya", "r").call_id
+        h.say(call_id, said)
+        call = h.verifier.call(call_id)
+        event = next(e["data"] for e in call["events"] if e["kind"] == "caller_said")
+        line = next(ln for ln in call["transcript"] if ln["speaker"] == "caller")
+        assert (call["request"], event["by_variant"], line.get("by_variant", False)) == ("add_payee", variant, variant)
 
 
 # Ordinary words that look like a mangled loanword, and Questions about a Request: none of these is
