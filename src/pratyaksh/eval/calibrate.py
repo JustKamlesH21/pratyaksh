@@ -4,7 +4,9 @@
     print(format_calibration(report)); Path("calibration.html").write_text(render_html(report))
 
 A source is either a folder with one subfolder of WAVs per class (whisper/, normal/, soft/,
-silence/, noise/, clone/ ...) or an exported Eval manifest. In a manifest, real Whisper Phrase
+silence/, noise/, clone/ ...) or an exported Eval manifest. In a folder, WAVs one level further down
+(whisper/kamlesh/1.wav) belong to that speaker; in a manifest the `speaker` column says. Speakers are
+recorded so an Eval Run can check none of its speakers took part in calibration. In a manifest, real Whisper Phrase
 Responses are "whisper", real Possession Code readouts (spoken aloud) are "normal" and Clone
 Responses are "clone", unless a `class` column says otherwise.
 
@@ -29,23 +31,36 @@ class Sample:
     cls: str
     file: str
     score: float | None  # None: no speech energy found (the Policy counts it as 0)
+    speaker: str | None = None
+
+
+def _recordings(source: Path) -> list[tuple[str, Path, str | None]]:
+    """(class, wav, speaker) for every recording in a calibration folder or manifest."""
+    if source.is_dir():
+        found = []
+        for sub in sorted(p for p in source.iterdir() if p.is_dir()):
+            for wav in sorted(sub.rglob("*.wav")):
+                parts = wav.relative_to(sub).parts
+                found.append((sub.name, wav, parts[0].strip().lower() if len(parts) > 1 else None))
+        if not found:
+            raise SystemExit(f"{source}: no class subfolders with .wav files (e.g. whisper/, normal/, clone/)")
+        return found
+    from .run import read_manifest
+
+    return [(_manifest_class(r), r.audio, r.speaker or None) for r in read_manifest(source)]
+
+
+def calibration_speakers(source: Path) -> list[str]:
+    """The labelled speakers of a calibration folder or manifest (no audio is decoded)."""
+    return sorted({spk for _, _, spk in _recordings(source) if spk})
 
 
 def samples_from(source: Path) -> list[Sample]:
     """Whisper Score of every WAV in a class-per-subfolder directory or an exported manifest."""
-    if source.is_dir():
-        pairs = [
-            (sub.name, wav)
-            for sub in sorted(p for p in source.iterdir() if p.is_dir())
-            for wav in sorted(sub.rglob("*.wav"))
-        ]
-        if not pairs:
-            raise SystemExit(f"{source}: no class subfolders with .wav files (e.g. whisper/, normal/, clone/)")
-    else:
-        from .run import read_manifest
-
-        pairs = [(_manifest_class(r), r.audio) for r in read_manifest(source)]
-    return [Sample(cls, str(path), whisper_score(Audio.from_wav(Path(path).read_bytes()))) for cls, path in pairs]
+    return [
+        Sample(cls, str(path), whisper_score(Audio.from_wav(Path(path).read_bytes())), spk)
+        for cls, path, spk in _recordings(source)
+    ]
 
 
 def _manifest_class(row) -> str:
@@ -87,7 +102,8 @@ def calibrate(
         "positive": positive,
         "excluded": [c for c in exclude if c in classes],
         "classes": classes,
-        "samples": [{"class": s.cls, "file": s.file, "score": s.score} for s in samples],
+        "samples": [{"class": s.cls, "file": s.file, "score": s.score, "speaker": s.speaker} for s in samples],
+        "speakers": sorted({s.speaker for s in samples if s.speaker}),
         "highest_negative": None,
         "lowest_positive": None,
         "gap": False,
@@ -180,6 +196,7 @@ def format_calibration(report: dict) -> str:
             f"{cls:<12}{c['role']:<10}{c['n']:>4}{c['no_speech']:>11}{_f(c['min']):>8}{_f(c['median']):>8}{_f(c['max']):>8}"
         )
     lines.append("")
+    lines.append("speakers: " + (", ".join(report.get("speakers") or []) or "none labelled (use class/<speaker>/*.wav)"))
     hn, lp = report["highest_negative"], report["lowest_positive"]
     if hn and lp:
         lines.append(f"highest negative: {hn['score']:.3f} ({hn['class']}, {Path(hn['file']).name})")
