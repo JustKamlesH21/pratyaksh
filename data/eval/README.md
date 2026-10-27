@@ -17,7 +17,7 @@ pratyaksh-eval calibrate data/eval/manifest.csv                    # or an expor
                                                                    # real code readout = normal, Clone = clone)
 ```
 
-It writes `calibration.html` (a dot plot, no internet needed) next to the source and suggests a `whisper_score.min` with zero false accepts where the data allow it. It never changes `policy.yaml`: agree the number with the team lead, then change it with a test. The Eval Run speakers should be different people from the calibration speakers.
+Put each speaker's WAVs in their own folder under the class (`whisper/kamlesh/1.wav`) so the calibration speakers are recorded. It writes `calibration.html` (a dot plot, no internet needed) next to the source and suggests a `whisper_score.min` with zero false accepts where the data allow it. It never changes `policy.yaml`: agree the number with the team lead, then change it with a test. The Eval Run speakers should be different people from the calibration speakers: export with `--speaker <name>` and run with `--calibration data/eval/calibration/`, which warns (and shows it on the Eval page) when a speaker appears in both.
 
 ## Collect (with consent)
 

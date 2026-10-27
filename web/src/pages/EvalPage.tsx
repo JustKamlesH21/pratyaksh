@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useState } from "react";
-import { ChartBar } from "@phosphor-icons/react";
+import { ChartBar, Warning } from "@phosphor-icons/react";
 import { api } from "../api";
 import { Card, VerdictBadge } from "../components";
 import type { EvalRate, EvalRun } from "../types";
@@ -87,6 +87,15 @@ export default function EvalPage() {
         <p className="text-sm text-ink-soft">
           Clone Calls that PASSed: <span className="font-mono text-ink">{counted(s.clone_pass)}</span>. The rest of the
           Clone Calls not BLOCKed ended in STEP-UP (App Approval on the Registered Device).
+        </p>
+      )}
+      {s.speakers && s.speakers.overlap.length > 0 && (
+        <p role="alert" className="flex items-start gap-2 rounded-xl border border-block/40 bg-block/10 p-4 text-sm text-ink">
+          <Warning size={20} weight="fill" className="mt-0.5 shrink-0 text-block" />
+          <span>
+            <strong>Speakers also used for calibration: {s.speakers.overlap.join(", ")}.</strong> The whisper threshold
+            was tuned on their voices, so their Calls overstate these results.
+          </span>
         </p>
       )}
       {run.notes && <p className="text-sm text-ink-soft">{run.notes}</p>}

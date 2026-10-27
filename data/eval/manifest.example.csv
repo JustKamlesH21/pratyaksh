@@ -1,5 +1,5 @@
-session_id,label,request,kind,audio,reply_latency_ms,expected,code_match,transcript,condition,channel,language,hearing_ms
-real-001,real,add_payee,whisper_phrase,clips/real-001-1.wav,720,naale 7 baje meeting,,naale seven baje meeting,,mic,kn,610
-real-001,real,add_payee,possession_code,clips/real-001-2.wav,940,,true,4 8 1 9 2 7,,mic,kn,540
-clone-001,clone,add_payee,whisper_phrase,clips/clone-001-1.wav,3150,sanje 5 baje dinner,,sanje five baje dinner,code_withheld,cable,en,
-clone-001,clone,add_payee,possession_code,clips/clone-001-2.wav,3020,,false,1 2 3 4 5 6,code_withheld,cable,en,
+session_id,label,request,kind,audio,reply_latency_ms,expected,code_match,transcript,condition,channel,language,hearing_ms,speaker
+real-001,real,add_payee,whisper_phrase,clips/real-001-1.wav,720,naale 7 baje meeting,,naale seven baje meeting,,mic,kn,610,ravi
+real-001,real,add_payee,possession_code,clips/real-001-2.wav,940,,true,4 8 1 9 2 7,,mic,kn,540,ravi
+clone-001,clone,add_payee,whisper_phrase,clips/clone-001-1.wav,3150,sanje 5 baje dinner,,sanje five baje dinner,code_withheld,cable,en,,
+clone-001,clone,add_payee,possession_code,clips/clone-001-2.wav,3020,,false,1 2 3 4 5 6,code_withheld,cable,en,,

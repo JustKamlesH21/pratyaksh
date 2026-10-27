@@ -197,6 +197,7 @@ export interface EvalRun {
     added_seconds?: { real: EvalSpread; clone: EvalSpread };
     hearing_ms?: EvalSpread;
     live_hearing_ms?: EvalSpread | null;
+    speakers?: { eval: string[]; calibration: string[] | null; overlap: string[]; unlabelled_calls: number };
   };
   rows: {
     session_id: string;
@@ -210,6 +211,7 @@ export interface EvalRun {
     channel?: string;
     language?: string;
     caught_by?: string[];
+    speaker?: string | null;
   }[];
   notes: string;
 }
