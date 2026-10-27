@@ -3,7 +3,7 @@
 import asyncio
 
 import pytest
-from conftest import Harness, voiced, whispered
+from conftest import Harness, enforce_policy, voiced, whispered
 
 from pratyaksh.domain import CallState, Outcome, Response
 from pratyaksh.phrases import speakable
@@ -66,7 +66,7 @@ def test_clone_without_the_phone_is_blocked_with_reasons():
 
 
 def test_synthetic_voice_alone_blocks_even_with_the_right_code():
-    h = Harness(spoof=0.97)
+    h = Harness(spoof=0.97, policy=enforce_policy())
     call_id = h.verifier.start_call(C, "r").call_id
     h.say(call_id, "add payee please")
     whisper_back(h, call_id)
@@ -229,7 +229,7 @@ def test_audit_trail_rejects_updates_and_deletes_in_the_database(harness):
 
 
 def test_a_clone_cannot_escape_a_block_by_asking_for_the_app():
-    h = Harness(spoof=0.97)
+    h = Harness(spoof=0.97, policy=enforce_policy())
     call_id = h.verifier.start_call(C, "r").call_id
     h.say(call_id, "SIM swap please")
     whisper_back(h, call_id)  # synthetic voice: hard fail already in the evidence

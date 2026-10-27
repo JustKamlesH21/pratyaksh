@@ -1,7 +1,7 @@
 """The Voice Agent handles anything a Caller says, without ever weakening Verification."""
 
 import pytest
-from conftest import Harness, voiced, whispered
+from conftest import Harness, enforce_policy, voiced, whispered
 
 from pratyaksh.domain import CallState, Outcome, Response
 from pratyaksh.verification.interpreter import NO_ANSWER
@@ -74,7 +74,7 @@ def test_questions_during_a_challenge_are_answered_but_capped():
 
 
 def test_asking_for_a_person_mid_challenge_still_blocks_a_detected_clone():
-    h = Harness(spoof=0.97)
+    h = Harness(spoof=0.97, policy=enforce_policy())
     call_id = start(h)
     h.say(call_id, "SIM swap please")
     h.say(call_id, h.current_phrase(call_id), whispered(), 700)  # synthetic voice: hard fail

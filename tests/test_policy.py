@@ -1,4 +1,5 @@
 import pytest
+from conftest import enforce_policy
 
 from pratyaksh.domain import ChallengeKind, Evidence, RequestKind, Signals, Verdict
 from pratyaksh.policy import Policy, PolicyError
@@ -38,10 +39,19 @@ def test_wrong_code_is_a_hard_block_with_a_reason(policy):
     assert any("does not match" in r for r in d.reasons)
 
 
-def test_synthetic_voice_blocks_in_enforce_mode(policy):
-    d = policy.decide([human_whisper(spoof_score=0.95), code()])
+def test_synthetic_voice_blocks_in_enforce_mode():
+    d = enforce_policy().decide([human_whisper(), code(spoof=0.95)])
     assert d.verdict is Verdict.BLOCK
     assert any("synthetic" in r for r in d.reasons)
+
+
+def test_a_real_whisper_the_spoof_model_calls_synthetic_still_passes(policy):
+    # Measured Oct 27: the spoof model scores real human whispers >= 0.85 in 67 of 87 recordings
+    # (EARS, Expresso, Hindi), so the shipped Policy uses it as advice only, and says nothing about it
+    # for a Whisper Phrase, where its opinion means nothing.
+    d = policy.decide([human_whisper(spoof_score=1.0), code()])
+    assert d.verdict is Verdict.PASS
+    assert not any("synthetic" in r for r in d.reasons)
 
 
 def test_clone_like_responses_block(policy):
@@ -97,8 +107,10 @@ def test_an_attack_wave_is_several_blocks_in_a_short_time(policy):
     assert not Policy(raw).attack_wave(100)  # 0 turns it off
 
 
-def test_a_step_up_for_an_inconclusive_call_is_not_a_retry_for_a_later_miss(policy):
+def test_a_step_up_for_an_inconclusive_call_is_not_a_retry_for_a_later_miss():
     # Inconclusive, so one more Whisper Phrase; that phrase is then missed. The mean alone would PASS.
+    # (The spoof score, enforced here, is what makes the first two Responses inconclusive.)
+    policy = enforce_policy()
     shaky = human_whisper(task_match=1.0, whisper_score=1.0, spoof_score=0.6)
     first = policy.decide([shaky, code(latency=1500, spoof=0.6)], step_ups_used=0)
     assert first.verdict is Verdict.STEP_UP and first.next_challenge is W
