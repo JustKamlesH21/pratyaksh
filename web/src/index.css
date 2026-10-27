@@ -6,7 +6,7 @@
 @import "tailwindcss";
 
 /* =====================================================================================================
-   Pratyaksh design tokens. The system as built is documented in docs/DESIGN.md and shown live at /design.
+   Pratyaksh design tokens. The system as built is documented in docs/DESIGN.md.
    Fonts are bundled (the demo LAN may have no internet, ADR-0005).
 
    COLOUR. Cool neutrals on one hue (265), hairline borders instead of shadows, ONE accent (cobalt) for
@@ -617,8 +617,8 @@
 }
 
 /* -----------------------------------------------------------------------------------------------------
-   Reduced motion: under the OS setting, or html[data-motion="reduce"] (the toggle on /design, so a judge
-   can see it without changing settings). Animations are shortened to 1 ms rather than removed, so they
+   Reduced motion: under the OS setting, or html[data-motion="reduce"] (set from localStorage "motion" =
+   "reduce", for checking without changing OS settings). Animations are shortened to 1 ms rather than removed, so they
    end in their final state and animationend still fires; loops run once and stop. The Verdict Ribbon and
    the Security Alert keep a 150 ms crossfade so the change still registers.
    ----------------------------------------------------------------------------------------------------- */
