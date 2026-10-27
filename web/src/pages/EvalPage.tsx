@@ -7,9 +7,9 @@ import { REQUEST_LABEL } from "../types";
 
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "-" : `${Math.round(v * 100)}%`);
 
-/** "9/10 · 95% CI 60–98%", or "-" when nothing was measured. */
+/** "9/10 · 95% CI 60% to 98%", or "-" when nothing was measured. */
 const counted = (r: EvalRate | undefined) =>
-  !r || !r.n ? "-" : `${r.k}/${r.n}${r.ci95 ? ` · 95% CI ${pct(r.ci95[0])}–${pct(r.ci95[1])}` : ""}`;
+  !r || !r.n ? "-" : `${r.k}/${r.n}${r.ci95 ? ` · 95% CI ${pct(r.ci95[0])} to ${pct(r.ci95[1])}` : ""}`;
 
 const FACTOR_LABEL: Record<string, string> = {
   possession_code: "Possession Code",

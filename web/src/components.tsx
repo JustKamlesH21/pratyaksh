@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle, CurrencyInr, GearSix, type Icon, Key, LockKey, Prohibit, SimCard, UserPlus, Wallet, Warning, Waveform,
 } from "@phosphor-icons/react";
+import { useLocation } from "react-router-dom";
 import { api, consoleKey, eventsUrl } from "./api";
 import type { CallView, Customer, Outcome, RequestKind, Verdict } from "./types";
 
@@ -17,7 +18,7 @@ export const REQUEST_ICON: Record<RequestKind, Icon> = {
 export function Logo({ size = 28 }: { size?: number }) {
   return (
     <span
-      className="inline-grid shrink-0 place-items-center rounded-lg bg-accent text-on-color"
+      className="inline-grid shrink-0 place-items-center rounded-lg bg-accent text-on-accent"
       style={{ width: size, height: size }}
       aria-hidden
     >
@@ -63,7 +64,7 @@ const outcomeText: Record<Outcome, [string, string]> = {
   approved_in_app: ["Approved in app", "text-pass"],
   blocked: ["Blocked", "text-block"],
   declined_in_app: ["Declined in app", "text-block"],
-  handed_to_agent: ["Handed to officer", "text-stepup"],
+  handed_to_agent: ["Handed to officer", "text-ink"],
   ended: ["Ended (questions only)", "text-ink-soft"],
   abandoned: ["Abandoned", "text-ink-soft"],
 };
@@ -72,45 +73,53 @@ export function OutcomeLabel({ outcome }: { outcome: Outcome | null }) {
   if (!outcome)
     return (
       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent">
-        <span className="live-dot" aria-hidden /> Live
+        <span className="live-dot" aria-hidden /> In call
       </span>
     );
   const [text, cls] = outcomeText[outcome];
   return <span className={`text-xs font-semibold ${cls}`}>{text}</span>;
 }
 
-/** A 0..1 meter. `good` says whether high values are good (task match) or bad (spoof score). */
-export function Meter({ label, value, good = true, threshold, suffix }: {
+/** A 0..1 meter for one Signal. `good` says whether high values are good (Task Match) or bad.
+ *  A missed threshold is drawn in block; a met one stays neutral, so the Verdict keeps the only strong
+ *  colour. `advisory` (the Spoof Score) is never pass or block and is labelled as not deciding anything.
+ *  A Signal that was not measured is a hatched strip, never a silent zero. */
+export function Meter({ label, value, good = true, threshold, suffix, missed = good ? "below" : "above", advisory = false }: {
   label: string;
   value: number | null;
   good?: boolean;
   threshold?: number;
   suffix?: string;
+  missed?: string;
+  advisory?: boolean;
 }) {
   const v = value ?? 0;
-  const ok = value === null ? null : threshold === undefined ? null : good ? v >= threshold : v < threshold;
-  const color = ok === null ? "bg-ink-soft" : ok ? "bg-pass" : "bg-block";
+  const ok = advisory || value === null || threshold === undefined ? null : good ? v >= threshold : v < threshold;
+  const color = ok === false ? "bg-block" : "bg-advisory";
   return (
-    <div className="grid grid-cols-[7.5rem_1fr_4.5rem] items-center gap-2 text-sm">
+    <div className="grid grid-cols-[7.5rem_1fr_4.5rem] items-center gap-x-2 gap-y-0.5 text-sm">
       <span className="text-ink-soft">{label}</span>
       <div className="relative">
-        <div className="h-2 overflow-hidden rounded-full bg-sunken">
+        <div className={`h-2 overflow-hidden rounded-full ${value === null ? "not-measured" : "bg-sunken"}`}>
           {/* grows in when the Signal is measured; scaleX, not width, so no layout work */}
           {value !== null && (
             <div
-              className={`motion-grow h-full origin-left motion-safe:transition-transform motion-safe:duration-500 ${color}`}
+              className={`motion-grow h-full origin-left ${color}`}
               style={{ transform: `scaleX(${Math.max(0, Math.min(1, v))})` }}
             />
           )}
         </div>
-        {threshold !== undefined && (
+        {threshold !== undefined && !advisory && (
           <div className="absolute -top-1 h-4 w-0.5 rounded-full bg-ink/60" style={{ left: `${threshold * 100}%` }} title={`threshold ${threshold}`} />
         )}
       </div>
       <span className="text-right font-mono text-xs">
-        {value === null ? "n/a" : suffix ?? v.toFixed(2)}
-        {ok !== null && <span className={ok ? "text-pass" : "text-block"}> {ok ? "ok" : "low"}</span>}
+        {value === null ? "not measured" : suffix ?? v.toFixed(2)}
+        {ok !== null && <span className={ok ? "text-ink-soft" : "font-semibold text-block"}> {ok ? "meets" : missed}</span>}
       </span>
+      {advisory && (
+        <span className="col-start-2 col-end-4 text-xs text-ink-soft">advisory · flags some real whispers, not used in the Verdict</span>
+      )}
     </div>
   );
 }
@@ -133,7 +142,7 @@ export function CustomerPicker({ value, onChange, label = "Customer" }: {
     <label className="flex flex-col gap-1 text-sm">
       <span className="font-medium text-ink-soft">{label}</span>
       <select
-        className="rounded-lg border border-line bg-surface px-3 py-2 text-ink"
+        className="rounded-lg border border-line-strong bg-surface px-3 py-2 text-ink"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -186,33 +195,42 @@ export function Reveal({ children, className = "", i = 0, as: Tag = "div" }: {
   );
 }
 
+/** Stage mode from a query string: ?stage=1 (125% type) or ?stage=small (112.5%, a 1280x800 projector). */
+export function stageOf(search: string): "1" | "small" | null {
+  const v = new URLSearchParams(search).get("stage");
+  if (!v || v === "0") return null;
+  return v === "small" ? "small" : "1";
+}
+
+/** True on a page opened for the projector (?stage=1). */
+export function useStage(): boolean {
+  return stageOf(useLocation().search) !== null;
+}
+
+/** Reduced motion from the OS, or from the /design toggle (html[data-motion="reduce"]). */
 export function prefersReducedMotion(): boolean {
+  if (typeof document !== "undefined" && document.documentElement.dataset.motion === "reduce") return true;
   return typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Counts up to `value` when it first arrives or changes (straight to it under reduced motion). */
-export function CountUp({ value, decimals = 0, ms = 900 }: { value: number; decimals?: number; ms?: number }) {
-  const [shown, setShown] = useState(prefersReducedMotion() ? value : 0);
-  const from = useRef(0);
-  useEffect(() => {
-    if (prefersReducedMotion()) {
-      setShown(value);
-      return;
-    }
-    const start = performance.now();
-    const begin = from.current;
-    let raf = 0;
-    const step = (now: number) => {
-      const k = Math.min(1, (now - start) / ms);
-      const eased = 1 - Math.pow(1 - k, 4);
-      setShown(begin + (value - begin) * eased);
-      if (k < 1) raf = requestAnimationFrame(step);
-      else from.current = value;
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [value, ms]);
-  return <>{shown.toFixed(decimals)}</>;
+/** "hi" or "kn" when the text has Devanagari or Kannada letters, for the element's lang attribute (Indic
+ *  line-height, no tracking, the right Noto face for screen readers). Mixed Hindi and English is "hi". */
+export function scriptLang(text?: string | null): "hi" | "kn" | undefined {
+  if (!text) return undefined;
+  if (/[ಀ-೿]/.test(text)) return "kn";
+  if (/[ऀ-ॿ]/.test(text)) return "hi";
+  return undefined;
+}
+
+/** A live number. When the value changes, the new one crossfades in (150 ms); no counting up, no rolling
+ *  digits, so what is on screen is always a real reading. */
+export function LiveNumber({ value, decimals = 0 }: { value: number; decimals?: number }) {
+  const text = value.toFixed(decimals);
+  return (
+    <span key={text} className="motion-fade">
+      {text}
+    </span>
+  );
 }
 
 export function ErrorNote({ error }: { error: string | null }) {
@@ -304,11 +322,11 @@ export function KeyGate({ onKey, why = "What Callers said and each Customer's ri
             type="password"
             autoFocus
             aria-label="Console key"
-            className="rounded-lg border border-line bg-canvas px-3 py-2"
+            className="rounded-lg border border-line-strong bg-canvas px-3 py-2"
             value={key}
             onChange={(e) => setKey(e.target.value)}
           />
-          <button className="press inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-color">
+          <button className="press inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-accent">
             <Key size={18} /> Unlock
           </button>
         </form>

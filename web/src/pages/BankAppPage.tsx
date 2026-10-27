@@ -1,9 +1,10 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Bank, Password, ShieldCheck, Siren } from "@phosphor-icons/react";
+import { Bank, EyeSlash, Password, ShieldCheck, Siren } from "@phosphor-icons/react";
 import { api } from "../api";
 import { ErrorNote } from "../components";
 import type { DeviceMessage, Inbox } from "../types";
+import { REQUEST_LABEL } from "../types";
 
 /** The Customer's Registered Device. Open the pairing link on a phone:
  *  /bank?customer=cust-ananya&device=<token>  (printed by `pratyaksh-seed`, in the API log and on /demo). */
@@ -28,11 +29,14 @@ export default function BankAppPage() {
 }
 
 /** The Bank App on one paired Registered Device: Possession Codes, App Approval prompts and Security
- *  Alerts, polled every second. `embedded` gives the phone a fixed height (the Demo hub shows three). */
-export function BankApp({ customer, device, embedded = false, onAlertsDismissed }: {
+ *  Alerts, polled every second. `embedded` gives the phone a fixed height (the Demo hub shows three).
+ *  `maskCodes` hides Possession Code digits (the projected hub mirror: an attacker in the room must not be
+ *  able to read the code off the big screen; only the real phone shows it). */
+export function BankApp({ customer, device, embedded = false, maskCodes = false, onAlertsDismissed }: {
   customer: string;
   device: string;
   embedded?: boolean;
+  maskCodes?: boolean;
   onAlertsDismissed?: () => void;
 }) {
   const [inbox, setInbox] = useState<Inbox | null>(null);
@@ -83,11 +87,11 @@ export function BankApp({ customer, device, embedded = false, onAlertsDismissed 
   return (
     // A device frame stays dark in both themes, like a real phone.
     <div
-      className={`overflow-hidden rounded-[2.2rem] border-[10px] border-zinc-900 bg-surface ring-1 ring-line ${
+      className={`overflow-hidden rounded-[2.2rem] border-[10px] border-bezel bg-surface ring-1 ring-line ${
         embedded ? "flex h-[26rem] flex-col" : ""
       }`}
     >
-      <div className="bg-accent px-5 pb-5 pt-6 text-on-color">
+      <div className="bg-accent px-5 pb-5 pt-6 text-on-accent">
         <p className="flex items-center gap-1.5 text-xs font-medium opacity-80"><Bank size={15} /> Your bank</p>
         <p className="text-lg font-bold">{inbox?.customer.name ?? "…"}</p>
         <p className="text-sm opacity-80">{inbox?.customer.phone_masked}</p>
@@ -105,32 +109,22 @@ export function BankApp({ customer, device, embedded = false, onAlertsDismissed 
         )}
         {inbox?.messages.map((m) =>
           m.kind === "security_alert" ? (
-            <div key={m.id} className="motion-attention rounded-xl border-2 border-block bg-block/10 p-4">
-              <p className="flex items-center gap-2 font-bold text-block"><Siren size={20} /> Blocked call attempt</p>
+            <div key={m.id} className="alert-in rounded-xl border-2 border-block bg-surface p-4">
+              <p className="flex items-center gap-2 font-bold text-block"><Siren size={20} weight="fill" aria-hidden /> Blocked call attempt</p>
               <p className="mt-1 text-sm text-ink">
                 Someone called the bank as you
                 {m.body.blocked_at && <> at {new Date(m.body.blocked_at + "Z").toLocaleTimeString()}</>}
                 {m.body.request_text && <> and asked to <b>{m.body.request_text}</b></>}. We could not verify them, so
                 nothing was changed.
               </p>
-              <p className="mt-1 text-xs text-ink-soft">
-                Voice requests on your account are paused until you dismiss this. Never share codes with anyone.
-              </p>
+              <p className="mt-1 text-xs text-ink-soft">Voice requests on your account are paused until you dismiss this.</p>
+              <p className="mt-1 text-xs text-ink-soft">If a caller says this check is "not working", hang up.</p>
               <button className="press mt-3 w-full rounded-lg bg-surface py-3 font-bold text-ink ring-1 ring-block/40 disabled:opacity-50" disabled={busy} onClick={dismissAlerts}>
                 Dismiss
               </button>
             </div>
           ) : m.kind === "possession_code" ? (
-            <div key={m.id} className="motion-enter rounded-xl bg-sunken p-4 text-center">
-              <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft"><Password size={17} /> One-time code for your call with the bank</p>
-              <p className="my-2 font-mono text-4xl font-semibold tracking-[0.3em] text-ink" aria-label={m.body.code}>
-                {(m.body.code ?? "").split("").map((d, i) => (
-                  <span key={i} className="motion-enter inline-block" style={{ "--i": i } as CSSProperties}>{d}</span>
-                ))}
-              </p>
-              <TimeLeft message={m} />
-              <p className="mt-2 text-xs text-ink-soft">Read it out on the call. Expires in {m.seconds_left}s</p>
-            </div>
+            <PossessionCode key={m.id} message={m} masked={maskCodes} name={inbox?.customer.name ?? ""} />
           ) : (
             <div key={m.id} className="motion-enter rounded-xl border-2 border-accent bg-accent/10 p-4">
               <p className="flex items-center gap-2 font-bold"><ShieldCheck size={20} className="text-accent" /> Approve this request?</p>
@@ -143,7 +137,7 @@ export function BankApp({ customer, device, embedded = false, onAlertsDismissed 
                 <button className="press rounded-lg bg-surface py-3 font-bold text-block ring-1 ring-block/40 disabled:opacity-50" disabled={busy} onClick={() => answer(m, false)}>
                   Decline
                 </button>
-                <button className="press rounded-lg bg-pass py-3 font-bold text-on-color disabled:opacity-50" disabled={busy} onClick={() => answer(m, true)}>
+                <button className="press rounded-lg bg-accent py-3 font-bold text-on-accent disabled:opacity-50" disabled={busy} onClick={() => answer(m, true)}>
                   Approve
                 </button>
               </div>
@@ -151,6 +145,50 @@ export function BankApp({ customer, device, embedded = false, onAlertsDismissed 
           ),
         )}
       </div>
+    </div>
+  );
+}
+
+/** The Possession Code card: which Request it authorises, the digits grouped 3 + 3, and the anti-relay
+ *  line (read it only if you are on the call; anyone who asks you for it is a scammer). Masked on the
+ *  projector: the digits are not even in the page. */
+export function PossessionCode({ message: m, masked, name }: { message: DeviceMessage; masked: boolean; name: string }) {
+  const code = m.body.code ?? "";
+  const groups = [code.slice(0, 3), code.slice(3)].filter(Boolean);
+  const request = m.body.request ? REQUEST_LABEL[m.body.request] : null;
+  return (
+    <div className="motion-enter rounded-xl bg-sunken p-4 text-center">
+      <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft">
+        <Password size={17} aria-hidden /> Code for your call with the bank
+      </p>
+      {request && <p className="mt-0.5 text-sm font-semibold text-ink">{request}</p>}
+      {masked ? (
+        <>
+          <p className="my-2 font-mono text-[2.25rem] font-semibold tracking-[0.12em] text-ink-soft" aria-label="Possession Code hidden">
+            ••• •••
+          </p>
+          <p className="flex items-center justify-center gap-1.5 text-xs font-medium text-ink-soft">
+            <EyeSlash size={14} aria-hidden /> Shown only on {name.split(" ")[0] || "the Customer"}'s phone
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="my-2 font-mono text-[2.25rem] font-semibold tracking-[0.12em] text-ink" aria-label={code.split("").join(" ")}>
+            {groups.map((g, k) => (
+              <span key={k} className={k ? "ml-[0.45em]" : ""} aria-hidden>
+                {g.split("").map((d, i) => (
+                  <span key={i} className="motion-enter inline-block" style={{ "--i": k * 3 + i } as CSSProperties}>{d}</span>
+                ))}
+              </span>
+            ))}
+          </p>
+          <p className="text-xs font-medium text-ink">
+            Read it aloud only if <i>you</i> are on this call right now. If someone asks you for this code, it's a scam.
+          </p>
+        </>
+      )}
+      <TimeLeft message={m} />
+      <p className="mt-2 font-mono text-xs text-ink-soft">Expires in {m.seconds_left}s</p>
     </div>
   );
 }

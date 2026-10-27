@@ -1,17 +1,17 @@
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import {
   Broadcast, CheckCircle, Clock, Database as DbIcon, DownloadSimple, Headset, LinkSimple, ListChecks,
-  Robot, SealCheck, ShieldWarning, Siren, Timer, User, Warning, Waveform,
+  Prohibit, Robot, SealCheck, ShieldCheck, ShieldWarning, Siren, Timer, User, Warning, Waveform,
 } from "@phosphor-icons/react";
 import { HttpError, api, downloadTranscript, setConsoleKey } from "../api";
-import { Card, ErrorNote, KeyGate, Meter, OutcomeLabel, REQUEST_ICON, VerdictBadge, useLiveCalls } from "../components";
+import {
+  Card, ErrorNote, KeyGate, Meter, OutcomeLabel, REQUEST_ICON, VerdictBadge, scriptLang, useLiveCalls, useStage,
+} from "../components";
 import type {
   AuditCheck, CallView, CustomerRisk, ReceiptCheck, Signals, Stats, Status, TranscriptLine,
 } from "../types";
 import { REQUEST_LABEL } from "../types";
-
-// Mirrors the defaults in policy.yaml, for drawing threshold marks only.
-const T = { task: 0.7, whisper: 0.6, humanMs: 1200, machineMs: 3000, spoof: 0.85 };
+import { FACTOR_LABEL, T, decidedBy, headline } from "../verdict";
 
 type Filter = "all" | "live" | "review" | "blocked" | "passed";
 const FILTERS: [Filter, string, (c: CallView) => boolean][] = [
@@ -22,14 +22,18 @@ const FILTERS: [Filter, string, (c: CallView) => boolean][] = [
   ["passed", "Passed", (c) => c.verdict === "PASS"],
 ];
 
+/** The Console. With ?stage=1 (the projector) it opens the latest decided Call by itself, at 125% type. */
 export default function ConsolePage() {
+  const stage = useStage();
   const [keyVersion, setKeyVersion] = useState(0);
   const [locked, setLocked] = useState(false);
   const { list, connected, loaded, setCalls } = useLiveCalls(keyVersion, () => setLocked(true));
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const shown = list.filter(FILTERS.find(([f]) => f === filter)![2]);
-  const call = list.find((c) => c.id === selected) ?? shown[0];
+  // On the projector nobody clicks: follow the newest Call that has a Verdict.
+  const latestDecided = list.find((c) => c.verdict !== null);
+  const call = list.find((c) => c.id === selected) ?? (stage && latestDecided ? latestDecided : shown[0]);
 
   function unlock(key: string) {
     setConsoleKey(key);
@@ -48,7 +52,7 @@ export default function ConsolePage() {
             <span className="flex items-center justify-between">
               Calls
               {connected ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-pass">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-accent">
                   <span className="live-dot" aria-hidden /> Live
                 </span>
               ) : (
@@ -67,7 +71,7 @@ export default function ConsolePage() {
                   aria-selected={filter === f}
                   onClick={() => setFilter(f)}
                   className={`press rounded-full px-2.5 py-1 text-xs font-medium ${
-                    filter === f ? "bg-accent text-on-color" : "bg-sunken text-ink-soft hover:text-ink"
+                    filter === f ? "bg-accent text-on-accent" : "bg-sunken text-ink-soft hover:text-ink"
                   }`}
                 >
                   {label} <span className="font-mono opacity-75">{n}</span>
@@ -94,7 +98,7 @@ export default function ConsolePage() {
                   <button
                     onClick={() => setSelected(c.id)}
                     className={`press flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left ${
-                      call?.id === c.id ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-sunken"
+                      call?.id === c.id ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-sunken"} ${c.verdict === "BLOCK" ? "border-l-2 border-block" : ""
                     }`}
                   >
                     <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${c.state === "closed" ? "bg-sunken text-ink-soft" : "bg-accent/12 text-accent"}`}>
@@ -148,7 +152,7 @@ function StatusBar() {
   return (
     <div className="flex flex-col gap-2">
       {wave?.active && (
-        <div className="motion-attention flex flex-wrap items-center gap-3 rounded-xl border border-block/40 bg-block/10 px-4 py-3 text-sm" role="alert">
+        <div className="motion-enter flex flex-wrap items-center gap-3 rounded-xl border border-block/40 bg-block/10 px-4 py-3 text-sm" role="alert">
           <Siren size={22} className="text-block" />
           <b className="text-block">Attack Wave</b>
           <span>
@@ -283,7 +287,7 @@ function ReceiptPanel({ callId, onLocked }: { callId: string; onLocked: () => vo
               Redeem as core banking
             </button>
           )}
-          <button className="press rounded-lg bg-accent px-3 py-1.5 text-sm font-bold text-on-color" onClick={issue}>
+          <button className="press rounded-lg bg-accent px-3 py-1.5 text-sm font-bold text-on-accent" onClick={issue}>
             {check ? "Issue again" : "Issue & verify"}
           </button>
         </span>
@@ -369,6 +373,7 @@ function CallDetail({ call, onUpdate, onLocked }: { call: CallView; onUpdate: (c
           </div>
         </div>
         <div className="mt-4 flex flex-col gap-3">
+          <Conclusion call={call} />
           <RiskPanel customerId={call.customer.id} refresh={call.updated_at} />
           {call.reasons.length > 0 && (
             <ul className="motion-enter list-disc space-y-1 pl-5 text-sm">
@@ -385,7 +390,7 @@ function CallDetail({ call, onUpdate, onLocked }: { call: CallView; onUpdate: (c
                 <button className="press rounded-lg bg-surface px-3 py-1.5 text-sm font-bold text-block ring-1 ring-block/40" onClick={() => review(false)}>
                   Reject
                 </button>
-                <button className="press rounded-lg bg-pass px-3 py-1.5 text-sm font-bold text-on-color" onClick={() => review(true)}>
+                <button className="press rounded-lg bg-accent px-3 py-1.5 text-sm font-bold text-on-accent" onClick={() => review(true)}>
                   Approve
                 </button>
               </span>
@@ -439,7 +444,11 @@ function CallDetail({ call, onUpdate, onLocked }: { call: CallView; onUpdate: (c
                   </span>
                 }
               >
-                {ch.phrase && <p className="mb-2 font-mono text-sm">expected: “{ch.phrase}”</p>}
+                {ch.phrase && (
+                  <p className="mb-2 text-sm">
+                    expected: <span className="font-medium" lang={scriptLang(ch.phrase)}>“{ch.phrase}”</span>
+                  </p>
+                )}
                 {ev ? (
                   <SignalView kind={ch.kind} s={ev.signals} />
                 ) : (
@@ -535,7 +544,7 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
     return (
       <div className={`motion-enter flex items-center gap-3 text-xs ${toned}`} style={style}>
         <span className="h-px flex-1 bg-line" />
-        <span className={`max-w-[80%] text-center ${l.event === "verdict" ? "font-semibold" : ""}`}>{l.text}</span>
+        <span className={`max-w-[80%] text-center ${l.event === "verdict" ? "font-semibold" : ""}`} lang={scriptLang(l.text)}>{l.text}</span>
         <span className="h-px flex-1 bg-line" />
       </div>
     );
@@ -548,7 +557,7 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
         </span>
         <div className="min-w-0">
           <p className="mb-1 text-xs text-ink-soft">Voice Agent · <span className="font-mono">{time}</span></p>
-          <p className="rounded-2xl rounded-tl-sm bg-sunken px-3.5 py-2 leading-relaxed">{l.text}</p>
+          <p className="rounded-2xl rounded-tl-sm bg-sunken px-3.5 py-2 leading-relaxed" lang={scriptLang(l.text)}>{l.text}</p>
         </div>
       </div>
     );
@@ -563,7 +572,7 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
   if (s.task_match != null) chips.push([`task ${s.task_match.toFixed(2)}`, s.task_match >= T.task ? "" : "text-block"]);
   if (s.whisper_score != null) chips.push([`whisper ${s.whisper_score.toFixed(2)}`, s.whisper_score >= T.whisper ? "" : "text-block"]);
   if (s.reply_latency_ms != null) chips.push([`${s.reply_latency_ms} ms reply`, s.reply_latency_ms <= T.humanMs ? "" : "text-stepup"]);
-  if (s.spoof_score != null) chips.push([`spoof ${s.spoof_score.toFixed(2)}`, s.spoof_score < T.spoof ? "" : "text-block"]);
+  if (s.spoof_score != null) chips.push([`spoof ${s.spoof_score.toFixed(2)} (advisory)`, ""]);
   if (s.code_match != null) chips.push([s.code_match ? "code matches" : "code wrong", s.code_match ? "text-pass" : "text-block"]);
   return (
     <div className="motion-enter ml-auto flex max-w-[85%] flex-row-reverse items-start gap-2.5" style={style}>
@@ -575,17 +584,56 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
           {l.timings_ms?.total != null && <span className="font-mono">heard in {l.timings_ms.total} ms · </span>}
           Caller · <span className="font-mono">{time}</span>
         </p>
-        <p className="rounded-2xl rounded-tr-sm bg-accent/12 px-3.5 py-2 leading-relaxed ring-1 ring-accent/20">
+        <p className="rounded-2xl rounded-tr-sm bg-accent/12 px-3.5 py-2 leading-relaxed ring-1 ring-accent/20" lang={l.language === "en" ? undefined : scriptLang(l.text)}>
           {l.text || <span className="italic text-ink-soft">silence</span>}
         </p>
         {l.note && <p className="mt-1 text-xs font-medium text-stepup">{l.note}</p>}
         {chips.length > 0 && (
           <p className="mt-1.5 flex flex-wrap justify-end gap-1">
             {chips.map(([text, cls]) => (
-              <span key={text} className={`rounded-full bg-sunken px-2 py-0.5 font-mono text-[0.68rem] ${cls || "text-ink-soft"}`}>{text}</span>
+              <span key={text} lang={scriptLang(text)} className={`rounded-full bg-sunken px-2 py-0.5 font-mono text-[0.68rem] ${cls || "text-ink-soft"}`}>{text}</span>
             ))}
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** The top of a decided Call, read in three seconds: the Verdict word, one plain sentence, what decided it,
+ *  and the authentication factors it rests on (Datadog's order: conclusion, then evidence). */
+function Conclusion({ call }: { call: CallView }) {
+  if (!call.verdict) return null;
+  const by = decidedBy(call);
+  const word = { PASS: "PASS", STEP_UP: "STEP-UP", BLOCK: "BLOCKED" }[call.verdict];
+  const tone = { PASS: "text-pass", STEP_UP: "text-stepup", BLOCK: "text-block" }[call.verdict];
+  const edge = { PASS: "border-pass", STEP_UP: "border-stepup", BLOCK: "border-block" }[call.verdict];
+  const Glyph = { PASS: ShieldCheck, STEP_UP: Warning, BLOCK: Prohibit }[call.verdict];
+  const code = call.evidence.find((e) => e.kind === "possession_code")?.signals.code_match;
+  const whisper = call.evidence.filter((e) => e.kind === "whisper_phrase").at(-1)?.signals;
+  const factors: [string, boolean | null][] = [
+    ["Possession (Registered Device)", code === undefined ? null : !!code],
+    ["Inherence, liveness (Whisper)", whisper ? (whisper.whisper_score ?? 0) >= T.whisper && (whisper.task_match ?? 0) >= T.task : null],
+  ];
+  return (
+    <div className={`motion-enter flex flex-col gap-2 border-l-2 pl-4 ${edge}`}>
+      <p className={`flex items-center gap-2 font-display text-3xl font-bold tracking-tight ${tone}`}>
+        <Glyph size={30} weight="fill" aria-hidden /> {word}
+      </p>
+      <p className="text-lg font-medium leading-snug">{headline(call, call.customer.name.split(" ")[0])}</p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        {by && (
+          <span className="rounded-full bg-sunken px-3 py-1">
+            Decided by: <b>{FACTOR_LABEL[by]}</b>
+          </span>
+        )}
+        {factors.map(([name, ok]) => (
+          <span key={name} className="inline-flex items-center gap-1 text-ink-soft">
+            {ok === null ? "not asked" : ok ? <CheckCircle size={15} weight="fill" className="text-ink" /> : <Prohibit size={15} weight="fill" className="text-block" />}
+            {name}
+          </span>
+        ))}
+        <span className="text-xs text-ink-soft">Aligned to RBI Authentication Directions 2025</span>
       </div>
     </div>
   );
@@ -598,13 +646,15 @@ function SignalView({ kind, s }: { kind: string; s: Signals }) {
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm">
-        heard: <span className="font-mono">“{s.transcript || "…"}”</span>
+        heard: <span className="font-medium" lang={scriptLang(s.transcript)}>“{s.transcript || "…"}”</span>
       </p>
       {kind === "whisper_phrase" && <Meter label="Task Match" value={s.task_match} threshold={T.task} />}
       {kind === "whisper_phrase" && <Meter label="Whisper Score" value={s.whisper_score} threshold={T.whisper} />}
       {/* full credit only at or under human_ms, matching the Policy's "slow reply" Reason */}
-      <Meter label="Reply Latency" value={latencyScore} threshold={1} suffix={latency === null ? "none" : `${latency} ms`} />
-      <Meter label="Spoof Score" value={s.spoof_score} good={false} threshold={T.spoof} />
+      {kind === "whisper_phrase" && (
+        <Meter label="Reply Latency" value={latencyScore} threshold={1} missed="slow" suffix={latency === null ? "none" : `${latency} ms`} />
+      )}
+      <Meter label="Spoof Score" value={s.spoof_score} advisory />
       {kind === "possession_code" && (
         <p className="text-sm">
           code read out: <span className="font-mono">{s.spoken_digits ?? "-"}</span>{" "}

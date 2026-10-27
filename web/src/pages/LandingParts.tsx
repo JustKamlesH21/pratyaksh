@@ -4,7 +4,7 @@
    docs/BUSINESS.md) or read from policy.yaml. */
 import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { Bank, Password, Siren, User, Waveform } from "@phosphor-icons/react";
-import { prefersReducedMotion } from "../components";
+import { prefersReducedMotion, scriptLang } from "../components";
 
 /** True once the element has scrolled into view (IntersectionObserver, no scroll listener).
  *  Starts true under reduced motion, so nothing waits on scrolling. */
@@ -41,8 +41,8 @@ export function DeviceFrame({ name, phone, children, className = "" }: {
   className?: string;
 }) {
   return (
-    <div className={`overflow-hidden rounded-[2.2rem] border-[10px] border-zinc-900 bg-surface ring-1 ring-line ${className}`}>
-      <div className="bg-accent px-5 pb-5 pt-6 text-on-color">
+    <div className={`overflow-hidden rounded-[2.2rem] border-[10px] border-bezel bg-surface ring-1 ring-line ${className}`}>
+      <div className="bg-accent px-5 pb-5 pt-6 text-on-accent">
         <p className="flex items-center gap-1.5 text-xs font-medium opacity-80"><Bank size={15} /> Your bank</p>
         <p className="text-lg font-bold">{name}</p>
         <p className="text-sm opacity-80">{phone}</p>
@@ -55,14 +55,12 @@ export function DeviceFrame({ name, phone, children, className = "" }: {
 /** The Security Alert card from the Bank App inbox (the Dismiss button is shown, not wired). */
 export function SecurityAlertPreview({ request, className = "" }: { request: string; className?: string }) {
   return (
-    <div className={`rounded-xl border-2 border-block bg-block/10 p-4 ${className}`}>
-      <p className="flex items-center gap-2 font-bold text-block"><Siren size={20} /> Blocked call attempt</p>
+    <div className={`alert-in rounded-xl border-2 border-block bg-surface p-4 ${className}`}>
+      <p className="flex items-center gap-2 font-bold text-block"><Siren size={20} weight="fill" /> Blocked call attempt</p>
       <p className="mt-1 text-sm text-ink">
         Someone called the bank as you and asked to <b>{request}</b>. We could not verify them, so nothing was changed.
       </p>
-      <p className="mt-1 text-xs text-ink-soft">
-        Voice requests on your account are paused until you dismiss this. Never share codes with anyone.
-      </p>
+      <p className="mt-1 text-xs text-ink-soft">Voice requests on your account are paused until you dismiss this.</p>
       <span className="mt-3 block w-full rounded-lg bg-surface py-3 text-center font-bold text-ink ring-1 ring-block/40" aria-hidden>
         Dismiss
       </span>
@@ -71,22 +69,25 @@ export function SecurityAlertPreview({ request, className = "" }: { request: str
 }
 
 /** The Possession Code card from the Bank App inbox. Digits arrive one by one when revealed. */
-export function PossessionCodePreview({ code }: { code: string }) {
+export function PossessionCodePreview({ code, request }: { code: string; request: string }) {
   return (
     <div className="rounded-xl bg-sunken p-4 text-center">
-      <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft"><Password size={17} /> One-time code for your call with the bank</p>
-      <p className="my-2 font-mono text-4xl font-semibold tracking-[0.3em] text-ink" aria-label={code.split("").join(" ")}>
+      <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft"><Password size={17} /> Code for your call with the bank</p>
+      <p className="mt-0.5 text-sm font-semibold">{request}</p>
+      <p className="my-2 font-mono text-[2.25rem] font-semibold tracking-[0.12em] text-ink" aria-label={code.split("").join(" ")}>
         {code.split("").map((d, i) => (
-          <span key={i} className="lp-digit inline-block" style={{ "--i": i } as CSSProperties} aria-hidden>{d}</span>
+          <span key={i} className={`lp-digit inline-block ${i === 3 ? "ml-[0.45em]" : ""}`} style={{ "--i": i } as CSSProperties} aria-hidden>{d}</span>
         ))}
       </p>
-      <p className="mt-2 text-xs text-ink-soft">Read it out on the call.</p>
+      <p className="text-xs font-medium">
+        Read it aloud only if <i>you</i> are on this call right now. If someone asks you for this code, it's a scam.
+      </p>
     </div>
   );
 }
 
 /** A Voice Agent line, styled as in the Console Transcript. */
-export function AgentLine({ children }: { children: ReactNode }) {
+export function AgentLine({ children, lang }: { children: ReactNode; lang?: string }) {
   return (
     <div className="flex max-w-[92%] items-start gap-2.5">
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent" aria-hidden>
@@ -94,14 +95,14 @@ export function AgentLine({ children }: { children: ReactNode }) {
       </span>
       <div className="min-w-0">
         <p className="mb-1 text-xs text-ink-soft">Voice Agent</p>
-        <p className="rounded-2xl rounded-tl-sm bg-sunken px-3.5 py-2 leading-relaxed">{children}</p>
+        <p className="rounded-2xl rounded-tl-sm bg-sunken px-3.5 py-2 leading-relaxed" lang={lang}>{children}</p>
       </div>
     </div>
   );
 }
 
 /** A Caller line with its chips, styled as in the Console Transcript. chips: [text, colour class]. */
-export function CallerLine({ who = "Caller", text, chips = [] }: { who?: string; text: ReactNode; chips?: [string, string][] }) {
+export function CallerLine({ who = "Caller", text, chips = [], lang }: { who?: string; text: ReactNode; chips?: [string, string][]; lang?: string }) {
   return (
     <div className="ml-auto flex max-w-[92%] flex-row-reverse items-start gap-2.5">
       <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sunken text-ink-soft" aria-hidden>
@@ -109,11 +110,11 @@ export function CallerLine({ who = "Caller", text, chips = [] }: { who?: string;
       </span>
       <div className="flex min-w-0 flex-col items-end">
         <p className="mb-1 text-xs text-ink-soft">{who}</p>
-        <p className="rounded-2xl rounded-tr-sm bg-accent/12 px-3.5 py-2 leading-relaxed ring-1 ring-accent/20">{text}</p>
+        <p className="rounded-2xl rounded-tr-sm bg-accent/12 px-3.5 py-2 leading-relaxed ring-1 ring-accent/20" lang={lang}>{text}</p>
         {chips.length > 0 && (
           <p className="mt-1.5 flex flex-wrap justify-end gap-1">
             {chips.map(([t, cls]) => (
-              <span key={t} className={`rounded-full bg-sunken px-2 py-0.5 font-mono text-[0.68rem] ${cls || "text-ink-soft"}`}>{t}</span>
+              <span key={t} lang={scriptLang(t)} className={`rounded-full bg-sunken px-2 py-0.5 font-mono text-[0.68rem] ${cls || "text-ink-soft"}`}>{t}</span>
             ))}
           </p>
         )}
