@@ -309,6 +309,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
                 "voice_paused": risk["voice_pause"]["active"],
                 "pause_minutes_left": risk["voice_pause"]["minutes_left"],
                 "open_security_alerts": risk["open_security_alerts"],
+                "phone_host": c(request).settings.lan_ip or None,  # a phone cannot reach localhost
             })
         return hub
 

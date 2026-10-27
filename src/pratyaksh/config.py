@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     cors_origins: str = "http://localhost:5173"
+    lan_ip: str = ""  # the laptop on the demo LAN (set-lan-ip.ps1 keeps it current): phone links use it
     console_key: str = ""  # required in X-Console-Key to decide Agent Reviews; set it for the demo
     # Required in X-Agent-Key on the Voice Agent's endpoints, so no other laptop can post Responses
     # (and forge Reply Latency) or start Calls directly. Set it for the demo; the agent sends it.

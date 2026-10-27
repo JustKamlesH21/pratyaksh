@@ -561,8 +561,12 @@ function PairingLink({ customer }: { customer: DemoCustomer }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const input = useRef<HTMLInputElement>(null);
-  const url = `${window.location.origin}/bank?customer=${encodeURIComponent(customer.id)}&device=${encodeURIComponent(customer.device_token)}`;
+  // The hub usually runs at localhost on the laptop, which a phone cannot reach: use the laptop's LAN address.
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+  const host = local && customer.phone_host ? customer.phone_host : window.location.hostname;
+  const port = window.location.port ? `:${window.location.port}` : "";
+  const url = `${window.location.protocol}//${host}${port}/bank?customer=${encodeURIComponent(customer.id)}&device=${encodeURIComponent(customer.device_token)}`;
+  const unreachable = local && !customer.phone_host;
 
   async function copy() {
     try {
@@ -622,9 +626,9 @@ function PairingLink({ customer }: { customer: DemoCustomer }) {
               </a>
             </div>
             <p className="text-xs text-ink-soft">
-              {local
-                ? "A phone cannot reach localhost. Open this page by the laptop's network address, then copy the link again."
-                : `Open it on ${customer.name.split(" ")[0]}'s phone. It pairs that phone as the Registered Device, so keep it private.`}
+              {unreachable
+                ? "A phone cannot reach localhost, and LAN_IP is not set in .env (run scripts\windows\set-lan-ip.ps1)."
+                : `Send this link to ${customer.name.split(" ")[0]}'s phone (on the same Wi-Fi) and open it there. It pairs that phone as the Registered Device, so keep it private.`}
             </p>
           </div>
         </div>

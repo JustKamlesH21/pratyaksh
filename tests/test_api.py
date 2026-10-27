@@ -29,6 +29,7 @@ def api(tmp_path):
         warm_up_models=False,
         livekit_public_url="ws://192.168.1.10:7880",
         console_key="console-secret",
+        lan_ip="192.168.1.10",
     )
     models = ScriptedSpeechModels(spoof=0.05)
     container = build(settings, speech=models)
@@ -353,3 +354,8 @@ def test_the_demo_hub_never_hands_out_device_tokens_without_a_console_key(tmp_pa
     )
     with TestClient(create_app(container=build(settings, speech=ScriptedSpeechModels()))) as client:
         assert client.get("/v1/demo/customers").status_code == 403
+
+
+def test_the_demo_hub_builds_phone_links_on_the_laptops_network_address(api):
+    # On the laptop the hub runs at localhost, which a phone cannot reach; LAN_IP is what it can.
+    assert {c["phone_host"] for c in api.get("/v1/demo/customers").json()} == {"192.168.1.10"}
