@@ -23,7 +23,10 @@ signals:
     human_ms: 1200       # at or below: full credit
     machine_ms: 3000     # at or above: no credit
   spoof_score:
-    mode: enforce        # enforce | advisory | off
+    # advisory since Oct 27 (Kamlesh's OK): the model scored 67 of 87 real human whispers >= 0.85
+    # (EARS, Expresso, Hindi corpora) and Indic Parler TTS 0.0, so enforcing it would BLOCK genuine
+    # Callers. It is shown in Reasons for voiced Responses only and never decides a Verdict.
+    mode: advisory       # enforce | advisory | off
     block_at: 0.85       # enforce mode: P(synthetic) at or above this is a hard fail
   code_match:
     max_digits: 8        # a readout with more digits never matches: a long run of digits would try many codes

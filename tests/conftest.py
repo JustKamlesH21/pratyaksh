@@ -72,10 +72,20 @@ class Clock:
         self.now += timedelta(seconds=seconds)
 
 
+def enforce_policy() -> Policy:
+    """The shipped Policy with the spoof model enforced (a hard fail at block_at), for tests of that mode."""
+    import yaml
+    from importlib import resources
+
+    raw = yaml.safe_load(resources.files("pratyaksh").joinpath("policy.yaml").read_text(encoding="utf-8"))
+    raw["signals"]["spoof_score"]["mode"] = "enforce"
+    return Policy(raw)
+
+
 class Harness:
     """A Verifier on in-memory SQLite (or the test MySQL) with scripted speech models."""
 
-    def __init__(self, spoof=None, llm=None, url: str | None = None):
+    def __init__(self, spoof=None, llm=None, url: str | None = None, policy: Policy | None = None):
         self.db = Database(url or database_url())
         self.db.create_schema()
         self.db.seed_demo_customers()
@@ -84,7 +94,7 @@ class Harness:
         self.events = EventHub()
         self.verifier = Verifier(
             self.db,
-            Policy.load(),
+            policy or Policy.load(),
             SignalExtractor(self.models),
             Interpreter(llm),
             self.events,

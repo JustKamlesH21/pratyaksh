@@ -216,7 +216,9 @@ class Policy:
                 parts["spoof_score"] = 1.0 - s.spoof_score
                 if s.spoof_score >= self._spoof_block_at:
                     hard.append(f"voice looks synthetic (spoof score {s.spoof_score:.2f}).")
-            if s.spoof_score >= 0.5:
+            # The spoof model calls most real whispers synthetic (Oct 27), so for a Whisper Phrase its
+            # lean is noise; in enforce mode the hard fail above still applies.
+            if s.spoof_score >= 0.5 and kind is not ChallengeKind.WHISPER_PHRASE:
                 why.append(f"spoof model leans synthetic ({s.spoof_score:.2f}).")
 
         total_w = sum(self._weights.get(k, 0.0) for k in parts)
