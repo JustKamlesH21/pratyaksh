@@ -11,6 +11,7 @@ import logging
 from dataclasses import dataclass
 
 from ..domain import Step
+from ..verification.verifier import ONE_MOMENT
 from .ports import CallAudio, CallerLeft, VerifierPort
 
 log = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class Timing:
     max_reply_s: float = 12.0
     poll_s: float = 1.0
     max_wait_s: float = 300.0
+    filler_after_s: float = 1.0  # a reply not voiced by then gets ONE_MOMENT first, not silence
 
 
 async def run_call(
@@ -35,7 +37,7 @@ async def run_call(
     try:
         while True:
             if step.say:
-                await audio.play(await verifier.voice(step.say), step.say)
+                await _speak(audio, verifier, step.say, timing)
             if step.end:
                 return step
             if step.listen:
@@ -57,6 +59,18 @@ async def run_call(
         log.exception("call %s failed; closing it", call_id)
         await _safe_hang_up(verifier, call_id)
         raise
+
+
+async def _speak(audio: CallAudio, verifier: VerifierPort, text: str, timing: Timing) -> None:
+    """Play the reply. Lines voiced ahead of time come back at once; a new one (an LLM answer) takes
+    seconds to synthesise, so the Caller hears ONE_MOMENT instead of silence meanwhile (Oct 27)."""
+    voicing = asyncio.ensure_future(verifier.voice(text))
+    try:
+        wav = await asyncio.wait_for(asyncio.shield(voicing), timing.filler_after_s)
+    except TimeoutError:
+        await audio.play(await verifier.voice(ONE_MOMENT), ONE_MOMENT)
+        wav = await voicing
+    await audio.play(wav, text)
 
 
 async def _wait_for_change(audio: CallAudio, verifier: VerifierPort, waiting: Step, timing: Timing) -> Step:

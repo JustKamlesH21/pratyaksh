@@ -32,7 +32,7 @@ from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
 from .receipts import InvalidReceipt, ReceiptSigner
 from .transcript import as_text, lines
-from .interpreter import Context, Interpreter, TurnKind, Understanding
+from .interpreter import _NO_ANSWER_IN, NO_ANSWER, Context, Faq, Interpreter, TurnKind, Understanding
 from .store import (
     GENESIS, AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow, chain_hash,
 )
@@ -121,6 +121,8 @@ _HANDOVER_LEADS = ("Sure.", "I'm having trouble on this line.", "I'm sorry, I co
 
 
 CODE_PROMPT = "I've sent a six-digit code to the bank app on your registered phone. Please read it out."
+# Said by the Voice Agent while a reply that was not voiced ahead of time (an LLM answer) is synthesised.
+ONE_MOMENT = "One moment, please."
 
 
 def _whisper_prompt(phrase: str, language: str) -> str:
@@ -138,9 +140,12 @@ def _intro(request: RequestKind, n: int) -> str:
 
 
 def spoken_lines() -> list[str]:
-    """What the Voice Agent can say on a Call, apart from answers to Questions, for voicing ahead of time.
-    Every Whisper Phrase prompt is here, so no Challenge waits for speech synthesis."""
+    """What the Voice Agent can say on a Call, for voicing ahead of time: every Whisper Phrase prompt and
+    every knowledge.yaml answer in each language, so no Challenge and no known Question waits for speech
+    synthesis. Only LLM answers are voiced on the Call (with ONE_MOMENT first if they are slow)."""
+    answers = [a for e in Faq.load().entries for a in e.answers.values()] + list(_NO_ANSWER_IN.values()) + [NO_ANSWER]
     fixed = [
+        ONE_MOMENT, *answers,
         GREETING, CLARIFY, HANDOFF, ANYTHING_ELSE, TAKE_YOUR_TIME, WHEN_READY, CODE_PROMPT,
         *_REASK.values(), *_DONE.values(), *(line for lang in _IN_LANGUAGE.values() for line in lang.values()),
         NOT_HEARD, OF_COURSE, TROUBLE_HEARING, CODE_MISMATCH, CODE_REISSUED, WHICH_REQUEST, BLOCKED,

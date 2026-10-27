@@ -67,7 +67,10 @@
     ಫೋನನ್ನು ಬಾಯಿಯ ಹತ್ತಿರ ಇಟ್ಟುಕೊಳ್ಳಿ.
 - id: why_code
   keywords: [why code, what code, which code, where is the code, code kahan, code kidhar, code elli, ಕೋಡ್ ಎಲ್ಲಿ,
-             ಯಾವ ಕೋಡ್, कोड कहाँ, कौन सा कोड]
+             ಯಾವ ಕೋಡ್, कोड कहाँ, कौन सा कोड,
+             # asked on a real Call (Oct 27): "From where to read the OTP?"
+             where otp, find code, find the code, where code, read otp, otp kahan, otp kidhar, otp elli,
+             ಒಟಿಪಿ ಎಲ್ಲಿ, ओटीपी कहाँ]
   answer: &why_code >-
     We send a six-digit code to the bank app on your registered phone. Reading it out shows that
     the person calling also has your phone. The code is valid for two minutes.
@@ -109,7 +112,8 @@
     ಬರುತ್ತದೆ, ಎಸ್‌ಎಂಎಸ್‌ನಲ್ಲಿ ಅಲ್ಲ.
 - id: two_codes
   during: possession_code
-  keywords: [two codes, many codes, which one, latest code, old code, multiple codes, do code, दो कोड, ಎರಡು ಕೋಡ್]
+  # not "do code": English "where do I find the code" would match it
+  keywords: [two codes, many codes, which one, latest code, old code, multiple codes, do code aaye, दो कोड, ಎರಡು ಕೋಡ್]
   answer: Please read the newest code, the one at the top of the bank app.
   answer_hi: कृपया सबसे नया कोड पढ़िए, जो बैंक ऐप में सबसे ऊपर है।
   answer_kn: ದಯವಿಟ್ಟು ಹೊಸ ಕೋಡ್ ಓದಿ, ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಮೇಲ್ಭಾಗದಲ್ಲಿರುವುದು.

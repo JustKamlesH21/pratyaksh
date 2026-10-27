@@ -7,6 +7,7 @@ from conftest import Harness, voiced, whispered
 from pratyaksh.agent.call_loop import Timing, run_call
 from pratyaksh.agent.ports import CallerLeft, InProcessVerifier
 from pratyaksh.domain import Outcome, Response
+from pratyaksh.verification.verifier import ONE_MOMENT, spoken_lines
 from pratyaksh.voice import PromptVoice, ToneVoice
 
 C = "cust-meera"
@@ -76,6 +77,39 @@ def test_app_approval_wait_then_result_is_spoken(tmp_path):
     final, caller = asyncio.run(scenario())
     assert final.outcome is Outcome.APPROVED_IN_APP
     assert "approve it there" in caller.heard[-2] and "approved this request" in caller.heard[-1]
+
+
+class SlowVoice(InProcessVerifier):
+    """Synthesises lines it has not voiced before slowly, like Parler on a new LLM answer (~6 s)."""
+
+    def __init__(self, h: Harness, tmp_path, slow: str):
+        super().__init__(h.verifier, PromptVoice(ToneVoice(), tmp_path))
+        self.slow = slow
+
+    async def voice(self, text: str) -> bytes:
+        if self.slow in text:
+            await asyncio.sleep(0.3)
+        return await super().voice(text)
+
+
+def test_a_reply_that_is_slow_to_voice_starts_with_one_moment_not_silence(tmp_path):
+    h = Harness()
+    caller = ScriptedCaller(h, [lambda _: ("add payee", voiced(), 700)], leave_after=1)
+    port = SlowVoice(h, tmp_path, slow="whisper these words")
+    asyncio.run(run_call(caller, port, C, "r", Timing(poll_s=0.01, filler_after_s=0.05)))
+    assert caller.heard[1] == ONE_MOMENT and "whisper these words" in caller.heard[2]
+
+
+def test_a_reply_voiced_in_time_has_no_filler(tmp_path):
+    h = Harness()
+    caller = ScriptedCaller(h, [lambda _: ("add payee", voiced(), 700)], leave_after=1)
+    port = SlowVoice(h, tmp_path, slow="never said")
+    asyncio.run(run_call(caller, port, C, "r", Timing(poll_s=0.01, filler_after_s=0.05)))
+    assert ONE_MOMENT not in caller.heard
+
+
+def test_one_moment_is_voiced_ahead_of_time():
+    assert ONE_MOMENT in spoken_lines()
 
 
 def test_caller_leaving_abandons_the_call(tmp_path):
