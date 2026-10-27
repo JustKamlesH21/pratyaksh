@@ -57,6 +57,16 @@ class LiveKitCallAudio:
                 self._left.set()
 
         room.on("participant_disconnected", on_left)
+
+        # The Caller app sends the capture settings its browser applied (noise suppression, auto
+        # gain…) as the "audio" attribute just after joining; one log line explains weak whispers.
+        def on_attributes(changed: dict[str, str], p: rtc.Participant):
+            if p.identity == caller.identity and "audio" in changed:
+                log.info("caller %s audio capture: %.300r", caller.identity, changed["audio"])
+
+        if "audio" in caller.attributes:
+            on_attributes(caller.attributes, caller)
+        room.on("participant_attributes_changed", on_attributes)
         return self
 
     def caller_left(self) -> bool:
