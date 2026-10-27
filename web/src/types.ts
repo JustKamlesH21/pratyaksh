@@ -72,6 +72,7 @@ export interface TranscriptLine {
   understood?: string | null;
   language?: "en" | "hi" | "kn";
   by_llm?: boolean;
+  by_variant?: boolean;
   note?: string;
   challenge?: ChallengeKind;
   liveness?: number | null;

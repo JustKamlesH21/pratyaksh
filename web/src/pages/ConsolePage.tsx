@@ -650,6 +650,7 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
   if (l.language) chips.push([LANGUAGE[l.language], ""]);
   if (l.understood) chips.push([UNDERSTOOD[l.understood] ?? l.understood, ""]);
   if (l.by_llm) chips.push(["understood by the LLM", "text-accent"]);
+  if (l.by_variant) chips.push(["understood from a misheard word", "text-accent"]);
   if (l.liveness != null) chips.push([`liveness ${l.liveness.toFixed(2)}`, l.liveness >= 0.75 ? "text-pass" : l.liveness <= 0.45 ? "text-block" : "text-stepup"]);
   if (s.task_match != null) chips.push([`task ${s.task_match.toFixed(2)}`, s.task_match >= T.task ? "" : "text-block"]);
   if (s.whisper_score != null) chips.push([`whisper ${s.whisper_score.toFixed(2)}`, s.whisper_score >= T.whisper ? "" : "text-block"]);
