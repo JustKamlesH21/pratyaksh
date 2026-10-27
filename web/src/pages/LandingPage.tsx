@@ -10,7 +10,7 @@ import {
   Plugs, Scales, SealCheck, Siren, UserPlus, Waveform,
 } from "@phosphor-icons/react";
 import { api } from "../api";
-import { CountUp, Logo, Reveal, VerdictBadge } from "../components";
+import { LiveNumber, Logo, Reveal, VerdictBadge } from "../components";
 import type { EvalRun, Stats } from "../types";
 import {
   AgentLine, CallerLine, DeviceFrame, PossessionCodePreview, SecurityAlertPreview, Source, useInView,
@@ -24,7 +24,7 @@ function PrimaryCta() {
   return (
     <Link
       to="/demo"
-      className="press group inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-accent px-5 py-3 font-semibold text-on-color hover:bg-accent/90"
+      className="press group inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-accent px-5 py-3 font-semibold text-on-accent hover:bg-accent/90"
     >
       Open the demo
       <ArrowRight size={18} weight="bold" className="nudge group-hover:translate-x-0.5" />
@@ -187,7 +187,7 @@ function RequestPreview() {
   return (
     <div className="flex flex-col gap-4">
       <div className="lp-line" style={{ "--i": 0 } as CSSProperties}>
-        <CallerLine who="Caller as Rahul Verma" text="मुझे नया payee add करना है" chips={[["हिन्दी", ""], ["Request", ""], ["Add payee", "text-accent"]]} />
+        <CallerLine who="Caller as Rahul Verma" lang="hi" text="मुझे नया payee add करना है" chips={[["हिन्दी", ""], ["Request", ""], ["Add payee", "text-accent"]]} />
       </div>
       <div className="lp-line rounded-xl bg-sunken p-3.5 text-xs" style={{ "--i": 1 } as CSSProperties}>
         <p className="text-ink-soft">Challenges per Request, from policy.yaml</p>
@@ -208,13 +208,13 @@ function WhisperPreview() {
   return (
     <div className="flex flex-col gap-4">
       <div className="lp-line" style={{ "--i": 0 } as CSSProperties}>
-        <AgentLine>Please whisper these words. कल सात बजे meeting है.</AgentLine>
+        <AgentLine lang="hi">Please whisper these words. कल सात बजे meeting है.</AgentLine>
       </div>
       <div className="lp-line" style={{ "--i": 1 } as CSSProperties}>
-        <CallerLine who="A real whisper, on an iPhone" text="कल सात बजे meeting है" chips={[["task 1.00", ""], ["whisper 1.00", "text-pass"]]} />
+        <CallerLine who="A real whisper, on an iPhone" lang="hi" text="कल सात बजे meeting है" chips={[["task 1.00", ""], ["whisper 1.00", "text-pass"]]} />
       </div>
       <div className="lp-line" style={{ "--i": 2 } as CSSProperties}>
-        <CallerLine who="A text-to-speech Caller" text="कल सात बजे meeting है" chips={[["task 0.92", ""], ["whisper 0.25", "text-block"]]} />
+        <CallerLine who="A text-to-speech Caller" lang="hi" text="कल सात बजे meeting है" chips={[["task 0.92", ""], ["whisper 0.25", "text-block"]]} />
       </div>
       <p className="lp-line text-xs leading-relaxed text-ink-soft" style={{ "--i": 3 } as CSSProperties}>
         Measured on our first real and synthetic Calls. The synthetic Caller said the right words but scored 0.01 to 0.25 on whispering. The Policy
@@ -228,7 +228,7 @@ function CodePreview() {
   return (
     <div className="flex flex-col gap-4">
       <div className="lp-line" style={{ "--i": 0 } as CSSProperties}>
-        <PossessionCodePreview code="481927" />
+        <PossessionCodePreview code="481927" request="Add payee" />
       </div>
       <div className="lp-line" style={{ "--i": 3 } as CSSProperties}>
         <CallerLine who="Caller" text="four eight one nine two seven" chips={[["code matches", "text-pass"]]} />
@@ -482,7 +482,7 @@ function LiveNumbers({ onState }: { onState: (s: LiveState) => void }) {
           <Reveal key={label} i={k} className="flex flex-col gap-1 bg-surface p-5">
             <span className="text-xs font-medium text-ink-soft">{label}</span>
             <span className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
-              {value === null ? "-" : <CountUp value={value} decimals={decimals} />}
+              {value === null ? "-" : <LiveNumber value={value} decimals={decimals} />}
               {value !== null && <span className="text-xl text-ink-soft">{unit}</span>}
             </span>
             <span className="text-xs text-ink-soft">{hint}</span>
@@ -648,7 +648,7 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-8 text-sm text-ink-soft">
           <Logo size={24} />
           <span>
-            <b className="font-display text-ink">प्रत्यक्ष</b>: perceived directly, with one's own senses.
+            <b lang="hi" className="font-display text-ink">प्रत्यक्ष</b>: perceived directly, with one's own senses.
           </span>
           <span className="ml-auto">Team Omnitrons, FET Aavishkar 2026</span>
         </div>
