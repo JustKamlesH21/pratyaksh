@@ -224,3 +224,11 @@ export const REQUEST_LABEL: Record<RequestKind, string> = {
   high_value_transfer: "Transfer above ₹5 lakh",
   account_service: "Other account change",
 };
+
+/** One Customer on the Demo hub (GET /v1/demo/customers, behind CONSOLE_KEY: it carries the pairing token). */
+export interface DemoCustomer extends Customer {
+  device_token: string;
+  voice_paused: boolean;
+  pause_minutes_left: number | null;
+  open_security_alerts: number;
+}

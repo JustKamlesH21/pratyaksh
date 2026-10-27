@@ -1,10 +1,10 @@
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckCircle, CurrencyInr, GearSix, type Icon, Prohibit, SimCard, UserPlus, Wallet, Warning, Waveform,
+  CheckCircle, CurrencyInr, GearSix, type Icon, Key, LockKey, Prohibit, SimCard, UserPlus, Wallet, Warning, Waveform,
 } from "@phosphor-icons/react";
-import { api } from "./api";
-import type { Customer, Outcome, RequestKind, Verdict } from "./types";
+import { api, consoleKey, eventsUrl } from "./api";
+import type { CallView, Customer, Outcome, RequestKind, Verdict } from "./types";
 
 export const REQUEST_ICON: Record<RequestKind, Icon> = {
   balance_enquiry: Wallet,
@@ -218,4 +218,101 @@ export function CountUp({ value, decimals = 0, ms = 900 }: { value: number; deci
 export function ErrorNote({ error }: { error: string | null }) {
   if (!error) return null;
   return <p className="rounded-lg bg-block/10 px-3 py-2 text-sm text-block">{error}</p>;
+}
+
+
+/** The live list of Calls over the WebSocket. With CONSOLE_KEY set, the key is the first message;
+ *  a refusal (close code 4401) asks the operator for it. */
+export function useLiveCalls(keyVersion: number, onLocked: () => void) {
+  const [calls, setCalls] = useState<Record<string, CallView>>({});
+  const [connected, setConnected] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let closed = false;
+    const connect = () => {
+      ws = new WebSocket(eventsUrl());
+      ws.onopen = () => {
+        ws?.send(JSON.stringify({ key: consoleKey() }));
+        setConnected(true);
+      };
+      ws.onclose = (e) => {
+        setConnected(false);
+        if (e.code === 4401) {
+          onLocked();
+          return; // wait for a key, then the effect runs again
+        }
+        if (!closed) retry = setTimeout(connect, 1500);
+      };
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === "snapshot") {
+          setCalls(Object.fromEntries((msg.calls as CallView[]).map((c) => [c.id, c])));
+          setLoaded(true);
+        } else if (msg.type === "call") {
+          const c = msg.call as CallView;
+          // Updates can arrive out of order across server threads; keep the newest.
+          setCalls((prev) => (prev[c.id] && prev[c.id].updated_at > c.updated_at ? prev : { ...prev, [c.id]: c }));
+        }
+      };
+    };
+    connect();
+    return () => {
+      closed = true;
+      clearTimeout(retry);
+      ws?.close();
+    };
+  }, [keyVersion]);
+
+  const list = useMemo(
+    () => Object.values(calls).sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [calls],
+  );
+  return { list, connected, loaded, setCalls };
+}
+
+/** Asks for the verifier's CONSOLE_KEY when a staff read is refused. `why` says what the key unlocks. */
+export function KeyGate({ onKey, why = "What Callers said and each Customer's risk are for bank staff." }: {
+  onKey: (key: string) => void;
+  why?: string;
+}) {
+  const [key, setKey] = useState("");
+  const tried = consoleKey() !== "";
+  return (
+    <div className="mx-auto mt-16 max-w-md">
+      <Card>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onKey(key);
+          }}
+        >
+          <span className="grid size-11 place-items-center rounded-xl bg-accent/12 text-accent">
+            <LockKey size={24} />
+          </span>
+          <div>
+            <h1 className="font-display text-2xl font-semibold tracking-tight">Console key</h1>
+            <p className="mt-1 text-sm text-ink-soft">
+              {why} Enter the verifier's <code>CONSOLE_KEY</code>.
+            </p>
+          </div>
+          {tried && <p className="text-sm font-medium text-block">That key was not accepted.</p>}
+          <input
+            type="password"
+            autoFocus
+            aria-label="Console key"
+            className="rounded-lg border border-line bg-canvas px-3 py-2"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+          <button className="press inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-color">
+            <Key size={18} /> Unlock
+          </button>
+        </form>
+      </Card>
+    </div>
+  );
 }
