@@ -345,6 +345,8 @@
   }
   .speaking-ring.is-active {
     animation: ring 1.6s ease-out infinite;
+  }
+}
 
 /* ---------------------------------------------------------------- Landing page (pages/LandingPage.tsx)
    Landing-only classes, prefixed lp-. Static by default; every animation sits under no-preference, so
