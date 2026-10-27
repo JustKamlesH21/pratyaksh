@@ -20,6 +20,9 @@ class NoLLM:
 # romanised). The exact keyword rules miss every one of these.
 MANGLED = [
     ("मुझे नया पाई आड़ करना है", RequestKind.ADD_PAYEE),  # heard on the real system for "मुझे नया पेयी ऐड करना है"
+    ("I want to add a new bee.", RequestKind.ADD_PAYEE),  # heard from an iPhone Caller, Oct 27, for "payee"
+    ("Add a new P.", RequestKind.ADD_PAYEE),  # heard from an iPhone Caller, Oct 27
+    ("add a new pee", RequestKind.ADD_PAYEE),
     ("पेई ऐड करना है", RequestKind.ADD_PAYEE),
     ("नया पे ऐड करना है", RequestKind.ADD_PAYEE),
     ("मुझे नया पेई जोड़ना है", RequestKind.ADD_PAYEE),
@@ -93,6 +96,9 @@ NOT_A_REQUEST = [
     ("मुझे बिल पे करना है", RequestKind.ADD_PAYEE),
     ("मेरे फोन पे मैसेज नहीं आया", RequestKind.ADD_PAYEE),
     ("I want to add money to my wallet", RequestKind.ADD_PAYEE),
+    ("a bee stung me", RequestKind.ADD_PAYEE),
+    ("add a new B2B account to my profile", RequestKind.ADD_PAYEE),
+    ("can you spell P for me", RequestKind.ADD_PAYEE),
     ("रिसीट चाहिए", RequestKind.SIM_SWAP),  # receipt, not reset
     ("पेई ऐड करना सेफ है क्या?", RequestKind.ADD_PAYEE),
     ("pai add karne ka tarika kya hai?", RequestKind.ADD_PAYEE),

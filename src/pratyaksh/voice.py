@@ -48,7 +48,8 @@ class PromptVoice:
         return _join([self._sentence(s) for s in sentences])
 
     def _sentence(self, text: str) -> bytes:
-        key = hashlib.sha1(f"{self._synth.name}|{text}".encode()).hexdigest()
+        # _CACHE_VERSION: clips cached before levelling (Oct 27) were quieter; they are not reused.
+        key = hashlib.sha1(f"{self._synth.name}|{_CACHE_VERSION}|{text}".encode()).hexdigest()
         path = self._cache / f"{key}.wav"
         if path.exists():
             return path.read_bytes()
@@ -62,8 +63,8 @@ class PromptVoice:
                     raise
                 log.exception("TTS failed; using the fallback voice for this prompt")
                 samples, rate = self._fallback.synthesise(text)
-                return _wav(samples, rate)  # not cached: retry the real voice next time
-            data = _wav(samples, rate)
+                return _wav(_level(samples), rate)  # not cached: retry the real voice next time
+            data = _wav(_level(samples), rate)
             tmp = path.with_suffix(".tmp")
             tmp.write_bytes(data)
             tmp.replace(path)
@@ -111,6 +112,21 @@ def _join(wavs: list[bytes]) -> bytes:
             samples = np.interp(np.arange(0, len(samples), r / rate), np.arange(len(samples)), samples)
         out += [samples, np.zeros(int(_GAP_S * rate), dtype=np.float32)]
     return _wav(np.concatenate(out[:-1]), rate)
+
+
+_CACHE_VERSION = "levelled-2"
+_SPEECH_RMS = 10 ** (-14 / 20)  # bold and clear on a phone earpiece or laptop speaker
+_PEAK = 0.9
+
+
+def _level(samples: np.ndarray) -> np.ndarray:
+    """Every sentence at the same loudness (RMS of the speech, not the pauses), never clipping."""
+    samples = np.asarray(samples, dtype=np.float32)
+    speech = samples[np.abs(samples) > 1e-3]
+    if speech.size == 0:
+        return samples
+    gain = min(_SPEECH_RMS / float(np.sqrt(np.mean(speech ** 2))), _PEAK / float(np.abs(samples).max()))
+    return samples * gain
 
 
 def _wav(samples: np.ndarray, rate: int) -> bytes:

@@ -79,6 +79,35 @@ def test_a_sentence_already_spoken_is_not_synthesised_again(tmp_path):
     ]
 
 
+class LevelVoice(CountingVoice):
+    """Speaks a 200 Hz tone at a fixed level, like a voice model that comes out too quiet or too loud."""
+
+    def __init__(self, amplitude: float):
+        super().__init__()
+        self.amplitude = amplitude
+
+    def synthesise(self, text: str) -> tuple[np.ndarray, int]:
+        t = np.arange(int(0.5 * RATE)) / RATE
+        return (self.amplitude * np.sin(2 * np.pi * 200 * t)).astype(np.float32), RATE
+
+
+@pytest.mark.parametrize("amplitude", [0.01, 0.3, 1.0])
+def test_every_prompt_comes_out_equally_loud_and_never_clips(tmp_path, amplitude):
+    # Callers on a phone could not make out a quiet prompt (Oct 27): every sentence is levelled.
+    samples, _ = sf.read(io.BytesIO(PromptVoice(LevelVoice(amplitude), tmp_path).render("Hello.")), dtype="float32")
+    rms_db = 20 * np.log10(np.sqrt(np.mean(samples ** 2)))
+    assert -15.5 < rms_db < -12.5
+    assert np.abs(samples).max() <= 0.9
+
+
+def test_the_whisper_instruction_is_voiced_once_for_every_phrase(tmp_path):
+    synth = CountingVoice()
+    voice = PromptVoice(synth, tmp_path)
+    voice.render("Please whisper these words. ನಾಳೆ ಐದು ಗಂಟೆಗೆ meeting ಇದೆ.")
+    voice.render("Please whisper these words. Five guests are coming home.")
+    assert synth.said == ["Please whisper these words.", "ನಾಳೆ ಐದು ಗಂಟೆಗೆ meeting ಇದೆ.", "Five guests are coming home."]
+
+
 @pytest.mark.parametrize("request_text", ["I want to add a new payee", "transfer 6 lakh to my brother", "change my sim"])
 def test_every_challenge_prompt_the_verifier_issues_is_rendered_ahead_of_time(tmp_path, request_text):
     synth = CountingVoice()

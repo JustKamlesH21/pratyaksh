@@ -25,7 +25,7 @@ from ..domain import (
     Step,
     Verdict,
 )
-from ..phrases import all_phrases, random_phrase, speakable
+from ..phrases import LANGUAGES, all_phrases, random_phrase, spoken
 from ..policy import Policy
 from ..signals import SignalExtractor
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
@@ -123,8 +123,11 @@ _HANDOVER_LEADS = ("Sure.", "I'm having trouble on this line.", "I'm sorry, I co
 CODE_PROMPT = "I've sent a six-digit code to the bank app on your registered phone. Please read it out."
 
 
-def _whisper_prompt(phrase: str) -> str:
-    return f"Please whisper these words: {speakable(phrase)}."
+def _whisper_prompt(phrase: str, language: str) -> str:
+    """The phrase as its own sentence after the instruction, so the voice says it whole and clearly (a
+    Caller on a real phone could not make it out run into the instruction, Oct 27). Hindi and Kannada
+    words are written in their own script: the voice says them clearly and the Caller reads them."""
+    return f"Please whisper these words. {spoken(phrase, language)}."
 
 
 def _intro(request: RequestKind, n: int) -> str:
@@ -147,7 +150,7 @@ def spoken_lines() -> list[str]:
         *(f"{lead} {HANDOFF}" for lead in _HANDOVER_LEADS),  # "…, so I'll connect you…" is one sentence
     ]
     intros = [_intro(r, n) for r in _REQUEST_NAMES for n in (1, 2, 3)]
-    return fixed + intros + [_whisper_prompt(p) for p in all_phrases()]
+    return fixed + intros + [_whisper_prompt(p, lang) for lang in LANGUAGES for p in all_phrases(lang)]
 
 
 def _utcnow() -> datetime:
@@ -899,8 +902,10 @@ class Verifier:
         call.planned = planned
         now = self._now()
         if kind is ChallengeKind.WHISPER_PHRASE:
-            phrase = random_phrase(self._rng)
-            prompt = _whisper_prompt(phrase)
+            customer = s.get(CustomerRow, call.customer_id)
+            language = customer.language if customer else "en"
+            phrase = random_phrase(self._rng, language)
+            prompt = _whisper_prompt(phrase, language)
             record = {"kind": kind.value, "prompt": prompt, "phrase": phrase, "issued_at": now.isoformat()}
         else:
             self._send_code(s, call)

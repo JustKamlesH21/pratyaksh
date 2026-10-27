@@ -83,7 +83,7 @@ class SignalExtractor:
         if whisper is not None:
             # The phrase mixes Kannada, Hindi and English words; asked for English, speech-to-text writes all
             # of it in Latin letters, and the expected words steer it toward the right spelling.
-            hint = TranscriptionHint(language="en", hotwords=speakable(challenge.phrase))
+            hint = TranscriptionHint(language="en", hotwords=speakable(challenge.phrase, language or "en"))
         else:
             hint = TranscriptionHint(language=_CODE_LANGUAGE.get(language or "", "en"))
         transcript = self._transcribe(audio, hint)
