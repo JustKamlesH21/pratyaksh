@@ -76,7 +76,7 @@ def _synth(settings: Settings):
 def voice_cache_main() -> None:
     """pratyaksh-voice-cache: voice every line the Voice Agent can say (all Whisper Phrase prompts
     included) into the TTS cache, so Calls never wait for speech synthesis. Lines already cached are
-    skipped, so it can be stopped and run again. With Parler on the laptop GPU this takes about 2 hours."""
+    skipped, so it can be stopped and run again. With Parler on the laptop GPU this takes about 3.6 hours per voice."""
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     settings = Settings()
     voice = PromptVoice(_synth(settings), settings.tts_cache_dir)  # no fallback: a failure must show
