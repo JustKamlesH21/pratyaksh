@@ -2,6 +2,8 @@
 
 Hides turn-taking: speak the Step, then listen (longer for Possession Codes), wait while
 App Approval is pending, or hang up; stop cleanly when the Caller leaves or anything fails.
+The Caller app is shown what the Verifier heard as soon as it is known (before the reply is voiced),
+the Challenge being answered, and the Outcome.
 """
 
 from __future__ import annotations
@@ -34,8 +36,14 @@ async def run_call(
     step = await verifier.start_call(customer_id, room)
     call_id = step.call_id
     log.info("call %s started for %s in %s", call_id, customer_id, room)
+    shown = _challenge(Step(call_id, ""))
     try:
         while True:
+            if _challenge(step) != shown:
+                shown = _challenge(step)
+                await audio.show(shown)
+            if step.end and step.outcome:
+                await audio.show({"type": "outcome", "outcome": step.outcome.value})
             if step.say:
                 await _speak(audio, verifier, step.say, timing)
             if step.end:
@@ -46,6 +54,8 @@ async def run_call(
                 else:
                     response = await audio.listen(timing.listen_timeout_s, timing.max_reply_s)
                 step = await verifier.respond(call_id, response)
+                if step.heard:
+                    await audio.show({"type": "heard", "text": step.heard})
             elif step.wait:
                 step = await _wait_for_change(audio, verifier, step, timing)
             else:
@@ -59,6 +69,10 @@ async def run_call(
         log.exception("call %s failed; closing it", call_id)
         await _safe_hang_up(verifier, call_id)
         raise
+
+
+def _challenge(step: Step) -> dict:
+    return {"type": "challenge", "kind": step.challenge.value if step.challenge else None, "words": step.words}
 
 
 async def _speak(audio: CallAudio, verifier: VerifierPort, text: str, timing: Timing) -> None:

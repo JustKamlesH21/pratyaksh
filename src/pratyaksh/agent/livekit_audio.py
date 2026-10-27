@@ -97,11 +97,13 @@ class LiveKitCallAudio:
             if len(chunk) < n:
                 chunk = np.pad(chunk, (0, n - len(chunk)))
             await self._source.capture_frame(rtc.AudioFrame(chunk.tobytes(), OUT_RATE, 1, n))
+            if i == 0:
+                # The caption as the audio starts (the source buffers ahead, so this costs no playout):
+                # the Caller reads along instead of waiting for the end, and text never leads speech.
+                await self.show({"type": "caption", "text": caption})
             if self._left.is_set():
                 raise CallerLeft()
         await self._source.wait_for_playout()
-        # Captions after the audio, so text never reaches a Caller earlier than speech does.
-        await self._caption(caption)
 
     async def listen(self, timeout_s: float, max_reply_s: float, pause_s: float = 0.0) -> Response:
         """Record one reply.
@@ -176,14 +178,14 @@ class LiveKitCallAudio:
             heard.append(frame)
             stream.push_frame(frame)
 
-    async def _caption(self, text: str) -> None:
-        """Send the spoken text to the Caller app as captions."""
+    async def show(self, message: dict) -> None:
+        """Send the Caller app a data message (captions, what was heard, the open Challenge, the Outcome)."""
         try:
             await self._room.local_participant.publish_data(
-                json.dumps({"type": "caption", "text": text}), reliable=True, topic="pratyaksh"
+                json.dumps(message), reliable=True, topic="pratyaksh"
             )
-        except Exception as e:  # captions are a nicety
-            log.debug("caption failed: %r", e)
+        except Exception as e:  # what the app shows is a nicety; the Call goes on without it
+            log.debug("data message %s failed: %r", message.get("type"), e)
 
     def _check(self) -> None:
         if self._left.is_set():

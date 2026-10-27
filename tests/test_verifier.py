@@ -640,3 +640,37 @@ def test_a_double_tap_on_dismiss_writes_one_event(threaded):
     call = h.verifier.call(call_id)
     assert sorted(results) == [0, 1] and call["audit"]["intact"]
     assert [e["kind"] for e in call["events"]].count("security_alert_dismissed") == 1
+
+
+def test_each_step_carries_what_the_verifier_heard_in_the_response_it_answers(harness):
+    h = harness
+    step = h.verifier.start_call(C, "r")
+    assert step.heard == ""  # nothing was said yet
+    call_id = step.call_id
+    step = h.say(call_id, "I want to add a payee")
+    assert step.heard == "I want to add a payee"
+    phrase = h.current_phrase(call_id)
+    step = whisper_back(h, call_id)
+    assert step.heard == phrase
+    step = h.verifier.respond(call_id, Response(voiced(), None))  # silence
+    assert step.heard == ""
+
+
+def test_a_step_says_which_challenge_is_open_and_the_words_to_whisper(harness):
+    from pratyaksh.domain import ChallengeKind, Step
+    from pratyaksh.phrases import spoken
+
+    h = harness  # Ananya's profile language is Kannada
+    call_id = h.verifier.start_call(C, "r").call_id
+    assert h.verifier.current_step(call_id).challenge is None
+    step = h.say(call_id, "I want to add a payee")
+    words = spoken(h.current_phrase(call_id), "kn")
+    assert step.challenge is ChallengeKind.WHISPER_PHRASE and step.words == words
+    assert step.say.endswith(f"{words}.")  # the same words, in the same script, as spoken
+    assert h.verifier.current_step(call_id) == step
+    assert Step.from_dict(step.to_dict()) == step  # as the Voice Agent gets it over HTTP
+
+    step = whisper_back(h, call_id)
+    assert step.challenge is ChallengeKind.POSSESSION_CODE and step.words == ""
+    step = h.say(call_id, " ".join(h.code_on_device(C)), voiced(), 900)
+    assert step.end and step.challenge is None

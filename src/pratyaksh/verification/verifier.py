@@ -6,7 +6,7 @@ import logging
 import random
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -263,6 +263,7 @@ class Verifier:
                     step = self._on_challenge_response(s, call, response, heard)
                 else:
                     step = self._ignore(s, call, f"the Call is {call.state}")
+            step = replace(step, heard=heard.transcript)  # the Caller app shows it before the reply is voiced
         except CallNotFound:
             raise
         except Exception:
@@ -1021,7 +1022,17 @@ class Verifier:
         return call
 
     def _set_step(self, s: Session, call: CallRow, step: Step) -> Step:
-        """What the Voice Agent says next. It goes on the Audit Trail too, so the transcript is complete."""
+        """What the Voice Agent says next. It goes on the Audit Trail too, so the transcript is complete.
+        A Step that listens for a Challenge names it, and the words of a Whisper Phrase, so the Caller
+        app can show them without reading the caption."""
+        if step.listen and step.state is CallState.CHALLENGING and call.challenges:
+            issued = call.challenges[-1]
+            kind = ChallengeKind(issued["kind"])
+            words = ""
+            if kind is ChallengeKind.WHISPER_PHRASE and issued.get("phrase"):
+                customer = s.get(CustomerRow, call.customer_id)
+                words = spoken(issued["phrase"], customer.language if customer else "en")
+            step = replace(step, challenge=kind, words=words)
         call.pending_step = step.to_dict()
         call.updated_at = self._now()
         self._audit(s, call, "agent_said", {"say": step.say})

@@ -63,6 +63,8 @@ def test_a_full_call_over_http(api):
     assert step["listen"] is True
 
     step = send(api, call_id, "naya payee add karna hai", voiced())
+    assert step["heard"] == "naya payee add karna hai" and step["challenge"] == "whisper_phrase"
+    assert step["words"] and step["say"].endswith(f"{step['words']}.")
     phrase = api.get(f"/v1/calls/{call_id}").json()["challenges"][-1]["phrase"]
     step = send(api, call_id, phrase, whispered())
     assert "code" in step["say"]

@@ -26,6 +26,9 @@ class ScriptedCaller:
         assert wav[:4] == b"RIFF"
         self.heard.append(caption)
 
+    async def show(self, message: dict) -> None:
+        pass
+
     def caller_left(self) -> bool:
         return False
 
@@ -118,3 +121,52 @@ def test_caller_leaving_abandons_the_call(tmp_path):
     run(h, caller, tmp_path)
     call = h.verifier.calls(1)[0]
     assert call["outcome"] == "abandoned"
+
+
+class WatchingCaller(ScriptedCaller):
+    """Also records what the Caller app is shown, in order with what is played."""
+
+    def __init__(self, h: Harness, answers, leave_after: int | None = None):
+        super().__init__(h, answers, leave_after)
+        self.events: list[tuple[str, object]] = []
+
+    async def play(self, wav: bytes, caption: str) -> None:
+        await super().play(wav, caption)
+        self.events.append(("play", caption))
+
+    async def show(self, message: dict) -> None:
+        self.events.append(("show", message))
+
+
+def test_what_the_verifier_heard_is_shown_before_the_reply_is_played(tmp_path):
+    h = Harness()
+    caller = WatchingCaller(h, [lambda _: ("I want to add a payee", voiced(), 800)], leave_after=1)
+    run(h, caller, tmp_path)
+    heard = caller.events.index(("show", {"type": "heard", "text": "I want to add a payee"}))
+    reply = next(i for i, (what, x) in enumerate(caller.events) if what == "play" and "whisper these words" in x)
+    assert caller.events.index(("play", caller.heard[0])) < heard < reply
+
+
+def test_the_caller_app_is_shown_the_open_challenge_and_the_outcome(tmp_path):
+    h = Harness()
+
+    def phrase(_):
+        calls = h.verifier.calls(1)
+        return h.verifier.call(calls[0]["id"])["challenges"][-1]["phrase"], whispered(), 650
+
+    caller = WatchingCaller(h, [
+        lambda _: ("I want to add a payee", voiced(), 800),
+        phrase,
+        lambda _: (h.code_on_device(C), voiced(), 900),
+    ])
+    run(h, caller, tmp_path)
+    shown = [m for what, m in caller.events if what == "show" and m["type"] in ("challenge", "outcome")]
+    whisper = caller.heard[1].split("whisper these words. ", 1)[1].rstrip(".")
+    assert shown == [
+        {"type": "challenge", "kind": "whisper_phrase", "words": whisper},
+        {"type": "challenge", "kind": "possession_code", "words": ""},
+        {"type": "challenge", "kind": None, "words": ""},
+        {"type": "outcome", "outcome": "passed"},
+    ]
+    whisper_shown = caller.events.index(("show", shown[0]))
+    assert caller.events[whisper_shown + 1] == ("play", caller.heard[1])  # just before it is spoken
