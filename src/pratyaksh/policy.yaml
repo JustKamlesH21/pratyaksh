@@ -34,8 +34,9 @@ signals:
 weights:                 # combined into a Liveness Score per Response
   task_match: 0.30
   whisper_score: 0.20
-  reply_latency: 0.20
+  reply_latency: 0.20    # Whisper Phrases only: a Possession Code is not timed (Oct 27, Kamlesh's OK)
   spoof_score: 0.30
+  code_match: 0.30       # a Possession Code read right; read wrong is a hard fail
 
 verdict:
   pass_at: 0.75          # mean Liveness Score at or above: PASS
