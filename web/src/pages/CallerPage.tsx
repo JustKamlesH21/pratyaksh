@@ -69,6 +69,51 @@ function captureOf(track: MediaStreamTrack): Capture {
 
 const onOff = (v: boolean | null) => (v === null ? "?" : v ? "on" : "off");
 
+/** Microphones that measured badly on the demo laptop (Oct 27): why the Voice Agent would not hear the Caller. */
+function micProblem(label: string): string | null {
+  if (/AI Noise-cancelling/i.test(label)) return "sends silence to the browser (ASUS AI noise cancelling)";
+  if (/Hands-Free|Bluetooth/i.test(label)) return "Bluetooth call mode: 8–16 kHz, whispers get lost";
+  if (/CABLE Output/i.test(label)) return "the virtual cable: only for Red-team mode";
+  return null;
+}
+
+// A working microphone may gate a quiet room to near zero (the Realtek array does), so only a microphone
+// that has carried no sound at all for this long since the Call began counts as dead.
+const SILENT_MS = 8000;
+const SOUND = 1e-3; // -60 dBFS: speech near any working microphone peaks far above this
+
+/** Live level of the microphone the Call is sending, and whether it has carried no sound since it started. */
+function useMicLevel(track: MediaStreamTrack | null) {
+  const [level, setLevel] = useState({ db: -100, silent: false });
+  useEffect(() => {
+    if (!track) return;
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    const started = performance.now();
+    let heardSound = false;
+    const timer = window.setInterval(() => {
+      analyser.getFloatTimeDomainData(buf);
+      let sum = 0;
+      let peak = 0;
+      for (const v of buf) {
+        sum += v * v;
+        peak = Math.max(peak, Math.abs(v));
+      }
+      heardSound ||= peak > SOUND;
+      const db = 10 * Math.log10(sum / buf.length || 1e-10);
+      setLevel({ db, silent: !heardSound && performance.now() - started > SILENT_MS });
+    }, 100);
+    return () => {
+      window.clearInterval(timer);
+      void ctx.close();
+    };
+  }, [track]);
+  return level;
+}
+
 export default function CallerPage() {
   const [customer, setCustomer] = useState("");
   const [status, setStatus] = useState<Status>("idle");
@@ -79,6 +124,8 @@ export default function CallerPage() {
   const [mic, setMic] = useState(() => stored(MIC_KEY) ?? "");
   const [headset, setHeadset] = useState(() => stored(HEADSET_KEY) === "1");
   const [capture, setCapture] = useState<Capture | null>(null);
+  const [micTrack, setMicTrack] = useState<MediaStreamTrack | null>(null);
+  const level = useMicLevel(micTrack);
   const roomRef = useRef<Room | null>(null);
   const audioHost = useRef<HTMLDivElement>(null);
 
@@ -104,6 +151,7 @@ export default function CallerPage() {
   async function report(room: Room) {
     const track = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack;
     if (!track) return;
+    setMicTrack(track);
     const c = captureOf(track);
     setCapture(c);
     try {
@@ -176,6 +224,7 @@ export default function CallerPage() {
   async function hangUp() {
     await roomRef.current?.disconnect();
     roomRef.current = null;
+    setMicTrack(null);
     setStatus("ended");
   }
 
@@ -200,9 +249,15 @@ export default function CallerPage() {
               {mics.map((d, i) => (
                 <option key={d.deviceId} value={d.deviceId}>
                   {d.label || `Microphone ${i + 1}`}
+                  {micProblem(d.label) ? " ⚠" : ""}
                 </option>
               ))}
             </select>
+            {(() => {
+              const chosen = mics.find((d) => d.deviceId === mic);
+              const problem = chosen ? micProblem(chosen.label) : null;
+              return problem ? <p className="text-xs font-semibold text-block">⚠ This microphone {problem}.</p> : null;
+            })()}
             {unnamed && (
               <button className="self-start text-xs font-semibold text-accent underline" onClick={() => void listMics(true)}>
                 Show microphone names
@@ -241,6 +296,22 @@ export default function CallerPage() {
               <>Status: <b className="text-ink">{status === "connecting" ? "connecting…" : status}</b></>
             )}
           </p>
+          {micTrack && status === "in-call" && (
+            <div className="flex flex-col gap-1" aria-live="polite">
+              <div className="h-2 overflow-hidden rounded-full bg-sunken" title={`${level.db.toFixed(0)} dBFS`}>
+                <div
+                  className={`h-full rounded-full ${level.silent ? "bg-block" : "bg-pass"}`}
+                  style={{ width: `${Math.max(0, Math.min(100, ((level.db + 70) / 60) * 100))}%` }}
+                />
+              </div>
+              {level.silent && (
+                <p className="text-xs font-semibold text-block">
+                  ⚠ No sound from this microphone since the call began, so the bank cannot hear you. Pick Microphone
+                  Array (Realtek) or a wired headset above.
+                </p>
+              )}
+            </div>
+          )}
           {capture && (
             <p className="flex items-start gap-1.5 text-xs text-ink-soft" title="What the browser applied to the microphone">
               <Microphone size={14} className="mt-0.5 shrink-0" aria-hidden />
