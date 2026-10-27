@@ -196,3 +196,62 @@ def test_calibrate_without_a_gap_prefers_zero_false_accepts():
     assert (s["false_rejects"]["k"], s["false_rejects"]["n"]) == (2, 5)  # 0.55 and the whisper with no speech
     assert report["current"]["false_accepts"]["k"] == 1  # the Clone at 0.61 passes today's 0.60
     assert report["notes"]
+
+
+# -- speakers: Eval Run speakers must not be calibration speakers ------------------------------
+
+
+def _calibration_dir(tmp_path, speakers=("Kamlesh", "priya")):
+    """class/<speaker>/*.wav: the speaker is the folder under the class folder."""
+    root = tmp_path / "calibration"
+    for cls, make in {"whisper": whispered, "normal": voiced}.items():
+        for spk in speakers:
+            (root / cls / spk).mkdir(parents=True)
+            _wav(root / cls / spk, "0.wav", make())
+    (root / "normal" / "loose.wav").write_bytes(voiced().to_wav())  # no speaker folder: unlabelled
+    return root
+
+
+def test_calibrate_records_speakers_from_subfolders(tmp_path, capsys):
+    json_out = tmp_path / "cal.json"
+    main(["calibrate", str(_calibration_dir(tmp_path)), "--json", str(json_out)])
+    report = json.loads(json_out.read_text(encoding="utf-8"))
+    assert report["speakers"] == ["kamlesh", "priya"]
+    assert {s["speaker"] for s in report["samples"]} == {"kamlesh", "priya", None}
+    assert "speakers: kamlesh, priya" in capsys.readouterr().out
+
+
+def test_run_warns_and_records_when_a_speaker_was_also_in_calibration(tmp_path, capsys):
+    cal = _calibration_dir(tmp_path)
+    rows = (
+        _session(tmp_path, "real-1", "real", **{**BLANK, "speaker": "KAMLESH "})
+        + _session(tmp_path, "real-2", "real", **{**BLANK, "speaker": "ravi"})
+        + _session(tmp_path, "real-3", "real", **{**BLANK, "speaker": ""})
+    )
+    out_json = tmp_path / "report.json"
+    main(["run", str(_manifest(tmp_path, rows)), "--speech", "scripted", "--no-save",
+          "--calibration", str(cal), "--json", str(out_json)])
+    captured = capsys.readouterr()
+    assert "WARNING" in captured.err and "kamlesh" in captured.err
+    report = json.loads(out_json.read_text(encoding="utf-8"))
+    sp = report["summary"]["speakers"]
+    assert sp["overlap"] == ["kamlesh"] and sp["eval"] == ["kamlesh", "ravi"]
+    assert sp["calibration"] == ["kamlesh", "priya"] and sp["unlabelled_calls"] == 1
+    assert {r["session_id"]: r["speaker"] for r in report["rows"]} == {"real-1": "kamlesh", "real-2": "ravi", "real-3": None}
+
+
+def test_run_with_disjoint_speakers_or_an_older_manifest_does_not_warn(tmp_path, capsys):
+    cal_manifest = _manifest(tmp_path, _session(tmp_path, "cal-1", "real", **{**BLANK, "speaker": "priya"}))
+    cal_manifest = cal_manifest.rename(tmp_path / "calibration.csv")
+    rows = _session(tmp_path, "real-1", "real", **{**BLANK, "speaker": "ravi"})
+    out_json = tmp_path / "report.json"
+    main(["run", str(_manifest(tmp_path, rows)), "--speech", "scripted", "--no-save",
+          "--calibration", str(cal_manifest), "--json", str(out_json)])
+    assert "WARNING" not in capsys.readouterr().err
+    sp = json.loads(out_json.read_text(encoding="utf-8"))["summary"]["speakers"]
+    assert sp["overlap"] == [] and sp["calibration"] == ["priya"]
+
+    # No speaker column and no --calibration: nothing to check, nothing recorded about calibration.
+    rows = _session(tmp_path, "real-2", "real")
+    s = _evaluate(_manifest(tmp_path, rows, OLD_FIELDS))["summary"]
+    assert s["speakers"] == {"eval": [], "calibration": None, "overlap": [], "unlabelled_calls": 1}

@@ -3,6 +3,7 @@
   pratyaksh-eval export --label real  [--since 2026-10-29T10:00] [--channel cable] [--language kn]
   pratyaksh-eval export --label clone [--since ...] [--condition code_supplied]
   pratyaksh-eval run data/eval/manifest.csv [--label "venue mics"] [--policy tuned.yaml] [--speech scripted]
+                     [--calibration data/eval/calibration/]   # warns if a speaker was also calibrated on
   pratyaksh-eval calibrate data/eval/calibration/ [--exclude noise] [--html calibration.html]
 
 Recording: run the verifier with RETAIN_AUDIO=true (with consent), place Calls, then export.
@@ -16,6 +17,7 @@ Optional columns (older manifests without them still work):
   channel     mic | cable (real Calls replayed through the virtual cable: a channel control). Blank: mic.
   language    e.g. en, hi, kn, mixed. Blank: unspecified.
   hearing_ms  how long the live Verifier took to hear the Response (export fills it in).
+  speaker     who spoke, e.g. ravi; `run --calibration` warns when a speaker was also in calibration.
   class       calibrate only: overrides the class of the recording (whisper, normal, soft, clone ...).
 
 Catch Rate and False Reject Rate are reported as x/n with a Wilson 95% confidence interval.
@@ -46,7 +48,7 @@ from .stats import format_rate, rate, spread
 
 FIELDS = [
     "session_id", "label", "request", "kind", "audio", "reply_latency_ms", "expected", "code_match", "transcript",
-    "condition", "channel", "language", "hearing_ms",
+    "condition", "channel", "language", "hearing_ms", "speaker",
 ]
 PROMPT_SECONDS = 4.0  # rough time the Voice Agent spends saying each Challenge
 CONDITIONS = ("code_withheld", "code_supplied")
@@ -69,6 +71,7 @@ class Row:
     language: str = ""  # blank: unspecified
     hearing_ms: int | None = None  # live Verifier's hearing time, when exported
     klass: str = ""  # calibrate only
+    speaker: str = ""  # blank: not labelled
 
 
 def _choice(value: str | None, allowed: tuple[str, ...], name: str) -> str:
@@ -101,6 +104,7 @@ def read_manifest(path: Path) -> list[Row]:
                     language=(r.get("language") or "").strip().lower(),
                     hearing_ms=int(float(r["hearing_ms"])) if r.get("hearing_ms") else None,
                     klass=(r.get("class") or "").strip().lower(),
+                    speaker=(r.get("speaker") or "").strip().lower(),
                 ))
             except (KeyError, ValueError) as e:
                 raise SystemExit(f"{path}:{i}: {e}") from e
@@ -137,8 +141,13 @@ def evaluate(
     policy: Policy,
     models_for: Callable[[Row], SpeechModels],
     prompt_seconds: float = PROMPT_SECONDS,
+    calibration_speakers: list[str] | None = None,
 ) -> dict:
-    """Score every session with the same Signals and Policy code the live Verifier uses."""
+    """Score every session with the same Signals and Policy code the live Verifier uses.
+
+    calibration_speakers: who recorded the calibration set (None: not given). Eval Run speakers
+    among them are reported in summary["speakers"]["overlap"].
+    """
     sessions: OrderedDict[str, list[Row]] = OrderedDict()
     for r in rows:
         sessions.setdefault(r.session_id, []).append(r)
@@ -172,6 +181,7 @@ def evaluate(
             "condition": condition,
             "channel": _session_value(srows, "channel") or "mic",
             "language": _session_value(srows, "language") or "unspecified",
+            "speaker": _session_value(srows, "speaker") or None,
             "verdict": d.verdict.value,
             "liveness": None if d.liveness is None else round(d.liveness, 3),
             "added_seconds": round(added, 1),
@@ -180,7 +190,35 @@ def evaluate(
             "caught_by": caught_by(d.reasons) if label == "clone" and d.verdict is Verdict.BLOCK else [],
             "reasons": d.reasons,
         })
-    return {"summary": summarize(results), "rows": results}
+    summary = summarize(results)
+    summary["speakers"] = speaker_check(results, calibration_speakers)
+    return {"summary": summary, "rows": results}
+
+
+def speaker_check(results: list[dict], calibration: list[str] | None) -> dict:
+    """Eval Run speakers, calibration speakers (None: no calibration set given) and their overlap."""
+    ours = sorted({r["speaker"] for r in results if r.get("speaker")})
+    return {
+        "eval": ours,
+        "calibration": None if calibration is None else sorted(calibration),
+        "overlap": sorted(set(ours) & set(calibration or [])),
+        "unlabelled_calls": sum(1 for r in results if not r.get("speaker")),
+    }
+
+
+def speaker_warning(summary: dict) -> str | None:
+    """A loud warning when an Eval Run speaker was also a calibration speaker."""
+    sp = summary.get("speakers") or {}
+    if not sp.get("overlap"):
+        return None
+    bar = "!" * 72
+    return "\n".join([
+        bar,
+        f"WARNING: Eval Run speaker(s) also in the calibration set: {', '.join(sp['overlap'])}.",
+        "The whisper threshold was tuned on their voices, so their Calls overstate the results.",
+        "Drop their Calls or record other speakers before showing these numbers.",
+        bar,
+    ])
 
 
 def _caught(rows: list[dict]) -> dict:
@@ -268,6 +306,12 @@ def format_report(summary: dict) -> str:
     if lh:
         lines.append(f"Hearing time per Response (live Calls): median {lh['median']:.0f} ms, "
                      f"p95 {lh['p95']:.0f} ms, max {lh['max']:.0f} ms over {lh['n']}")
+    sp = s.get("speakers")
+    if sp and (sp["eval"] or sp["calibration"] is not None):
+        lines.append(f"Speakers: {', '.join(sp['eval']) or 'none labelled'}"
+                     + (f" ({sp['unlabelled_calls']} Calls unlabelled)" if sp["unlabelled_calls"] else ""))
+        if sp["calibration"] is not None:
+            lines.append("Overlap with calibration speakers: " + (", ".join(sp["overlap"]) or "none"))
     return "\n".join(lines)
 
 
@@ -287,7 +331,7 @@ def _as_utc(text: str) -> datetime:
 
 def export(
     db: Database, audio_dir: Path, label: str, since: datetime | None, out: Path,
-    condition: str = "", channel: str = "", language: str = "",
+    condition: str = "", channel: str = "", language: str = "", speaker: str = "",
 ) -> int:
     """Append manifest rows for every closed, recorded Call (one row per scored Response)."""
     from sqlalchemy import select
@@ -323,7 +367,7 @@ def export(
                     "code_match": "" if sig.get("code_match") is None else str(sig["code_match"]).lower(),
                     "transcript": sig.get("transcript", ""),
                     "condition": condition if label == "clone" else "", "channel": channel, "language": language,
-                    "hearing_ms": "" if heard is None else round(heard),
+                    "hearing_ms": "" if heard is None else round(heard), "speaker": speaker.strip().lower(),
                 })
     header = FIELDS
     if out.exists() and out.stat().st_size:
@@ -367,6 +411,8 @@ def main(argv: list[str] | None = None) -> None:
                     help="scripted uses the manifest's transcript column instead of speech-to-text")
     pr.add_argument("--no-save", action="store_true")
     pr.add_argument("--json", type=Path, help="also write the full report here")
+    pr.add_argument("--calibration", type=Path,
+                    help="calibration folder or manifest: warn if any speaker of this Eval Run is in it")
 
     pe = sub.add_parser("export", help="turn recorded Calls into manifest rows")
     pe.add_argument("--label", choices=["real", "clone"], required=True)
@@ -376,6 +422,7 @@ def main(argv: list[str] | None = None) -> None:
                     help="Clone Calls: was the right Possession Code supplied? (blank: inferred from Code Match)")
     pe.add_argument("--channel", choices=CHANNELS, default="", help="blank: mic")
     pe.add_argument("--language", default="", help="e.g. en, hi, kn, mixed")
+    pe.add_argument("--speaker", default="", help="who spoke on these Calls, e.g. ravi")
 
     pc = sub.add_parser("calibrate", help="Whisper Score per class of recordings; suggests whisper_score.min")
     pc.add_argument("source", type=Path, help="folder with one subfolder of WAVs per class, or a manifest")
@@ -412,7 +459,7 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "export":
         n = export(database(), Path(settings.audio_dir), args.label, args.since, args.out,
-                   args.condition, args.channel, args.language)
+                   args.condition, args.channel, args.language, args.speaker)
         print(f"added {n} rows to {args.out}")
         return
 
@@ -430,8 +477,22 @@ def main(argv: list[str] | None = None) -> None:
         def models_for(r: Row) -> SpeechModels:
             return shared
 
-    report = evaluate(rows, Policy.load(args.policy), models_for)
+    cal_speakers = None
+    if args.calibration:
+        from .calibrate import calibration_speakers
+
+        if not args.calibration.exists():
+            raise SystemExit(f"{args.calibration}: not found")
+        cal_speakers = calibration_speakers(args.calibration)
+    report = evaluate(rows, Policy.load(args.policy), models_for, calibration_speakers=cal_speakers)
     print(format_report(report["summary"]))
+    sp = report["summary"]["speakers"]
+    warning = speaker_warning(report["summary"])
+    if warning:
+        print(warning, file=sys.stderr)
+    elif cal_speakers is not None and (sp["unlabelled_calls"] or not cal_speakers):
+        print(f"note: speaker check incomplete: {sp['unlabelled_calls']} Eval Run Calls without a speaker, "
+              f"{len(cal_speakers)} labelled calibration speakers", file=sys.stderr)
     if args.json:
         args.json.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     if not args.no_save:
