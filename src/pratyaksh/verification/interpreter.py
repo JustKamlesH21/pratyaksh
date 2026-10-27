@@ -218,7 +218,8 @@ def _sounds_like_add_payee(said: list[str]) -> bool:
         before, after = _next_word(said, i, -1), _next_word(said, i, 1)
         if w in _PAYEE and (_is_add(before) or _is_add(after)):
             return True
-        if w in _PAYEE_AS_LETTER and i > 0 and said[i - 1] in _NEW and before in _ADD:  # "add a new bee"
+        # "add a new bee", or "add a P" ending the Request
+        if w in _PAYEE_AS_LETTER and before in _ADD and ((i > 0 and said[i - 1] in _NEW) or after is None):
             return True
         if w in _PAYEE_SHORT:
             starts = i == 0 or said[i - 1] in _FILLER

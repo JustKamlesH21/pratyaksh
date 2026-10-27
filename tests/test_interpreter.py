@@ -22,6 +22,8 @@ MANGLED = [
     ("मुझे नया पाई आड़ करना है", RequestKind.ADD_PAYEE),  # heard on the real system for "मुझे नया पेयी ऐड करना है"
     ("I want to add a new bee.", RequestKind.ADD_PAYEE),  # heard from an iPhone Caller, Oct 27, for "payee"
     ("Add a new P.", RequestKind.ADD_PAYEE),  # heard from an iPhone Caller, Oct 27
+    ("Add a P", RequestKind.ADD_PAYEE),  # heard from an iPhone Caller, Oct 27
+    ("add a bee", RequestKind.ADD_PAYEE),
     ("add a new pee", RequestKind.ADD_PAYEE),
     ("पेई ऐड करना है", RequestKind.ADD_PAYEE),
     ("नया पे ऐड करना है", RequestKind.ADD_PAYEE),
