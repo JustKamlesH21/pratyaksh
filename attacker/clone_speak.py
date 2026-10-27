@@ -18,6 +18,8 @@ import time
 
 import numpy as np
 
+from devanagari import to_devanagari
+
 OUT_RATE = 24_000  # IndicF5 output sample rate
 
 
@@ -51,7 +53,8 @@ def main() -> None:
         if not text:
             break
         t0 = time.perf_counter()
-        audio = model(text, ref_audio_path=args.ref, ref_text=args.ref_text)
+        # Typed Whisper Phrase words go to IndicF5 in Devanagari: it reads Latin script as noise.
+        audio = model(to_devanagari(text), ref_audio_path=args.ref, ref_text=args.ref_text)
         audio = np.asarray(audio)
         if audio.dtype == np.int16:
             audio = audio.astype(np.float32) / 32768.0
