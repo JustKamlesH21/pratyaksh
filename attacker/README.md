@@ -48,15 +48,19 @@ numpy 1.26.4, scipy 1.17.1, f5_tts @ the pinned commit.
 `hf auth login` once with a read token. The weights (~1.4 GB `model.safetensors`) and the
 `charactr/vocos-mel-24khz` vocoder download into `HF_HOME=E:\AVISHKAR\hf-cache`.
 
-IndicF5 is trained on 11 Indian languages, not English. Type the Request in Hindi or Kannada
-for the most convincing Clone, and check how it says the English words in a Whisper Phrase
-before the demo.
+IndicF5 is trained on 11 Indian languages, not English, and reads only Indic scripts: given
+Latin "park alli four baje interview" it made 0.5 s of noise (Task Match 0/10, Oct 27), given
+"पार्क अल्ली फोर बजे इंटरव्यू" it said the phrase clearly (10/10). `clone_speak.py` and
+`make_clone_bank.py` therefore send every Whisper Phrase word in Devanagari (`devanagari.py`);
+type the phrase in Latin as you hear it. Type a Request in Hindi or Kannada script.
 
 ### CPU vs GPU
 
-The 6 GB RTX 3060 is ~5 GB full with the live API running. **Run IndicF5 on CPU** (the tools
-default to `--device cpu`); use `--device cuda` only when `nvidia-smi` shows ≥2.5 GB free.
-Never stop the running services to free the GPU.
+Measured on the RTX 3060 (Oct 27): **~2.5 s per Whisper Phrase on the GPU, 1.5 GB VRAM peak**.
+The live API holds ~5 GB of the 6 GB GPU, so the two do not fit together: run IndicF5 on a
+second laptop, or build the clip bank on this one with the services stopped
+(`scripts\windows\stop.ps1`, then `start.ps1` again). `--device cpu` works but needs several
+GB of free RAM and is much slower.
 
 ### Virtual audio cable
 

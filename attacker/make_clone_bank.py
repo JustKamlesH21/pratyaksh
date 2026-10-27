@@ -39,6 +39,7 @@ if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from clip_bank import ClipRow, VARIANTS, append_row, done_keys, read_manifest  # noqa: E402
+from devanagari import to_devanagari  # noqa: E402
 from dsp_whisper import whisperise  # noqa: E402
 
 OUT_RATE = 24_000  # IndicF5 output sample rate
@@ -132,7 +133,9 @@ def main() -> None:
     base = len(already)
     for i, phrase in enumerate(todo, start=1):
         t0 = time.perf_counter()
-        audio = model(phrase, ref_audio_path=args.ref, ref_text=args.ref_text)
+        # The manifest keeps the Latin phrase (what the attacker hears and types); IndicF5 reads
+        # Devanagari far better (Task Match 10/10 vs 0/10 on Oct 27).
+        audio = model(to_devanagari(phrase), ref_audio_path=args.ref, ref_text=args.ref_text)
         audio = _to_float_mono(audio)
         if args.variant == "dsp-whisper":
             audio = whisperise(audio, OUT_RATE)
