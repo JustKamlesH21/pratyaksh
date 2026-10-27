@@ -108,6 +108,7 @@ def test_livekit_token_is_scoped_to_one_room(api):
     assert r["url"] == "ws://192.168.1.10:7880" and r["room"].startswith(f"call-{C}-")
     payload = json.loads(base64.urlsafe_b64decode(r["token"].split(".")[1] + "=="))
     assert payload["sub"] == C and payload["video"]["room"] == r["room"] and payload["video"]["roomJoin"]
+    assert payload["video"]["canUpdateOwnMetadata"]  # the Caller app sends its capture settings
     assert api.post("/v1/livekit/token", json={"customer_id": "nobody"}).status_code == 404
 
 

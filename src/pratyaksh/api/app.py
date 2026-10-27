@@ -341,7 +341,10 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             .with_identity(identity)
             .with_name(identity)
             .with_metadata(body.customer_id)
-            .with_grants(lk.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True))
+            # can_update_own_metadata: the Caller app sends its microphone capture settings as an attribute
+            .with_grants(lk.VideoGrants(
+                room_join=True, room=room, can_publish=True, can_subscribe=True, can_update_own_metadata=True,
+            ))
             .to_jwt()
         )
         return {"url": cont.settings.livekit_public_url or cont.settings.livekit_url, "token": token, "room": room}
