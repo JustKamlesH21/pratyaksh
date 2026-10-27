@@ -152,7 +152,7 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
 /** The Possession Code card: which Request it authorises, the digits grouped 3 + 3, and the anti-relay
  *  line (read it only if you are on the call; anyone who asks you for it is a scammer). Masked on the
  *  projector: the digits are not even in the page. */
-function PossessionCode({ message: m, masked, name }: { message: DeviceMessage; masked: boolean; name: string }) {
+export function PossessionCode({ message: m, masked, name }: { message: DeviceMessage; masked: boolean; name: string }) {
   const code = m.body.code ?? "";
   const groups = [code.slice(0, 3), code.slice(3)].filter(Boolean);
   const request = m.body.request ? REQUEST_LABEL[m.body.request] : null;
