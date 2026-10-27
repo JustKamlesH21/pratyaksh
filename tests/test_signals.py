@@ -114,3 +114,16 @@ def test_a_whisper_phrase_is_heard_in_latin_whatever_the_customers_language():
     )
     # Latin letters, and the digit as the Customer was asked to say it (in Kannada).
     assert models.hints == [TranscriptionHint(language="en", hotwords="naale elu gantege meeting ide")]
+
+
+def test_the_logged_whisper_diagnostic_can_never_fail_a_response(monkeypatch):
+    import logging
+
+    import pratyaksh.signals as signals
+
+    def broken(audio):
+        raise ValueError("odd sample rate")
+
+    monkeypatch.setattr(signals, "whisper_detail", broken)
+    logging.getLogger("pratyaksh.signals").setLevel(logging.INFO)
+    assert signals.whisper_score(whispered()) is not None

@@ -36,7 +36,7 @@ async def run_call(
     step = await verifier.start_call(customer_id, room)
     call_id = step.call_id
     log.info("call %s started for %s in %s", call_id, customer_id, room)
-    shown = _challenge(Step(call_id, ""))
+    shown: dict | None = None  # sent at once, so the Caller app never guesses a Challenge from a caption
     try:
         while True:
             if _challenge(step) != shown:

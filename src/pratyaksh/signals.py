@@ -163,8 +163,11 @@ def whisper_score(audio: Audio) -> float | None:
     score = _whisper_score(audio)
     if log.isEnabledFor(logging.INFO):
         # Runs on the DSP thread beside speech-to-text, so it adds no latency to the Response.
-        log.info("whisper DSP: whisper_score=%s detail=%s (logged only; the Policy does not use it)",
-                 score, whisper_detail(audio))
+        try:
+            detail = whisper_detail(audio)
+        except Exception as e:  # a diagnostic must never fail the Response
+            detail = f"unavailable ({e!r})"
+        log.info("whisper DSP: whisper_score=%s detail=%s (logged only; the Policy does not use it)", score, detail)
     return score
 
 

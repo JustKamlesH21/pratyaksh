@@ -255,3 +255,21 @@ def test_run_with_disjoint_speakers_or_an_older_manifest_does_not_warn(tmp_path,
     rows = _session(tmp_path, "real-2", "real")
     s = _evaluate(_manifest(tmp_path, rows, OLD_FIELDS))["summary"]
     assert s["speakers"] == {"eval": [], "calibration": None, "overlap": [], "unlabelled_calls": 1}
+
+
+def test_an_eval_run_hears_each_response_in_the_customers_language(tmp_path):
+    # Code review (Oct 28): the live Verifier passes the Customer's language; the Eval Run must too.
+    from conftest import voiced
+
+    from pratyaksh.domain import ChallengeKind, RequestKind
+    from pratyaksh.eval.run import Row, evaluate
+    from pratyaksh.policy import Policy
+    from pratyaksh.signals import ScriptedSpeechModels
+
+    wav = tmp_path / "code.wav"
+    wav.write_bytes(voiced().to_wav())
+    row = Row("s1", "real", RequestKind.ADD_PAYEE, ChallengeKind.POSSESSION_CODE, wav, 900, "", True, "ಐದು ಏಳು",
+              language="kn")
+    models = ScriptedSpeechModels(["ಐದು ಏಳು"])
+    evaluate([row], Policy.load(), lambda r: models)
+    assert models.hints[-1].language == "kn"

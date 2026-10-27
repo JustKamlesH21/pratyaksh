@@ -342,3 +342,14 @@ def test_demo_reset_dismisses_alerts_and_ends_open_calls_but_keeps_the_audit_tra
     after = api.get(f"/v1/calls/{blocked}").json()
     assert len(after["events"]) == events_before + 1 and after["audit"]["intact"]  # added to, never removed
     assert api.post("/v1/demo/reset").json() == {"dismissed": 0, "ended": 0}
+
+
+def test_the_demo_hub_never_hands_out_device_tokens_without_a_console_key(tmp_path):
+    # Code review (Oct 28): with CONSOLE_KEY unset anyone on the LAN could read every pairing token.
+    settings = Settings(
+        _env_file=None, database_url=database_url(), speech_backend="scripted", tts_backend="tone",
+        tts_cache_dir=str(tmp_path / "tts"), receipt_key_path=str(tmp_path / "key.pem"), ollama_api_key="",
+        warm_up_models=False, console_key="",
+    )
+    with TestClient(create_app(container=build(settings, speech=ScriptedSpeechModels()))) as client:
+        assert client.get("/v1/demo/customers").status_code == 403
