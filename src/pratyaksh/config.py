@@ -71,12 +71,12 @@ class Settings(BaseSettings):
 
     # Voice Agent worker
     verifier_url: str = "http://localhost:8000"
-    listen_timeout_s: float = 8.0  # silence before a reply counts as "no reply"
-    code_listen_timeout_s: float = 15.0  # Possession Codes: time to unlock the phone and read
+    listen_timeout_s: float = 12.0  # silence before a reply counts as "no reply": time to think (Oct 27)
+    code_listen_timeout_s: float = 20.0  # Possession Codes: time to unlock the phone, open the app and read
     code_pause_s: float = 1.5  # Possession Codes: pauses this long do not end the reply
-    max_reply_s: float = 12.0
+    max_reply_s: float = 15.0
     vad_activation: float = 0.35  # Silero threshold; lower catches whispers, higher ignores noise
-    vad_min_silence_s: float = 0.8
+    vad_min_silence_s: float = 1.2  # a pause this long ends a reply; 0.8 s cut real Callers off mid-phrase
 
     @property
     def cors_origin_list(self) -> list[str]:
