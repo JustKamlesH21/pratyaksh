@@ -168,6 +168,7 @@ class _Turn:
     challenge: Challenge | None  # the Challenge being answered, if any
     repeated: bool  # the Challenge was already repeated once after silence
     context: Context
+    language: str  # the Customer's profile language: speech-to-text is told to expect it
 
 
 @dataclass(frozen=True)
@@ -268,22 +269,25 @@ class Verifier:
         issued = call.challenges[-1] if call.state == CallState.CHALLENGING and call.challenges else None
         challenge = Challenge(ChallengeKind(issued["kind"]), issued["prompt"], issued.get("phrase", "")) if issued else None
         request = RequestKind(call.request) if call.request else None
+        customer = s.get(CustomerRow, call.customer_id)
         return _Turn(
             version, CallState(call.state), challenge, bool(issued and issued.get("repeated")),
             Context(challenge.kind if challenge else None, request, self._pending(call).say),
+            customer.language if customer else "en",
         )
 
     def _hear(self, turn: _Turn, response: Response) -> _Heard:
         speech = response.reply_latency_ms is not None
         start = time.perf_counter()
         if turn.state is CallState.AWAITING_REQUEST:
-            transcript = self._signals.transcribe(response.audio) if speech else ""
+            transcript = self._signals.transcribe(response.audio, turn.language) if speech else ""
             heard_at = time.perf_counter()
             understanding = self._interpreter.understand(transcript, turn.context)
             return _Heard(transcript, understanding=understanding, timings={
                 "speech_to_text": _ms(start, heard_at), "understand": _ms(heard_at), "total": _ms(start)})
         if turn.state is CallState.CHALLENGING and turn.challenge and (speech or turn.repeated):
-            signals = self._signals.extract(turn.challenge, response)  # speech-to-text, DSP and spoof model at once
+            # speech-to-text, DSP and spoof model at once
+            signals = self._signals.extract(turn.challenge, response, turn.language)
             heard_at = time.perf_counter()
             off_script = self._off_script(turn, signals)
             return _Heard(signals.transcript, signals=signals, off_script=off_script, timings={
