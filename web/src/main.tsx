@@ -1,7 +1,7 @@
 import { StrictMode, Suspense, lazy, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { ChartBar, DeviceMobile, IconContext, Monitor, Moon, Phone, ShieldCheck, Sun } from "@phosphor-icons/react";
+import { ChartBar, DeviceMobile, IconContext, Monitor, Moon, Phone, ShieldCheck, SquaresFour, Sun } from "@phosphor-icons/react";
 import { Logo } from "./components";
 import "./index.css";
 
@@ -11,8 +11,10 @@ const ConsolePage = lazy(() => import("./pages/ConsolePage"));
 const CallerPage = lazy(() => import("./pages/CallerPage"));
 const BankAppPage = lazy(() => import("./pages/BankAppPage"));
 const EvalPage = lazy(() => import("./pages/EvalPage"));
+const DemoPage = lazy(() => import("./pages/DemoPage"));
 
 const tabs = [
+  { to: "/demo", label: "Demo", icon: SquaresFour },
   { to: "/console", label: "Console", icon: ShieldCheck },
   { to: "/call", label: "Caller", icon: Phone },
   { to: "/bank", label: "Bank App", icon: DeviceMobile },
@@ -102,6 +104,7 @@ function Shell() {
         <Suspense fallback={<PageSkeleton />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
+            <Route path="/demo" element={<DemoPage />} />
             <Route path="/console" element={<ConsolePage />} />
             <Route path="/call" element={<CallerPage />} />
             <Route path="/bank" element={<BankAppPage />} />
