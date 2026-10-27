@@ -33,6 +33,14 @@ def test_live_human_passes(policy):
     assert d.verdict is Verdict.PASS and d.liveness >= 0.9
 
 
+def test_a_genuine_caller_who_takes_time_to_find_the_code_still_passes(policy):
+    # The iPhone Call of Oct 27, 19:29: perfect whisper started at 1.95 s, right code read 10.6 s after
+    # the prompt (unlock, open the bank app, read). The code is judged on being right, not on speed.
+    d = policy.decide([human_whisper(task_match=1.0, whisper_score=1.0, reply_latency_ms=1952), code(latency=10592)])
+    assert d.verdict is Verdict.PASS
+    assert not any("Possession Code" in r and "slow" in r for r in d.reasons)
+
+
 def test_wrong_code_is_a_hard_block_with_a_reason(policy):
     d = policy.decide([human_whisper(), code(match=False)])
     assert d.verdict is Verdict.BLOCK
@@ -54,13 +62,17 @@ def test_a_real_whisper_the_spoof_model_calls_synthetic_still_passes(policy):
     assert not any("synthetic" in r for r in d.reasons)
 
 
-def test_clone_like_responses_block(policy):
+def test_clone_like_responses_block_even_with_a_stolen_code(policy):
+    # Wrong words, voiced, slow: one more Whisper Phrase, then BLOCK, whatever the code says.
     clone = human_whisper(task_match=0.4, whisper_score=0.1, reply_latency_ms=3200, spoof_score=0.6)
-    assert policy.decide([clone, code(latency=3100, spoof=0.6)]).verdict is Verdict.BLOCK
+    assert policy.decide([clone, code(latency=3100, spoof=0.6)]).verdict is Verdict.STEP_UP
+    assert policy.decide([clone, code(latency=3100, spoof=0.6), clone], step_ups_used=1).verdict is Verdict.BLOCK
+    assert policy.decide([clone, code(match=False)]).verdict is Verdict.BLOCK  # and at once without it
 
 
 def test_inconclusive_steps_up_then_hands_over_to_app(policy):
-    meh = human_whisper(task_match=0.75, whisper_score=0.65, reply_latency_ms=2100, spoof_score=0.4)
+    # Barely whispered, barely the right words, a machine-slow reply: the right code alone is not enough.
+    meh = human_whisper(task_match=0.7, whisper_score=0.6, reply_latency_ms=3000, spoof_score=0.4)
     first = policy.decide([meh, code(latency=2000, spoof=0.4)], step_ups_used=0)
     assert first.verdict is Verdict.STEP_UP and first.next_challenge is W
     second = policy.decide([meh, code(latency=2000, spoof=0.4), meh], step_ups_used=1)
@@ -111,11 +123,11 @@ def test_a_step_up_for_an_inconclusive_call_is_not_a_retry_for_a_later_miss():
     # Inconclusive, so one more Whisper Phrase; that phrase is then missed. The mean alone would PASS.
     # (The spoof score, enforced here, is what makes the first two Responses inconclusive.)
     policy = enforce_policy()
-    shaky = human_whisper(task_match=1.0, whisper_score=1.0, spoof_score=0.6)
-    first = policy.decide([shaky, code(latency=1500, spoof=0.6)], step_ups_used=0)
+    shaky = human_whisper(task_match=1.0, whisper_score=1.0, spoof_score=0.7)
+    first = policy.decide([shaky, code(latency=1500, spoof=0.7)], step_ups_used=0)
     assert first.verdict is Verdict.STEP_UP and first.next_challenge is W
     missed = human_whisper(task_match=0.65, whisper_score=1.0, spoof_score=0.0)
-    second = policy.decide([shaky, code(latency=1500, spoof=0.6), missed], step_ups_used=1)
+    second = policy.decide([shaky, code(latency=1500, spoof=0.7), missed], step_ups_used=1)
     assert second.liveness >= 0.75 and second.verdict is Verdict.STEP_UP and second.offer_app_approval
     assert "no retry is left" in second.reasons[0]
 

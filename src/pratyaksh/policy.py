@@ -189,7 +189,9 @@ class Policy:
 
         if s.reply_latency_ms is None:
             hard.append("no reply was heard.")
-        else:
+        elif kind is not ChallengeKind.POSSESSION_CODE:
+            # A Possession Code is not timed: unlocking the phone and opening the bank app takes anyone
+            # 5-15 s (a genuine Caller read it after 10.6 s on Oct 27 and was BLOCKed for it).
             parts["reply_latency"] = self._latency_component(s.reply_latency_ms)
             if s.reply_latency_ms > self._human_ms:
                 why.append(f"slow reply ({s.reply_latency_ms} ms; people usually answer within {self._human_ms:.0f} ms).")
@@ -210,6 +212,8 @@ class Policy:
                 hard.append("the code read out does not match the code sent to the Registered Device.")
             elif s.code_match is None:
                 hard.append("no code was read out.")
+            else:
+                parts["code_match"] = 1.0  # the right code: proof the Caller holds the Registered Device
 
         if s.spoof_score is not None and self._spoof_mode != "off":
             if self._spoof_mode == "enforce":
