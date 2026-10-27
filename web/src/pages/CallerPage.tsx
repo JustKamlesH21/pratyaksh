@@ -1,5 +1,5 @@
 import { AudioPresets, Room, RoomEvent, Track, type AudioCaptureOptions, type RemoteTrack } from "livekit-client";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Bank, ChatText, CheckCircle, CircleNotch, DeviceMobile, Headset, type Icon, Microphone, MicrophoneSlash, PhoneCall,
@@ -78,7 +78,7 @@ function captureOptions(mic: string): AudioCaptureOptions {
 }
 
 const AGENT_AUDIBLE = 3e-3; // -50 dBFS: the Voice Agent's voice is far louder, line noise far quieter
-const HANGOVER_MS = 500; // the room still rings briefly after the last word
+const HANGOVER_MS = 250; // the room still rings briefly after the last word; longer delays the Caller's first syllable
 
 /** Half duplex: mute the Caller's microphone while the Voice Agent's voice is playing here, and briefly
  *  after. On a real iPhone Call (Oct 27) the agent heard its own words back ("How can I help you today?
@@ -446,7 +446,7 @@ export default function CallerPage() {
       add("you", msg.text);
       turn.current.heard = true;
     } else if (msg.type === "challenge") {
-      structured.current = true;
+      structured.current = true; // the agent sends one (kind null) at Call start: from then on captions are not parsed
       setChallenge(msg.kind ? { kind: msg.kind, words: msg.words } : null);
     } else if (msg.type === "outcome") {
       setOutcome(msg.outcome);
@@ -582,11 +582,17 @@ export default function CallerPage() {
     </p>
   );
 
-  const audio = <div ref={audioHost} className="hidden" />;
+  // The Voice Agent's <audio> is attached into this host when its track arrives (often while "connecting").
+  // It must never remount, or the attached element leaves the document and the Caller hears nothing, so it
+  // sits beside the screen, outside the per-status trees, under a stable key.
+  const withAudio = (screen: ReactNode) => [
+    <Fragment key="screen">{screen}</Fragment>,
+    <div key="audio-host" ref={audioHost} className="hidden" />,
+  ];
 
   // ---------------------------------------------------------------- before a Call
   if (status === "idle" || status === "connecting") {
-    return (
+    return withAudio(
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
         <div className="flex flex-col items-center gap-3 pt-2 text-center">
           <Logo size={56} />
@@ -630,7 +636,6 @@ export default function CallerPage() {
             Clone into that cable, so the Voice Agent hears the Clone, not you.
           </p>
         </details>
-        {audio}
       </div>
     );
   }
@@ -668,7 +673,7 @@ export default function CallerPage() {
   if (status === "ended") {
     const end = ending(outcome);
     const Glyph = end.icon;
-    return (
+    return withAudio(
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
         <div className="flex flex-col items-center gap-3 pt-4 text-center" aria-live="polite">
           <span className={`motion-pop grid size-32 place-items-center rounded-full ${FILL[end.tone]}`}>
@@ -698,7 +703,6 @@ export default function CallerPage() {
         >
           Done
         </button>
-        {audio}
       </div>
     );
   }
@@ -709,7 +713,7 @@ export default function CallerPage() {
   const bars = [0.55, 0.85, 1, 0.75, 0.5].map((k) => (youTalking ? Math.min(1, meter * k * 1.4) : 0));
   const end = outcome ? ending(outcome) : null;
 
-  return (
+  return withAudio(
     <div className="mx-auto flex h-[calc(100dvh-6.5rem)] min-h-[34rem] w-full max-w-md flex-col">
       {/* who is on the line, and for how long */}
       <header className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
@@ -837,7 +841,6 @@ export default function CallerPage() {
           <span className="text-xs font-semibold text-ink-soft">Hang up</span>
         </div>
       </div>
-      {audio}
     </div>
   );
 }
