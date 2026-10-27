@@ -59,6 +59,9 @@ function Hero() {
             On risky bank calls, the Caller whispers a random phrase and reads a code shown only on their Registered
             Device.
           </p>
+          <p className="motion-enter max-w-[40ch] border-l-2 border-accent pl-4 font-display text-xl font-semibold leading-snug tracking-[-0.01em]" style={{ "--i": 3 } as CSSProperties}>
+            A cloned voice can fool your ear. It can't hold your phone.
+          </p>
           <div className="motion-enter flex flex-wrap gap-3" style={{ "--i": 4 } as CSSProperties}>
             <PrimaryCta />
             <ConsoleCta />
