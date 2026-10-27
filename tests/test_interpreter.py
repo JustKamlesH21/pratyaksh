@@ -193,3 +193,15 @@ def test_a_reply_the_llm_got_wrong_does_not_take_it_offline():
 def test_an_unreachable_llm_is_given_up_on_within_a_second_but_may_take_its_time_to_answer():
     timeout = OllamaChat("http://127.0.0.1:9", "m")._client.timeout
     assert timeout.connect <= 1.0 and timeout.read >= 6.0
+
+
+@pytest.mark.parametrize("said", ["From where to read the OTP?", "where do I find the code?", "OTP kahan milega?",
+                                  "ಕೋಡ್ ಎಲ್ಲಿ ಸಿಗುತ್ತೆ?"])
+def test_where_is_the_code_is_answered_offline_during_the_code_challenge(said):
+    # Asked on a real iPhone Call (Oct 27): the LLM's answer mentioned "OTP" and was dropped.
+    from pratyaksh.domain import ChallengeKind
+    from pratyaksh.verification.interpreter import Context
+
+    u = Interpreter(NoLLM(), faq=FAQ).understand(said, Context(challenge=ChallengeKind.POSSESSION_CODE))
+    assert u.kind is TurnKind.QUESTION and "bank app" in FAQ.entries[[e.id for e in FAQ.entries].index("why_code")].answers["en"]
+    assert u.reply in [a for e in FAQ.entries if e.id == "why_code" for a in e.answers.values()]
