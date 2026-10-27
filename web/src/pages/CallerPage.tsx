@@ -21,7 +21,6 @@ interface Capture {
 }
 
 const MIC_KEY = "pratyaksh.mic";
-const HEADSET_KEY = "pratyaksh.headset";
 
 // Browsers expose the microphone only on HTTPS or localhost; over http://<LAN IP> this is undefined.
 const MIC_BLOCKED =
@@ -46,13 +45,50 @@ function store(key: string, value: string | null) {
   }
 }
 
-/** Whispers are quiet broadband sound: noise suppression and auto gain treat them as noise, so both stay off. */
-function captureOptions(mic: string, headset: boolean): AudioCaptureOptions {
+/** Whispers are quiet broadband sound: noise suppression and auto gain treat them as noise, so both stay off.
+ *  Echo cancellation is off too: on iPhones it switches on voice processing that strips whispers (whisper
+ *  score 0.14-0.16 on Oct 27), and the microphone is held while the Voice Agent speaks, so there is no echo. */
+function captureOptions(mic: string): AudioCaptureOptions {
   return {
     ...(mic ? { deviceId: { ideal: mic } } : {}),
-    echoCancellation: !headset, // the Voice Agent plays through laptop speakers unless the Caller wears a headset
+    echoCancellation: false,
     noiseSuppression: false,
     autoGainControl: false,
+  };
+}
+
+const AGENT_AUDIBLE = 3e-3; // -50 dBFS: the Voice Agent's voice is far louder, line noise far quieter
+const HANGOVER_MS = 500; // the room still rings briefly after the last word
+
+/** Half duplex: mute the Caller's microphone while the Voice Agent's voice is playing here, and briefly
+ *  after. On a real iPhone Call (Oct 27) the agent heard its own words back ("How can I help you today?
+ *  Add a PE") from the phone's speaker; the agent never listens while it speaks, but this phone plays
+ *  its voice later than the agent sends it. Returns a function that stops it. */
+function holdMicWhileAgentSpeaks(room: Room, agent: MediaStreamTrack, onHold: (held: boolean) => void): () => void {
+  const ctx = new AudioContext();
+  void ctx.resume();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+  ctx.createMediaStreamSource(new MediaStream([agent])).connect(analyser);
+  const buf = new Float32Array(analyser.fftSize);
+  let lastHeard = 0;
+  let held = false;
+  const timer = window.setInterval(() => {
+    analyser.getFloatTimeDomainData(buf);
+    let peak = 0;
+    for (const v of buf) peak = Math.max(peak, Math.abs(v));
+    const now = performance.now();
+    if (peak > AGENT_AUDIBLE) lastHeard = now;
+    const hold = now - lastHeard < HANGOVER_MS;
+    if (hold === held) return;
+    held = hold;
+    const mic = room.localParticipant.getTrackPublication(Track.Source.Microphone)?.track;
+    void (hold ? mic?.mute() : mic?.unmute());
+    onHold(hold);
+  }, 30);
+  return () => {
+    window.clearInterval(timer);
+    void ctx.close();
   };
 }
 
@@ -82,19 +118,24 @@ function micProblem(label: string): string | null {
 const SILENT_MS = 8000;
 const SOUND = 1e-3; // -60 dBFS: speech near any working microphone peaks far above this
 
-/** Live level of the microphone the Call is sending, and whether it has carried no sound since it started. */
-function useMicLevel(track: MediaStreamTrack | null) {
+/** Live level of the microphone the Call is sending, and whether it has carried no sound since it started.
+ *  Time while the microphone is held for the Voice Agent does not count. */
+function useMicLevel(track: MediaStreamTrack | null, held: boolean) {
   const [level, setLevel] = useState({ db: -100, silent: false });
+  const heldRef = useRef(held);
+  heldRef.current = held;
   useEffect(() => {
     if (!track) return;
     const ctx = new AudioContext();
+    void ctx.resume();
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
     const buf = new Float32Array(analyser.fftSize);
-    const started = performance.now();
+    let started = performance.now();
     let heardSound = false;
     const timer = window.setInterval(() => {
+      if (heldRef.current) started = performance.now();
       analyser.getFloatTimeDomainData(buf);
       let sum = 0;
       let peak = 0;
@@ -122,14 +163,21 @@ export default function CallerPage() {
   const [agentSpeaking, setAgentSpeaking] = useState(false);
   const [mics, setMics] = useState<MediaDeviceInfo[]>([]);
   const [mic, setMic] = useState(() => stored(MIC_KEY) ?? "");
-  const [headset, setHeadset] = useState(() => stored(HEADSET_KEY) === "1");
   const [capture, setCapture] = useState<Capture | null>(null);
   const [micTrack, setMicTrack] = useState<MediaStreamTrack | null>(null);
-  const level = useMicLevel(micTrack);
+  const [micHeld, setMicHeld] = useState(false);
+  const level = useMicLevel(micTrack, micHeld);
   const roomRef = useRef<Room | null>(null);
+  const stopHolding = useRef<(() => void) | null>(null);
   const audioHost = useRef<HTMLDivElement>(null);
 
-  useEffect(() => () => void roomRef.current?.disconnect(), []);
+  useEffect(
+    () => () => {
+      stopHolding.current?.();
+      void roomRef.current?.disconnect();
+    },
+    [],
+  );
 
   async function listMics(askPermission = false) {
     try {
@@ -174,11 +222,6 @@ export default function CallerPage() {
     }
   }
 
-  function chooseHeadset(on: boolean) {
-    setHeadset(on);
-    store(HEADSET_KEY, on ? "1" : null);
-  }
-
   async function call() {
     if (MIC_BLOCKED) return;
     setError(null);
@@ -187,7 +230,7 @@ export default function CallerPage() {
     setStatus("connecting");
     try {
       const { url, token } = await api.token(customer);
-      const options = captureOptions(mic, headset);
+      const options = captureOptions(mic);
       const room = new Room({
         adaptiveStream: true,
         dynacast: true,
@@ -198,7 +241,10 @@ export default function CallerPage() {
       roomRef.current = room;
 
       room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-        if (track.kind === Track.Kind.Audio) audioHost.current?.appendChild(track.attach());
+        if (track.kind !== Track.Kind.Audio) return;
+        audioHost.current?.appendChild(track.attach());
+        stopHolding.current?.();
+        stopHolding.current = holdMicWhileAgentSpeaks(room, track.mediaStreamTrack, setMicHeld);
       });
       room.on(RoomEvent.DataReceived, (payload, _participant, _kind, topic) => {
         if (topic !== "pratyaksh") return;
@@ -208,7 +254,12 @@ export default function CallerPage() {
       room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
         setAgentSpeaking(speakers.some((p) => p.identity !== room.localParticipant.identity));
       });
-      room.on(RoomEvent.Disconnected, () => setStatus("ended"));
+      room.on(RoomEvent.Disconnected, () => {
+        stopHolding.current?.();
+        stopHolding.current = null;
+        setMicHeld(false);
+        setStatus("ended");
+      });
 
       await room.connect(url, token);
       await room.localParticipant.setMicrophoneEnabled(true, options);
@@ -222,9 +273,12 @@ export default function CallerPage() {
   }
 
   async function hangUp() {
+    stopHolding.current?.();
+    stopHolding.current = null;
     await roomRef.current?.disconnect();
     roomRef.current = null;
     setMicTrack(null);
+    setMicHeld(false);
     setStatus("ended");
   }
 
@@ -264,10 +318,6 @@ export default function CallerPage() {
               </button>
             )}
           </div>
-          <label className="flex items-center gap-2 text-sm text-ink-soft">
-            <input type="checkbox" checked={headset} disabled={inCall} onChange={(e) => chooseHeadset(e.target.checked)} />
-            I'm using a headset <span className="text-xs">(echo cancellation off)</span>
-          </label>
           {inCall ? (
             <button className="press inline-flex items-center justify-center gap-2 rounded-lg bg-block px-4 py-3 font-bold text-on-color" onClick={hangUp}>
               <PhoneDisconnect size={20} /> Hang up
@@ -283,7 +333,7 @@ export default function CallerPage() {
           )}
           <p className="flex items-center gap-2 text-sm text-ink-soft" aria-live="polite">
             {status === "in-call" ? (
-              agentSpeaking ? (
+              agentSpeaking || micHeld ? (
                 <span className="inline-flex items-center gap-1.5 font-semibold text-accent">
                   <Waveform size={17} aria-hidden /> The bank is speaking
                 </span>
@@ -327,9 +377,8 @@ export default function CallerPage() {
             <summary className="cursor-pointer font-semibold">Red-team mode</summary>
             <p className="mt-2">
               On the attacker laptop, choose the victim as "Calling as", pick{" "}
-              <b>CABLE Output (VB-Audio Virtual Cable)</b> as the Microphone and tick "I'm using a headset" (no speaker
-              echo reaches a cable). <code>attacker/clone_speak.py</code> plays the Clone into that cable, so the Voice
-              Agent hears the Clone, not you.
+              <b>CABLE Output (VB-Audio Virtual Cable)</b> as the Microphone. <code>attacker/clone_speak.py</code> plays
+              the Clone into that cable, so the Voice Agent hears the Clone, not you.
             </p>
           </details>
         </div>
