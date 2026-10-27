@@ -231,4 +231,6 @@ export interface DemoCustomer extends Customer {
   voice_paused: boolean;
   pause_minutes_left: number | null;
   open_security_alerts: number;
+  /** The laptop's LAN address (LAN_IP), for links a phone can open; null when not configured. */
+  phone_host: string | null;
 }
