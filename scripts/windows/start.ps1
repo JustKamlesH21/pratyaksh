@@ -50,8 +50,18 @@ if ($Only -in 'all', 'livekit') {
     Launch 'livekit' $LiveKit @('--config', "$R\infra\livekit.yaml", '--node-ip', $envs.LAN_IP) $T
     Remove-Item Env:LIVEKIT_KEYS
 }
+# HTTPS=1 in .env: phones (iPhones need it) may use the microphone. The web dev server serves HTTPS with a
+# certificate for the current LAN_IP (made here, signed by the local CA a phone installs once) and proxies
+# the API and LiveKit, so browsers use one origin: https://<LAN_IP>:5173.
+$https = $envs.HTTPS -eq '1'
+if ($https -and $Only -in 'all', 'api', 'web') {
+    & "$R\.venv\Scripts\python.exe" "$R\scripts\lan_https.py" $envs.LAN_IP
+    if ($LASTEXITCODE) { throw 'could not make the HTTPS certificate (scripts\lan_https.py)' }
+}
 if ($Only -in 'all', 'api') {
+    if ($https) { $env:LIVEKIT_PUBLIC_URL = "wss://$($envs.LAN_IP):5173" }  # LiveKit through the web origin
     Launch 'api' "$R\.venv\Scripts\pratyaksh-api.exe" @() $R
+    Remove-Item Env:LIVEKIT_PUBLIC_URL -ErrorAction SilentlyContinue
 }
 if ($Only -in 'all', 'agent') {
     # The LiveKit Agents CLI reads these from the environment, not from .env.
@@ -60,6 +70,12 @@ if ($Only -in 'all', 'agent') {
     foreach ($n in 'LIVEKIT_URL', 'LIVEKIT_API_KEY', 'LIVEKIT_API_SECRET') { Remove-Item "env:$n" }
 }
 if ($Only -in 'all', 'web') {
+    if ($https) { $env:PRATYAKSH_HTTPS = '1'; $env:VITE_SAME_ORIGIN = '1' }
     Launch 'web' 'npm.cmd' @('run', 'dev') "$R\web"
+    Remove-Item Env:PRATYAKSH_HTTPS, Env:VITE_SAME_ORIGIN -ErrorAction SilentlyContinue
 }
-"Console: http://localhost:5173/console   Caller: http://localhost:5173/call   Status: http://$($envs.LAN_IP):8000/v1/status"
+if ($https) {
+    "Phones: https://$($envs.LAN_IP):5173/call   CA for phones: https://$($envs.LAN_IP):5173/pratyaksh-ca.crt   Console: https://localhost:5173/console"
+} else {
+    "Console: http://localhost:5173/console   Caller: http://localhost:5173/call   Status: http://$($envs.LAN_IP):8000/v1/status"
+}

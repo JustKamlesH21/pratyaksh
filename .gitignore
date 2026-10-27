@@ -18,3 +18,4 @@ web/.env
 data/eval/**/*.wav
 data/eval/calibration.html
 data/eval/calibration/
+web/public/pratyaksh-ca.crt

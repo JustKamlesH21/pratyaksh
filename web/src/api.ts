@@ -1,6 +1,10 @@
 import type { CallView, Customer, CustomerRisk, EvalRun, Inbox, Receipt, ReceiptCheck, Stats, Status } from "./types";
 
-export const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+// HTTPS mode (start.ps1 with HTTPS=1) serves the API on this page's own origin through the dev server's proxy.
+export const API_URL: string =
+  import.meta.env.VITE_SAME_ORIGIN === "1"
+    ? ""
+    : ((import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000");
 
 /** Thrown for non-2xx replies; `status` lets the Console ask for its key on a 403. */
 export class HttpError extends Error {
@@ -108,5 +112,6 @@ export async function downloadTranscript(callId: string): Promise<void> {
 
 /** The Console's live feed. With CONSOLE_KEY set, the key goes in the first message (no WS headers). */
 export function eventsUrl(): string {
-  return `${API_URL.replace(/^http/, "ws")}/v1/events`;
+  // An empty VITE_API_URL means the API is on this page's own origin (HTTPS mode proxies /v1).
+  return `${(API_URL || window.location.origin).replace(/^http/, "ws")}/v1/events`;
 }
