@@ -139,7 +139,8 @@ backup even without a GPU.
 IndicF5 on **CPU** (RTX 3060 box, API running), reference `Divya_en.wav`:
 
 - _Blocked on this box while the live API runs:_ the fp32 model is ~1.4 GB but only ~1.3 GB
-  RAM and ~1 GB VRAM are free, so model load segfaults. `make_clone_bank.py --device cpu` now
+  RAM and ~1 GB VRAM are free, so model load fails (segfault, or with the CPU fixes below
+  `OSError: paging file is too small (os error 1455)`; a larger Windows pagefile may help). `make_clone_bank.py --device cpu` now
   hides CUDA and disables `torch.compile` so it genuinely runs on CPU; measure with a single
   clip once a few GB of RAM are free (e.g. the API paused, or on another machine), or on the
   GPU when `nvidia-smi` shows ≥2.5 GB free (`--device cuda`). The dependency stack, import
