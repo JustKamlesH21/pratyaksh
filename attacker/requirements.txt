@@ -1,12 +1,26 @@
-# Attacker laptop, Python 3.10 (IndicF5's tested version).
+# Attacker laptop. Python 3.11 (verified working: IndicF5's setup.py is python_requires>=3.7
+# and all its deps have cp311 wheels; 3.11 reuses the cached cu124 torch wheels). The README
+# originally said 3.10 — 3.11 is what we actually run.
+#
 # Install the CUDA build of torch first, then this file:
-#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+#   pip install torch==2.6.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
 #   pip install -r requirements.txt
+# (what we ran: uv pip install, venv at E:\AVISHKAR\attacker-venv, UV_CACHE_DIR=E:\AVISHKAR\uv-cache)
+#
 # IndicF5's code and dependencies, pinned to the commit we tested (Sep 24, 2025).
 f5_tts @ git+https://github.com/AI4Bharat/IndicF5.git@13f7c4d627cc10111aea8fe9c0039462cacacdc7
 # IndicF5's requirements.txt pins these but its setup.py does not; newer versions break the model.
+# Resolved on our box: transformers 4.49.0, numpy 1.26.4.
 transformers<4.50
 numpy<=1.26.4
-# Playing the Clone into the virtual cable.
+# datasets + pyarrow are pulled in by f5_tts and imported even for inference. Their current
+# releases (datasets 5.x, pyarrow 26) require numpy 2.0, which breaks the model — pin to the
+# numpy-1.26-compatible line that the Sep-2025 commit expects.
+datasets==2.21.0
+pyarrow==17.0.0
+# DSP whisperiser (dsp_whisper.py) needs scipy.signal; it also arrives via librosa (an f5_tts dep),
+# pinned here because we import it directly. Resolved: scipy 1.17.1.
+scipy
+# Playing the Clone into the virtual cable, and reading/writing WAVs.
 soundfile
 sounddevice
