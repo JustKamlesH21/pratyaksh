@@ -15,3 +15,6 @@ attacker/*.wav
 web/node_modules/
 web/dist/
 web/.env
+data/eval/**/*.wav
+data/eval/calibration.html
+data/eval/calibration/

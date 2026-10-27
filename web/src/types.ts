@@ -156,6 +156,22 @@ export interface Inbox {
   messages: DeviceMessage[];
 }
 
+/** k of n, with a Wilson 95% confidence interval (null when n is 0). */
+export interface EvalRate {
+  k: number;
+  n: number;
+  rate: number | null;
+  ci95: [number, number] | null;
+}
+
+export interface EvalSpread {
+  n: number;
+  median: number | null;
+  p95: number | null;
+  max: number | null;
+  mean: number | null;
+}
+
 export interface EvalRun {
   id: number;
   created_at: string;
@@ -169,6 +185,18 @@ export interface EvalRun {
     avg_added_seconds_real: number | null;
     pass_threshold?: number;
     block_threshold?: number;
+    // Eval Runs from Oct 28 on also carry counts, Wilson 95% intervals, breakdowns and latency.
+    catch?: EvalRate;
+    false_reject?: EvalRate;
+    clone_pass?: EvalRate;
+    by_condition?: Record<string, EvalRate>;
+    by_channel?: Record<string, { false_reject: EvalRate; catch: EvalRate }>;
+    by_language?: Record<string, { false_reject: EvalRate; catch: EvalRate }>;
+    caught_by?: Record<string, number>;
+    caught_by_only?: Record<string, number>;
+    added_seconds?: { real: EvalSpread; clone: EvalSpread };
+    hearing_ms?: EvalSpread;
+    live_hearing_ms?: EvalSpread | null;
   };
   rows: {
     session_id: string;
@@ -178,6 +206,10 @@ export interface EvalRun {
     liveness: number | null;
     added_seconds: number;
     reasons: string[];
+    condition?: string | null;
+    channel?: string;
+    language?: string;
+    caught_by?: string[];
   }[];
   notes: string;
 }
