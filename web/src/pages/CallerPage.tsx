@@ -1,12 +1,12 @@
 import { AudioPresets, Room, RoomEvent, Track, type AudioCaptureOptions, type RemoteTrack } from "livekit-client";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  ChatText, CheckCircle, DeviceMobile, Headset, type Icon, Microphone, PhoneCall, PhoneDisconnect, Prohibit,
-  ShieldCheck, SpeakerSimpleLow, Warning,
+  Bank, ChatText, CheckCircle, CircleNotch, DeviceMobile, Headset, type Icon, Microphone, MicrophoneSlash, PhoneCall,
+  PhoneDisconnect, ShieldCheck, ShieldSlash, SpeakerSimpleLow, User, Warning, XCircle,
 } from "@phosphor-icons/react";
 import { api } from "../api";
-import { ErrorNote, Logo, useCustomers } from "../components";
+import { ErrorNote, Logo, scriptLang, useCustomers } from "../components";
 import type { Outcome } from "../types";
 
 type Status = "idle" | "connecting" | "in-call" | "ended";
@@ -78,7 +78,7 @@ function captureOptions(mic: string): AudioCaptureOptions {
 }
 
 const AGENT_AUDIBLE = 3e-3; // -50 dBFS: the Voice Agent's voice is far louder, line noise far quieter
-const HANGOVER_MS = 500; // the room still rings briefly after the last word
+const HANGOVER_MS = 250; // the room still rings briefly after the last word; longer delays the Caller's first syllable
 
 /** Half duplex: mute the Caller's microphone while the Voice Agent's voice is playing here, and briefly
  *  after. On a real iPhone Call (Oct 27) the agent heard its own words back ("How can I help you today?
@@ -187,10 +187,21 @@ type Phase = "waiting" | "bank" | "listening" | "checking" | "your-turn";
 
 const PHASE_TEXT: Record<Phase, string> = {
   waiting: "Connecting to your bank…",
-  bank: "The bank is speaking",
+  bank: "Bank is speaking, please wait",
   listening: "Listening…",
   checking: "Checking…",
   "your-turn": "Your turn",
+};
+
+/** Turn cues use their own colours (index.css turn-*), never a Verdict colour: the bank in accent, the
+ *  Caller in ink with a solid microphone, waiting and checking in ink-soft with a spinner. The shape changes
+ *  with the colour, so colour is never the only cue. */
+const PHASE_TONE: Record<Phase, { orb: string; text: string; ring: string }> = {
+  bank: { orb: "bg-turn-bank/15 text-turn-bank ring-turn-bank/40", text: "text-turn-bank", ring: "is-active text-turn-bank" },
+  listening: { orb: "bg-turn-you/10 text-turn-you ring-turn-you/40", text: "text-turn-you", ring: "is-active text-turn-you" },
+  "your-turn": { orb: "bg-turn-you/10 text-turn-you ring-turn-you/40", text: "text-turn-you", ring: "text-turn-you" },
+  checking: { orb: "bg-sunken text-turn-wait ring-line", text: "text-turn-wait", ring: "text-line" },
+  waiting: { orb: "bg-sunken text-turn-wait ring-line", text: "text-turn-wait", ring: "text-line" },
 };
 
 /** Before the Voice Agent sent the open Challenge as data, the page read it from the caption. */
@@ -226,21 +237,21 @@ function ending(outcome: Outcome | null): { badge: string | null; title: string;
     };
   if (outcome && BLOCKED.includes(outcome))
     return {
-      badge: "BLOCK",
+      badge: "BLOCKED",
       title: "Call blocked",
       text:
         outcome === "declined_in_app"
           ? "You declined this request in your bank app, so nothing was changed."
           : "We could not verify this call, so for your safety nothing was changed.",
       tone: "block",
-      icon: Prohibit,
+      icon: XCircle,
     };
   if (outcome === "handed_to_agent")
     return {
       badge: "Handed to an officer",
       title: "A bank officer will help you",
       text: "The officer will verify you again before changing anything.",
-      tone: "stepup",
+      tone: "ink-soft",
       icon: Headset,
     };
   return {
@@ -255,9 +266,35 @@ function ending(outcome: Outcome | null): { badge: string | null; title: string;
 const TONE: Record<string, string> = {
   pass: "bg-pass/12 text-pass ring-pass/30",
   block: "bg-block/12 text-block ring-block/30",
-  stepup: "bg-stepup/12 text-stepup ring-stepup/30",
   "ink-soft": "bg-sunken text-ink-soft ring-line",
 };
+/** The Verdict as a solid fill with white text, as on the projector's Ribbon. */
+const FILL: Record<string, string> = {
+  pass: "bg-pass-fill text-on-fill",
+  block: "bg-block-fill text-on-fill",
+  "ink-soft": "bg-sunken text-ink",
+};
+
+/** The honest line status in the call header: nobody is verified until the Policy says so. */
+function CallStatus({ outcome }: { outcome: Outcome | null }) {
+  if (outcome && PASSED.includes(outcome))
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-pass">
+        <ShieldCheck size={13} weight="fill" aria-hidden /> Verified call
+      </span>
+    );
+  if (outcome && BLOCKED.includes(outcome))
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-block">
+        <ShieldSlash size={13} weight="fill" aria-hidden /> Not verified
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-ink-soft">
+      <Bank size={13} aria-hidden /> Your bank · verifying you
+    </span>
+  );
+}
 
 /** Bars that move while someone speaks. `levels` (0..1 each) follow the microphone; without them they
  *  animate in CSS (still, under reduced motion). */
@@ -409,7 +446,7 @@ export default function CallerPage() {
       add("you", msg.text);
       turn.current.heard = true;
     } else if (msg.type === "challenge") {
-      structured.current = true;
+      structured.current = true; // the agent sends one (kind null) at Call start: from then on captions are not parsed
       setChallenge(msg.kind ? { kind: msg.kind, words: msg.words } : null);
     } else if (msg.type === "outcome") {
       setOutcome(msg.outcome);
@@ -508,7 +545,7 @@ export default function CallerPage() {
       <label htmlFor="mic" className="font-medium text-ink-soft">Microphone</label>
       <select
         id="mic"
-        className="min-h-12 rounded-xl border border-line bg-surface px-3 text-base text-ink disabled:opacity-40"
+        className="min-h-12 rounded-xl border border-line-strong bg-surface px-3 text-base text-ink disabled:opacity-40"
         value={mic}
         disabled={!!MIC_BLOCKED || status === "connecting"}
         onChange={(e) => void chooseMic(e.target.value)}
@@ -545,11 +582,17 @@ export default function CallerPage() {
     </p>
   );
 
-  const audio = <div ref={audioHost} className="hidden" />;
+  // The Voice Agent's <audio> is attached into this host when its track arrives (often while "connecting").
+  // It must never remount, or the attached element leaves the document and the Caller hears nothing, so it
+  // sits beside the screen, outside the per-status trees, under a stable key.
+  const withAudio = (screen: ReactNode) => [
+    <Fragment key="screen">{screen}</Fragment>,
+    <div key="audio-host" ref={audioHost} className="hidden" />,
+  ];
 
   // ---------------------------------------------------------------- before a Call
   if (status === "idle" || status === "connecting") {
-    return (
+    return withAudio(
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
         <div className="flex flex-col items-center gap-3 pt-2 text-center">
           <Logo size={56} />
@@ -562,7 +605,7 @@ export default function CallerPage() {
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-ink-soft">Calling as</span>
             <select
-              className="min-h-12 rounded-xl border border-line bg-surface px-3 text-base text-ink"
+              className="min-h-12 rounded-xl border border-line-strong bg-surface px-3 text-base text-ink"
               value={customer}
               disabled={status === "connecting"}
               onChange={(e) => setCustomer(e.target.value)}
@@ -578,7 +621,7 @@ export default function CallerPage() {
           {micPicker}
         </div>
         <button
-          className="press inline-flex min-h-16 items-center justify-center gap-2.5 rounded-full bg-pass px-6 text-lg font-bold text-on-color disabled:cursor-not-allowed disabled:opacity-40"
+          className="press inline-flex min-h-16 items-center justify-center gap-2.5 rounded-full bg-accent px-6 text-lg font-bold text-on-accent disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!customer || !!MIC_BLOCKED || status === "connecting"}
           onClick={call}
         >
@@ -593,7 +636,6 @@ export default function CallerPage() {
             Clone into that cable, so the Voice Agent hears the Clone, not you.
           </p>
         </details>
-        {audio}
       </div>
     );
   }
@@ -609,16 +651,17 @@ export default function CallerPage() {
           {lines.map((l, i) => (
             <li
               key={l.at + "-" + i}
-              className={`motion-enter max-w-[85%] rounded-2xl px-3.5 py-2.5 text-base leading-snug ${
+              className={`motion-enter max-w-[85%] rounded-2xl px-3.5 py-2.5 text-lg leading-snug ${
                 l.who === "bank"
                   ? "self-start rounded-bl-md bg-sunken text-ink"
                   : "self-end rounded-br-md bg-accent/15 text-ink ring-1 ring-accent/25"
               } ${i < lines.length - 2 ? "opacity-75" : ""}`}
             >
-              <span className="mb-0.5 block text-[11px] font-semibold tracking-wide text-ink-soft uppercase">
+              <span className="mb-0.5 flex items-center gap-1 text-xs font-semibold text-ink-soft">
+                {l.who === "bank" ? <Bank size={13} aria-hidden /> : <User size={13} aria-hidden />}
                 {l.who === "bank" ? "Bank" : "You"}
               </span>
-              {l.text}
+              <span lang={scriptLang(l.text)}>{l.text}</span>
             </li>
           ))}
         </ol>
@@ -630,11 +673,11 @@ export default function CallerPage() {
   if (status === "ended") {
     const end = ending(outcome);
     const Glyph = end.icon;
-    return (
+    return withAudio(
       <div className="mx-auto flex w-full max-w-md flex-col gap-6">
         <div className="flex flex-col items-center gap-3 pt-4 text-center" aria-live="polite">
-          <span className={`motion-pop grid size-24 place-items-center rounded-full ring-1 ${TONE[end.tone]}`}>
-            <Glyph size={52} weight="fill" aria-hidden />
+          <span className={`motion-pop grid size-32 place-items-center rounded-full ${FILL[end.tone]}`}>
+            <Glyph size={96} weight="fill" aria-hidden />
           </span>
           {end.badge && (
             <span className={`motion-pop rounded-full px-3 py-1 text-sm font-bold ring-1 ${TONE[end.tone]}`}>{end.badge}</span>
@@ -653,22 +696,13 @@ export default function CallerPage() {
             {transcript}
           </div>
         )}
-        <div className="flex flex-col gap-2">
-          <button
-            className="press inline-flex min-h-14 items-center justify-center gap-2 rounded-full bg-pass px-6 text-lg font-bold text-on-color disabled:opacity-40"
-            disabled={!customer || !!MIC_BLOCKED}
-            onClick={call}
-          >
-            <PhoneCall size={22} weight="fill" aria-hidden /> Call again
-          </button>
-          <button
-            className="press min-h-12 rounded-full px-6 text-sm font-semibold text-ink-soft ring-1 ring-line hover:text-ink"
-            onClick={() => setStatus("idle")}
-          >
-            Change Customer or microphone
-          </button>
-        </div>
-        {audio}
+        {/* one Done, not "Call again" where the thumb just pressed Hang up (no accidental redial) */}
+        <button
+          className="press inline-flex min-h-14 items-center justify-center rounded-full bg-surface px-6 text-lg font-bold text-ink ring-1 ring-line-strong"
+          onClick={() => setStatus("idle")}
+        >
+          Done
+        </button>
       </div>
     );
   }
@@ -679,7 +713,7 @@ export default function CallerPage() {
   const bars = [0.55, 0.85, 1, 0.75, 0.5].map((k) => (youTalking ? Math.min(1, meter * k * 1.4) : 0));
   const end = outcome ? ending(outcome) : null;
 
-  return (
+  return withAudio(
     <div className="mx-auto flex h-[calc(100dvh-6.5rem)] min-h-[34rem] w-full max-w-md flex-col">
       {/* who is on the line, and for how long */}
       <header className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
@@ -690,76 +724,57 @@ export default function CallerPage() {
         </div>
         <div className="flex flex-col items-end">
           <span className="font-mono text-lg font-semibold tabular-nums">{startedAt ? clock(now - startedAt) : "0:00"}</span>
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-pass">
-            <ShieldCheck size={12} weight="fill" aria-hidden /> Secure line
-          </span>
+          <CallStatus outcome={outcome} />
         </div>
       </header>
 
       {/* whose turn it is */}
       <div className="flex flex-col items-center gap-3 py-5 text-center">
         <div className="relative grid size-28 place-items-center">
-          <span
-            className={`speaking-ring absolute inset-0 rounded-full ${
-              phase === "bank" ? "is-active text-accent" : youTalking ? "is-active text-pass" : "text-line"
-            }`}
-            aria-hidden
-          />
-          <span
-            className={`relative grid size-24 place-items-center rounded-full ring-1 ${
-              phase === "bank"
-                ? "bg-accent/15 text-accent ring-accent/40"
-                : phase === "checking"
-                  ? "bg-stepup/12 text-stepup ring-stepup/30"
-                  : phase === "waiting"
-                    ? "bg-sunken text-ink-soft ring-line"
-                    : "bg-pass/12 text-pass ring-pass/30"
-            }`}
-          >
+          <span className={`speaking-ring absolute inset-0 rounded-full ${PHASE_TONE[phase].ring}`} aria-hidden />
+          <span className={`relative grid size-24 place-items-center rounded-full ring-1 ${PHASE_TONE[phase].orb}`}>
             {phase === "bank" ? (
               <VoiceBars active />
             ) : phase === "checking" || phase === "waiting" ? (
-              <span className="typing inline-flex gap-1.5" aria-hidden>
-                <span />
-                <span />
-                <span />
-              </span>
+              <CircleNotch size={40} weight="bold" className="spinner" aria-hidden />
+            ) : phase === "your-turn" ? (
+              <Microphone size={40} weight="fill" aria-hidden />
             ) : (
               <VoiceBars active={youTalking} levels={bars} />
             )}
           </span>
         </div>
         <p
-          className={`font-display text-3xl font-semibold tracking-tight ${
-            phase === "bank"
-              ? "text-accent"
-              : phase === "checking"
-                ? "text-stepup"
-                : phase === "waiting"
-                  ? "text-ink-soft"
-                  : "text-pass"
-          }`}
+          className={`inline-flex items-center gap-2 font-display text-3xl font-semibold tracking-tight ${PHASE_TONE[phase].text}`}
           aria-live="polite"
         >
+          {phase === "bank" && <MicrophoneSlash size={26} aria-hidden />}
           {PHASE_TEXT[phase]}
         </p>
       </div>
 
       {/* the open Challenge, or the Outcome as soon as the bank decides */}
       {end ? (
-        <div className={`motion-pop flex items-center gap-3 rounded-2xl px-4 py-4 ring-1 ${TONE[end.tone]}`} aria-live="polite">
+        <div className={`motion-pop flex items-center gap-3 rounded-2xl px-4 py-4 ${FILL[end.tone]}`} aria-live="polite">
           <end.icon size={32} weight="fill" aria-hidden />
           <div>
             {end.badge && <p className="text-sm font-bold">{end.badge}</p>}
-            <p className="font-semibold text-ink">{end.title}</p>
+            <p className="font-semibold">{end.title}</p>
           </div>
         </div>
       ) : challenge?.kind === "whisper_phrase" ? (
         <div className="motion-pop flex flex-col gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-4" aria-live="polite">
           <p className="text-sm font-semibold text-accent">Whisper these words</p>
-          <p className="font-display text-[1.75rem] leading-snug font-semibold text-ink break-words">{challenge.words}</p>
+          <p key={challenge.words} className="font-display text-phrase font-semibold leading-tight text-ink break-words" lang={scriptLang(challenge.words)}>
+            {challenge.words.split(/\s+/).map((w, i, all) => (
+              <span key={i}>
+                <span className="word" style={{ "--i": i } as CSSProperties}>{w}</span>
+                {i < all.length - 1 ? " " : ""}
+              </span>
+            ))}
+          </p>
           <p className="inline-flex items-center gap-2 self-start rounded-full bg-surface px-3 py-1.5 text-sm font-semibold text-ink ring-1 ring-line">
-            <SpeakerSimpleLow size={16} weight="bold" aria-hidden /> Whisper, don't speak
+            <SpeakerSimpleLow size={16} weight="bold" aria-hidden /> Speak softly, close to the phone
           </p>
         </div>
       ) : challenge?.kind === "possession_code" ? (
@@ -792,15 +807,15 @@ export default function CallerPage() {
       <ErrorNote error={error} />
 
       {/* thumb zone: the microphone level and Hang up */}
-      <div className="pt-4 pb-[env(safe-area-inset-bottom)]">
+      <div className="pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         {micTrack && (
           <div className="mb-4 flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <Microphone size={16} className={micHeld ? "text-ink-soft" : level.silent ? "text-block" : "text-pass"} aria-hidden />
+              <Microphone size={16} className={micHeld ? "text-ink-soft" : level.silent ? "text-block" : "text-turn-you"} aria-hidden />
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-sunken" title={`${level.db.toFixed(0)} dBFS`}>
                 <div
                   className={`h-full origin-left rounded-full motion-safe:transition-transform motion-safe:duration-100 ${
-                    level.silent ? "bg-block" : "bg-pass"
+                    level.silent ? "bg-block" : "bg-turn-you"
                   }`}
                   style={{ transform: `scaleX(${micHeld ? 0 : meter})` }}
                 />
@@ -817,7 +832,7 @@ export default function CallerPage() {
         )}
         <div className="flex flex-col items-center gap-1.5">
           <button
-            className="press grid size-18 place-items-center rounded-full bg-block text-on-color shadow-lg shadow-block/30"
+            className="press grid size-18 place-items-center rounded-full bg-block text-on-accent"
             onClick={() => void hangUp()}
             aria-label="Hang up"
           >
@@ -826,7 +841,6 @@ export default function CallerPage() {
           <span className="text-xs font-semibold text-ink-soft">Hang up</span>
         </div>
       </div>
-      {audio}
     </div>
   );
 }

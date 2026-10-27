@@ -1,8 +1,10 @@
-import { StrictMode, Suspense, lazy, useState } from "react";
+import { StrictMode, Suspense, lazy, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { ChartBar, DeviceMobile, IconContext, Monitor, Moon, Phone, ShieldCheck, SquaresFour, Sun } from "@phosphor-icons/react";
-import { Logo } from "./components";
+import {
+  ChartBar, DeviceMobile, IconContext, Monitor, Moon, Palette, Phone, ShieldCheck, SquaresFour, Sun,
+} from "@phosphor-icons/react";
+import { Logo, stageOf } from "./components";
 import "./index.css";
 
 // One chunk per page: the Bank App on a phone does not download the LiveKit client the Caller page needs.
@@ -12,9 +14,11 @@ const CallerPage = lazy(() => import("./pages/CallerPage"));
 const BankAppPage = lazy(() => import("./pages/BankAppPage"));
 const EvalPage = lazy(() => import("./pages/EvalPage"));
 const DemoPage = lazy(() => import("./pages/DemoPage"));
+const DesignPage = lazy(() => import("./pages/DesignPage"));
 
 const tabs = [
   { to: "/demo", label: "Demo", icon: SquaresFour },
+  { to: "/design", label: "Design", icon: Palette },
   { to: "/console", label: "Console", icon: ShieldCheck },
   { to: "/call", label: "Caller", icon: Phone },
   { to: "/bank", label: "Bank App", icon: DeviceMobile },
@@ -25,16 +29,31 @@ type Theme = "dark" | "light" | "system";
 const NEXT: Record<Theme, Theme> = { dark: "light", light: "system", system: "dark" };
 const THEME_ICON = { dark: Moon, light: Sun, system: Monitor };
 
-/** Dark by default (index.html applies it before the first paint); light, or follow the system. */
+function applyTheme(t: Theme) {
+  if (t === "system") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+}
+
+/** Dark by default (index.html applies it before the first paint); light, or follow the system. A change
+ *  in one tab reaches the others (the projector window follows the laptop's toggle). */
 function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => {
     const t = document.documentElement.dataset.theme;
     return t === "light" || t === "dark" ? t : "system";
   });
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== "theme") return;
+      const t: Theme = e.newValue === "light" || e.newValue === "dark" ? e.newValue : e.newValue === "system" ? "system" : "dark";
+      applyTheme(t);
+      setTheme(t);
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
   const cycle = () => {
     const next = NEXT[theme];
-    if (next === "system") delete document.documentElement.dataset.theme;
-    else document.documentElement.dataset.theme = next;
+    applyTheme(next);
     try {
       localStorage.setItem("theme", next);
     } catch {
@@ -60,10 +79,19 @@ function PageSkeleton() {
 function Shell() {
   const [theme, cycleTheme] = useTheme();
   const ThemeIcon = THEME_ICON[theme];
-  const landing = useLocation().pathname === "/";
+  const location = useLocation();
+  const landing = location.pathname === "/";
+  // Stage mode (/demo?stage=1, /console?stage=1): the projector shows only the page, at 125% (112.5% with
+  // stage=small). The nav goes; the theme still follows the laptop's toggle through storage.
+  const stage = ["/demo", "/console"].includes(location.pathname) ? stageOf(location.search) : null;
+  useEffect(() => {
+    if (stage) document.documentElement.dataset.stage = stage;
+    else delete document.documentElement.dataset.stage;
+  }, [stage]);
   return (
     <div className="min-h-[100dvh]">
       <header
+        hidden={!!stage}
         className={`sticky top-0 z-30 border-b backdrop-blur-md ${
           landing ? "border-transparent bg-canvas/70" : "border-line bg-surface/85"
         }`}
@@ -100,11 +128,12 @@ function Shell() {
           </button>
         </div>
       </header>
-      <main className={landing ? "" : "mx-auto max-w-7xl px-4 py-6"}>
+      <main className={landing ? "" : stage ? "px-4 py-4" : "mx-auto max-w-7xl px-4 py-6"}>
         <Suspense fallback={<PageSkeleton />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/demo" element={<DemoPage />} />
+            <Route path="/design" element={<DesignPage />} />
             <Route path="/console" element={<ConsolePage />} />
             <Route path="/call" element={<CallerPage />} />
             <Route path="/bank" element={<BankAppPage />} />
