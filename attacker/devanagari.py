@@ -16,6 +16,19 @@ LEXICON: dict[str, str] = {
     "ivattu": "इवत्तु", "kilo": "किलो", "kobari": "कोबरी", "lao": "लाओ", "mane": "मने", "mein": "में",
     "naale": "नाले", "naanu": "नानु", "oota": "ऊटा", "ratri": "रात्रि", "sakkare": "सक्करे",
     "sanje": "संजे", "upma": "उपमा", "vada": "वड़ा", "biryani": "बिरयानी",
+    # per-language phrase banks (Oct 27): Hindi, and Kannada written in Devanagari
+    "aaj": "आज", "kal": "कल", "subah": "सुबह", "shaam": "शाम", "raat": "रात", "ghar": "घर",
+    "cheeni": "चीनी", "chawal": "चावल", "pyaaz": "प्याज़", "tamatar": "टमाटर", "daal": "दाल", "atta": "आटा",
+    "sabzi": "सब्ज़ी", "mehmaan": "मेहमान", "dost": "दोस्त", "bachche": "बच्चे", "padosi": "पड़ोसी",
+    "rishtedaar": "रिश्तेदार", "khana": "खाना", "paratha": "पराठा", "samosa": "समोसा", "poha": "पोहा",
+    "gantege": "गंटेगे", "beku": "बेकु", "maneli": "मनेली", "nimishadalli": "निमिषदल्ली",
+    "hain": "हैं", "ghante": "घंटे", "pahunchna": "पहुँचना", "ide": "इदे", "tagondu": "तगोंडु", "baa": "बा",
+    "iddare": "इद्दारे", "banni": "बन्नी", "are": "आर", "coming": "कमिंग", "home": "होम", "is": "इज़",
+    "today": "टुडे", "tonight": "टुनाइट", "tomorrow": "टुमॉरो",
+    # digits as Hindi and Kannada Customers are asked to say them (phrases.speakable)
+    "do": "दो", "teen": "तीन", "chaar": "चार", "paanch": "पाँच", "chhah": "छह", "saat": "सात", "aath": "आठ",
+    "nau": "नौ", "eradu": "एरडु", "mooru": "मूरु", "naalku": "नाल्कु", "aidu": "ऐदु", "aaru": "आरु", "elu": "एळु",
+    "entu": "एंटु", "ombattu": "ओंबत्तु",
     # English words, spelt as an Indian speaker says them
     "alarm": "अलार्म", "auto": "ऑटो", "bell": "बेल", "bus": "बस", "cab": "कैब", "class": "क्लास",
     "coffee": "कॉफ़ी", "college": "कॉलेज", "cousins": "कज़िन्स", "dinner": "डिनर", "flight": "फ्लाइट",
@@ -26,6 +39,11 @@ LEXICON: dict[str, str] = {
     "phone": "फ़ोन", "ready": "रेडी", "relatives": "रिलेटिव्स", "ring": "रिंग", "school": "स्कूल",
     "station": "स्टेशन", "students": "स्टूडेंट्स", "sunday": "संडे", "temple": "टेम्पल",
     "tomato": "टोमैटो", "train": "ट्रेन",
+    "tuesday": "ट्यूज़डे", "wednesday": "वेडनेसडे", "thursday": "थर्सडे", "saturday": "सैटरडे", "tea": "टी",
+    "pizza": "पिज़्ज़ा", "soup": "सूप", "rice": "राइस", "sugar": "शुगर", "onions": "अनियन्स",
+    "tomatoes": "टमाटोज़", "potatoes": "पोटैटोज़", "apples": "ऐपल्स", "bananas": "बनानाज़", "flour": "फ्लोर",
+    "doorbell": "डोरबेल", "kilos": "किलोज़", "of": "ऑफ़", "in": "इन", "by": "बाय", "at": "ऐट", "the": "द",
+    "on": "ऑन", "hours": "आवर्स", "times": "टाइम्स", "minutes": "मिनट्स", "bring": "ब्रिंग", "rang": "रैंग",
     # digit names (phrases.speakable says digits in English)
     "zero": "ज़ीरो", "one": "वन", "two": "टू", "three": "थ्री", "four": "फोर", "five": "फाइव",
     "six": "सिक्स", "seven": "सेवन", "eight": "एट", "nine": "नाइन",

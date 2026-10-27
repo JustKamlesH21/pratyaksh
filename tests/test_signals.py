@@ -108,8 +108,9 @@ def test_possession_code_digits_are_heard_where_they_transcribe_best(customer_la
 
 
 def test_a_whisper_phrase_is_heard_in_latin_whatever_the_customers_language():
-    models = ScriptedSpeechModels(["naale seven baje meeting"])
+    models = ScriptedSpeechModels(["naale elu gantege meeting ide"])
     SignalExtractor(models).extract(
-        Challenge(ChallengeKind.WHISPER_PHRASE, "", "naale 7 baje meeting"), Response(whispered(), 650), "kn"
+        Challenge(ChallengeKind.WHISPER_PHRASE, "", "naale 7 gantege meeting ide"), Response(whispered(), 650), "kn"
     )
-    assert models.hints == [TranscriptionHint(language="en", hotwords="naale seven baje meeting")]
+    # Latin letters, and the digit as the Customer was asked to say it (in Kannada).
+    assert models.hints == [TranscriptionHint(language="en", hotwords="naale elu gantege meeting ide")]
