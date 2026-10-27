@@ -153,6 +153,10 @@ class Step:
     long_reply: the Response is a Possession Code readout: allow more time and pauses
     wait:       after speaking, poll for the next Step (App Approval pending)
     end:        after speaking, hang up
+    challenge:  the Challenge the Caller is answering while this Step listens (None outside one)
+    words:      Whisper Phrase only: the words to whisper, as spoken and captioned (native script)
+    heard:      the transcript of the Response this Step answers ("" for none). It is about the
+                Response, not what to do next, so it is neither stored nor compared.
     """
 
     call_id: str
@@ -163,6 +167,9 @@ class Step:
     end: bool = False
     state: CallState = CallState.AWAITING_REQUEST
     outcome: Outcome | None = None
+    challenge: ChallengeKind | None = None
+    words: str = ""
+    heard: str = field(default="", compare=False)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -178,4 +185,7 @@ class Step:
             end=bool(d.get("end")),
             state=CallState(d.get("state", CallState.AWAITING_REQUEST)),
             outcome=Outcome(d["outcome"]) if d.get("outcome") else None,
+            challenge=ChallengeKind(d["challenge"]) if d.get("challenge") else None,
+            words=d.get("words") or "",
+            heard=d.get("heard") or "",
         )

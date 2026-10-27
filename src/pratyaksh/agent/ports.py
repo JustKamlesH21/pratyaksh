@@ -32,13 +32,19 @@ class VerifierPort(Protocol):
 
 class CallAudio(Protocol):
     async def play(self, wav: bytes, caption: str) -> None:
-        """Speak to the Caller; return when playout has finished. Raises CallerLeft."""
+        """Speak to the Caller; return when playout has finished. The caption reaches the Caller app
+        as the audio starts, never before. Raises CallerLeft."""
         ...
 
     async def listen(self, timeout_s: float, max_reply_s: float, pause_s: float = 0.0) -> Response:
         """Record one reply. reply_latency_ms counts from this call to the start of speech;
         None if the Caller said nothing within timeout_s. Pauses shorter than pause_s do not
         end the reply. Raises CallerLeft."""
+        ...
+
+    async def show(self, message: dict) -> None:
+        """Send the Caller app something to display, not to hear: {"type": "heard", "text"},
+        {"type": "challenge", "kind", "words"} or {"type": "outcome", "outcome"}. Best effort."""
         ...
 
     def caller_left(self) -> bool: ...
