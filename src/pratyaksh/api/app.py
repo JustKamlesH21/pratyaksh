@@ -115,6 +115,13 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     # Aggregates (/v1/status, /v1/stats), the Customer picker and receipt checking stay open.
     console = [Depends(console_only)]
 
+    def console_key_set(request: Request) -> None:
+        # The Demo hub hands out Registered Device tokens: never without a key (code review, Oct 28).
+        if not c(request).settings.console_key:
+            raise HTTPException(403, "set CONSOLE_KEY to use the Demo hub")
+
+    demo = [Depends(console_key_set), Depends(console_only)]
+
     @app.get("/healthz")
     def healthz():
         return {"ok": True}
@@ -290,7 +297,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     # One page for every demo Customer: their Bank App, Call state and Voice Pause. It hands out
     # pairing tokens, so it sits behind CONSOLE_KEY like every other staff read.
 
-    @app.get("/v1/demo/customers", dependencies=console)
+    @app.get("/v1/demo/customers", dependencies=demo)
     def demo_customers(request: Request):
         v = c(request).verifier
         hub = []
@@ -305,7 +312,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
             })
         return hub
 
-    @app.post("/v1/demo/reset", dependencies=console)
+    @app.post("/v1/demo/reset", dependencies=demo)
     def demo_reset(request: Request):
         """Between demo runs: dismiss every Security Alert (as each Registered Device would) and end
         Calls left open. Both only add Audit Trail events; nothing is deleted."""

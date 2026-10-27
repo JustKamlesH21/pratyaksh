@@ -267,7 +267,7 @@ def _request_in(said: list[str], question: bool, do_it: bool) -> tuple[RequestKi
         if kind in _SOUNDS_LIKE and _SOUNDS_LIKE[kind](said):
             if kind is RequestKind.BALANCE_ENQUIRY or do_it or not question:
                 return kind, True
-            return None, False
+            # only sounds like it, in a Question: a plainer Request may still follow
     return None, False
 
 

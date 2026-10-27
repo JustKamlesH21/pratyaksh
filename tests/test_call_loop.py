@@ -163,10 +163,12 @@ def test_the_caller_app_is_shown_the_open_challenge_and_the_outcome(tmp_path):
     shown = [m for what, m in caller.events if what == "show" and m["type"] in ("challenge", "outcome")]
     whisper = caller.heard[1].split("whisper these words. ", 1)[1].rstrip(".")
     assert shown == [
+        # Sent at once, so the Caller app never guesses a Challenge from a caption (code review, Oct 28).
+        {"type": "challenge", "kind": None, "words": ""},
         {"type": "challenge", "kind": "whisper_phrase", "words": whisper},
         {"type": "challenge", "kind": "possession_code", "words": ""},
         {"type": "challenge", "kind": None, "words": ""},
         {"type": "outcome", "outcome": "passed"},
     ]
-    whisper_shown = caller.events.index(("show", shown[0]))
+    whisper_shown = caller.events.index(("show", shown[1]))
     assert caller.events[whisper_shown + 1] == ("play", caller.heard[1])  # just before it is spoken

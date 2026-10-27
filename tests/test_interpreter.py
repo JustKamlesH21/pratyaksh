@@ -207,3 +207,10 @@ def test_where_is_the_code_is_answered_offline_during_the_code_challenge(said):
     u = Interpreter(NoLLM(), faq=FAQ).understand(said, Context(challenge=ChallengeKind.POSSESSION_CODE))
     assert u.kind is TurnKind.QUESTION and "bank app" in FAQ.entries[[e.id for e in FAQ.entries].index("why_code")].answers["en"]
     assert u.reply in [a for e in FAQ.entries if e.id == "why_code" for a in e.answers.values()]
+
+
+@pytest.mark.parametrize("said", ["pai add kaise hota hai? mera balance batao", "पाई ऐड कैसे होता है? मेरा बैलेंस बताओ"])
+def test_a_question_that_only_sounds_risky_does_not_hide_a_plain_request(said):
+    # Code review (Oct 28): a payee sound-alike inside a Question stopped the search before "balance".
+    u = Interpreter(NoLLM(), faq=FAQ).understand(said)
+    assert u.kind is TurnKind.REQUEST and u.request is RequestKind.BALANCE_ENQUIRY

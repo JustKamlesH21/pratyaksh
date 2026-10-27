@@ -1,3 +1,5 @@
+import yaml
+from importlib import resources
 import pytest
 from conftest import enforce_policy
 
@@ -137,3 +139,11 @@ def test_a_planned_phrase_is_not_a_retry_for_an_earlier_miss(policy):
     first = policy.decide([missed, human_whisper(), code()], step_ups_used=0)
     assert first.verdict is Verdict.STEP_UP and first.next_challenge is W
     assert policy.decide([missed, human_whisper(), code(), human_whisper()], step_ups_used=1).verdict is Verdict.PASS
+
+
+def test_a_policy_without_a_code_match_weight_is_rejected():
+    # Without it a right Possession Code would score 0 and genuine Callers would be stepped up or blocked.
+    raw = yaml.safe_load(resources.files("pratyaksh").joinpath("policy.yaml").read_text(encoding="utf-8"))
+    del raw["weights"]["code_match"]
+    with pytest.raises(PolicyError, match="code_match"):
+        Policy(raw)

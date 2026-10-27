@@ -65,6 +65,8 @@ class Policy:
         missing = set(RequestKind) - set(self._plans)
         if missing:
             raise PolicyError(f"policy has no plan for: {sorted(missing)}")
+        if self._weights.get("code_match", 0.0) <= 0:
+            raise PolicyError("weights.code_match must be positive: a right Possession Code would score 0")
         if self._spoof_mode not in {"enforce", "advisory", "off"}:
             raise PolicyError("signals.spoof_score.mode must be enforce, advisory or off")
         if not self._block_at < self._pass_at:

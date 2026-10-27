@@ -160,7 +160,8 @@ def evaluate(
             audio = Audio.from_wav(r.audio.read_bytes())
             extractor = SignalExtractor(models_for(r))
             started = time.perf_counter()
-            signals = extractor.extract(Challenge(r.kind, "", r.expected), Response(audio, r.reply_latency_ms))
+            signals = extractor.extract(Challenge(r.kind, "", r.expected), Response(audio, r.reply_latency_ms),
+                                        r.language if r.language in ("en", "hi", "kn") else None)
             hearing.append(round((time.perf_counter() - started) * 1000))
             if r.kind is ChallengeKind.POSSESSION_CODE:
                 signals = Signals.from_dict({**signals.to_dict(), "code_match": r.code_match})
