@@ -2,7 +2,8 @@
 
 Speech-to-text may return Kannada script, Devanagari, another Indic script, Latin, or a mix.
 Everything is romanised and folded to a rough phonetic form so "ನಾಳೆ", "नाळे" and "naale"
-compare equal. language_of() tells which of the three a Caller spoke, so answers match it.
+compare equal. sound_key() goes further, for loanwords that speech-to-text spells many ways.
+language_of() tells which of the three a Caller spoke, so answers match it.
 Internal to SignalExtractor and the Interpreter.
 """
 
@@ -62,6 +63,16 @@ def fold(text: str) -> str:
     """Romanise, lowercase, drop punctuation, fold spelling variants. Returns space-joined words."""
     words = re.findall(r"[a-z0-9]+", romanise(text).lower())
     return " ".join(_fold_word(w) for w in words)
+
+
+def sound_key(word: str) -> str:
+    """A folded word's consonant skeleton, for words speech-to-text spells many ways: English
+    loanwords written in Devanagari or Kannada script ("बैलेंस", "ಬ್ಯಾಲನ್ಸ್" and "balance" all give
+    "blns"). Keeps the first letter, drops later vowels and "y", and merges f/p, v/b, soft c/s."""
+    w = re.sub(r"c(?=[eiy])", "s", word)
+    w = w.replace("ck", "k").replace("c", "k").replace("f", "p").replace("v", "b").replace("z", "j").replace("q", "k")
+    w = w[:1] + re.sub(r"[aeiouy]", "", w[1:])
+    return re.sub(r"(.)\1+", r"\1", w)
 
 
 def fold_with_digits(text: str) -> str:
