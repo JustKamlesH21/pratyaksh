@@ -298,3 +298,47 @@ def test_status_names_a_model_that_failed_to_load(tmp_path):
             time.sleep(0.05)
     assert status["ready"] is False
     assert any("failed to load" in w and "cublas64_12.dll" in w for w in status["warnings"])
+
+
+def _blocked_over_http(client, customer_id=C):
+    """An impostor without the Registered Device: right phrase, wrong code twice."""
+    call_id = client.post("/v1/calls", json={"customer_id": customer_id}).json()["call_id"]
+    send(client, call_id, "naya payee add karna hai", voiced())
+    send(client, call_id, client.get(f"/v1/calls/{call_id}").json()["challenges"][-1]["phrase"], whispered())
+    for _ in range(2):
+        step = send(client, call_id, "9 9 9 9 9 9", voiced(), 900)
+    assert step["outcome"] == "blocked"
+    return call_id
+
+
+def test_the_demo_hub_lists_each_customer_with_pairing_and_voice_pause(api):
+    assert api.get("/v1/demo/customers", headers=NO_KEY).status_code == 403
+    hub = {c["id"]: c for c in api.get("/v1/demo/customers").json()}
+    assert set(hub) == {"cust-ananya", "cust-rahul", "cust-meera"}
+    assert {c["language"] for c in hub.values()} == {"kn", "hi", "en"}
+    assert hub[C]["device_token"] == device(api, C)["X-Device-Token"]
+    assert hub[C]["voice_paused"] is False and hub[C]["open_security_alerts"] == 0
+
+    _blocked_over_http(api)
+    rahul = next(c for c in api.get("/v1/demo/customers").json() if c["id"] == C)
+    assert rahul["voice_paused"] is True and rahul["open_security_alerts"] == 1
+    assert rahul["pause_minutes_left"] > 0
+    # Lifting the Voice Pause goes through the Bank App's own route, with the device token from the hub.
+    lifted = api.post(f"/v1/customers/{C}/alerts/dismiss", headers={"X-Device-Token": rahul["device_token"]})
+    assert lifted.json() == {"dismissed": 1}
+    rahul = next(c for c in api.get("/v1/demo/customers").json() if c["id"] == C)
+    assert rahul["voice_paused"] is False and rahul["pause_minutes_left"] is None
+
+
+def test_demo_reset_dismisses_alerts_and_ends_open_calls_but_keeps_the_audit_trail(api):
+    assert api.post("/v1/demo/reset", headers=NO_KEY).status_code == 403
+    blocked = _blocked_over_http(api)
+    open_call = api.post("/v1/calls", json={"customer_id": "cust-meera"}).json()["call_id"]
+    events_before = len(api.get(f"/v1/calls/{blocked}").json()["events"])
+
+    assert api.post("/v1/demo/reset").json() == {"dismissed": 1, "ended": 1}
+    assert api.get(f"/v1/calls/{open_call}").json()["outcome"] == "abandoned"
+    assert all(not c["voice_paused"] for c in api.get("/v1/demo/customers").json())
+    after = api.get(f"/v1/calls/{blocked}").json()
+    assert len(after["events"]) == events_before + 1 and after["audit"]["intact"]  # added to, never removed
+    assert api.post("/v1/demo/reset").json() == {"dismissed": 0, "ended": 0}

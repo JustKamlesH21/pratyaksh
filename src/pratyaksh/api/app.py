@@ -286,6 +286,36 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     def review(call_id: str, body: Review, request: Request):
         return c(request).verifier.review(call_id, body.approve, body.reviewer)
 
+    # -- Demo hub (the operator's laptop) --------------------------------------------------
+    # One page for every demo Customer: their Bank App, Call state and Voice Pause. It hands out
+    # pairing tokens, so it sits behind CONSOLE_KEY like every other staff read.
+
+    @app.get("/v1/demo/customers", dependencies=console)
+    def demo_customers(request: Request):
+        v = c(request).verifier
+        hub = []
+        for cust in v.customers():
+            risk = v.customer_risk(cust["id"])
+            hub.append({
+                **cust,
+                "device_token": v.pairing(cust["id"]),
+                "voice_paused": risk["voice_pause"]["active"],
+                "pause_minutes_left": risk["voice_pause"]["minutes_left"],
+                "open_security_alerts": risk["open_security_alerts"],
+            })
+        return hub
+
+    @app.post("/v1/demo/reset", dependencies=console)
+    def demo_reset(request: Request):
+        """Between demo runs: dismiss every Security Alert (as each Registered Device would) and end
+        Calls left open. Both only add Audit Trail events; nothing is deleted."""
+        v = c(request).verifier
+        dismissed = sum(v.dismiss_alerts(cust["id"], v.pairing(cust["id"])) for cust in v.customers())
+        open_calls = v.calls(500, outcome="in_progress")
+        for call in open_calls:
+            v.hang_up(call["id"])
+        return {"dismissed": dismissed, "ended": len(open_calls)}
+
     @app.websocket("/v1/events")
     async def events(ws: WebSocket):
         await ws.accept()

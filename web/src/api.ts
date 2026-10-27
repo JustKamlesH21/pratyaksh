@@ -1,4 +1,6 @@
-import type { CallView, Customer, CustomerRisk, EvalRun, Inbox, Receipt, ReceiptCheck, Stats, Status } from "./types";
+import type {
+  CallView, Customer, CustomerRisk, DemoCustomer, EvalRun, Inbox, Receipt, ReceiptCheck, Stats, Status,
+} from "./types";
 
 // HTTPS mode (start.ps1 with HTTPS=1) serves the API on this page's own origin through the dev server's proxy.
 export const API_URL: string =
@@ -69,6 +71,8 @@ export const api = {
       method: "POST",
       headers: { "X-Device-Token": deviceToken },
     }),
+  demoCustomers: () => http<DemoCustomer[]>("/v1/demo/customers", { headers: staff() }),
+  demoReset: () => http<{ dismissed: number; ended: number }>("/v1/demo/reset", { method: "POST", headers: staff() }),
   calls: (limit = 50) => http<CallView[]>(`/v1/calls?limit=${limit}`, { headers: staff() }),
   call: (id: string) => http<CallView>(`/v1/calls/${id}`, { headers: staff() }),
   customerRisk: (customerId: string) => http<CustomerRisk>(`/v1/customers/${customerId}/risk`, { headers: staff() }),
