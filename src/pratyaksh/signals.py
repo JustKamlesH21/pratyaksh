@@ -160,7 +160,44 @@ def whisper_score(audio: Audio) -> float | None:
     None when no speech energy is found.
     """
     warm_up_dsp()
-    return _whisper_score(audio)
+    score = _whisper_score(audio)
+    if log.isEnabledFor(logging.INFO):
+        # Runs on the DSP thread beside speech-to-text, so it adds no latency to the Response.
+        log.info("whisper DSP: whisper_score=%s detail=%s (logged only; the Policy does not use it)",
+                 score, whisper_detail(audio))
+    return score
+
+
+def whisper_detail(audio: Audio) -> dict | None:
+    """Diagnostic measurements for red-team review, never used for a Verdict (~5 ms per 3 s).
+
+    The whisper score alone is fooled by voiced synthetic speech drowned in loud noise (<= 5 dB SNR):
+    that leaves few pauses (TTS + white noise at 0 dB: dynamic_range_db ~5) and a flat, hissy spectrum
+    (flatness ~0.5). Recorded human whispers (EARS, Expresso, Claris Hindi; some with two background
+    talkers) measured dynamic_range_db 9.8-26 and flatness 0.03-0.11. Logged so real Calls show whether
+    a gate on these is safe; see scripts/redteam_whisper.py. None without speech energy.
+    """
+    import librosa
+
+    y = audio.samples
+    if audio.sample_rate != SAMPLE_RATE:
+        y = librosa.resample(y, orig_sr=audio.sample_rate, target_sr=SAMPLE_RATE)
+    n_fft, hop = 1024, 256
+    power = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop)) ** 2
+    rms = np.sqrt(power.sum(axis=0) / n_fft)
+    if rms.size == 0 or float(rms.max()) < 1e-4:
+        return None
+    db = 20 * np.log10(rms + 1e-9)
+    speech = power[:, rms > 0.1 * float(rms.max())]
+    freqs = librosa.fft_frequencies(sr=SAMPLE_RATE, n_fft=n_fft)
+    band = speech[(freqs > 100) & (freqs < 7500)] + 1e-12
+    flatness = np.exp(np.mean(np.log(band), axis=0)) / np.mean(band, axis=0)
+    high = speech[freqs >= 4000].sum(axis=0) / (speech.sum(axis=0) + 1e-12)
+    return {
+        "dynamic_range_db": round(float(np.percentile(db, 95) - np.percentile(db, 10)), 1),
+        "flatness": round(float(np.median(flatness)), 3),
+        "high_band_share": round(float(np.median(high)), 3),
+    }
 
 
 def _whisper_score(audio: Audio) -> float | None:
