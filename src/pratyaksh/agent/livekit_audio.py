@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 OUT_RATE = 48_000
 FRAME_MS = 10
 PREFIX_S = 0.3  # audio kept before the detected start of speech
+SILENCE_LSB = 4  # a device sending zeros arrives after Opus as ±1 LSB (measured); speech peaks in the thousands
 
 
 class LiveKitCallAudio:
@@ -38,6 +39,7 @@ class LiveKitCallAudio:
         self._left = asyncio.Event()
         self._reader: asyncio.Task | None = None
         self._listening = False
+        self._loudest = 0  # loudest sample heard from the Caller during this Call
 
     @classmethod
     async def open(cls, room: rtc.Room, caller: rtc.RemoteParticipant, vad: lk_vad.VAD) -> "LiveKitCallAudio":
@@ -148,6 +150,13 @@ class LiveKitCallAudio:
             self._listening = False
             pump.cancel()
             await stream.aclose()
+        self._loudest = max(self._loudest, _peak(heard))
+        if latency_ms is None and heard and self._loudest <= SILENCE_LSB:
+            # Measured Oct 27: the ASUS "AI Noise-cancelling Input" sends zeros, so the Caller talks and
+            # nothing is heard. A quiet room can also be near zero (the Realtek array gates it), so only a
+            # microphone that has carried no sound at all during the Call is reported.
+            log.warning("caller %s: no sound from the microphone at all so far (%.1f s silent now); "
+                        "wrong input device?", self._caller.identity, _seconds(heard))
         self._check()
         if latency_ms is None or start_idx is None:
             return Response(Audio.silence(), None)
@@ -184,6 +193,10 @@ class LiveKitCallAudio:
         if self._reader:
             self._reader.cancel()
         await self._source.aclose()
+
+
+def _peak(frames: list[rtc.AudioFrame]) -> int:
+    return max((int(np.abs(np.frombuffer(f.data, dtype=np.int16)).max(initial=0)) for f in frames), default=0)
 
 
 def _seconds(frames: list[rtc.AudioFrame]) -> float:
