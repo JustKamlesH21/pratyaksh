@@ -23,6 +23,7 @@ foreach ($l in [IO.File]::ReadAllLines("$R\.env")) {
     if ($l -match '^\s*([A-Za-z_]\w*)\s*=\s*(.*?)\s*(\s#.*)?$') { $envs[$matches[1]] = $matches[2].Trim('"', "'") }
 }
 . "$PSScriptRoot\pidfile.ps1"
+. "$PSScriptRoot\power.ps1"
 function Running($name) { return [bool](Get-Started "$T\$name.pid") }
 function Launch($name, $exe, $argList, $dir) {
     if (Running $name) { "$name already running (pid $(Get-Content "$T\$name.pid"))"; return }
@@ -31,6 +32,8 @@ function Launch($name, $exe, $argList, $dir) {
     if ($argList) { $opts.ArgumentList = $argList }  # Start-Process refuses an empty list
     $p = Start-Process @opts
     Save-Started "$T\$name.pid" $p
+    Start-Sleep -Seconds 2  # the .exe launchers start the real python.exe as a child
+    Set-Unthrottled $p.Id   # hidden processes are otherwise throttled by Windows (see power.ps1)
     "$name started (pid $($p.Id)); log $T\$name.log"
 }
 
