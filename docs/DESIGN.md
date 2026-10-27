@@ -1,6 +1,6 @@
 # Pratyaksh design system
 
-What the web app looks and moves like, and why. For engineers changing a screen and for presenters on the projector. The live version is the style guide at **`/design`** (in the nav after Demo): every token, state, component and animation below, rendered from the same CSS, with replay buttons. The source of truth is `web/src/index.css`; this file explains it.
+What the web app looks and moves like, and why. For engineers changing a screen and for presenters on the projector. The source of truth is `web/src/index.css`; this file explains it.
 
 The direction comes from `reports/Pratyaksh demo design brief.md`: the demo is remembered for one beat (the clone ticks green for the whisper, then flips to a full-width red BLOCK because the Possession Code is missing, while the real phone shows the Security Alert). Every choice here serves that beat and the honesty behind it.
 
@@ -133,7 +133,7 @@ Easing (`ease-*` utilities): `arrive` cubic-bezier(0.05, 0.7, 0.1, 1) (M3 emphas
 | `.press` | 100 ms · std (transition) | scale(0.98) while pressed | 1 ms |
 | Landing `lp-rise`, `lp-slide`, `lp-line`, `lp-digit`, `.reveal` | 360 to 900 ms · arrive | Hero plays a blocked Call; steps reveal as they scroll in | Content shown at once |
 
-**Reduced motion** (OS setting, or `html[data-motion="reduce"]` from the switch on `/design`, remembered in `localStorage` and applied before first paint): every animation and transition is shortened to 1 ms with one iteration, rather than removed, so it ends in its final state and `animationend` still fires. The Verdict Ribbon and the Security Alert keep a 150 ms opacity crossfade. Hidden start states (scroll reveals) exist only when motion is allowed. JS checks `prefersReducedMotion()` (both sources) to skip the Ribbon's tick dwell.
+**Reduced motion** (OS setting, or `html[data-motion="reduce"]` set by `localStorage.motion = "reduce"` and applied before first paint): every animation and transition is shortened to 1 ms with one iteration, rather than removed, so it ends in its final state and `animationend` still fires. The Verdict Ribbon and the Security Alert keep a 150 ms opacity crossfade. Hidden start states (scroll reveals) exist only when motion is allowed. JS checks `prefersReducedMotion()` (both sources) to skip the Ribbon's tick dwell.
 
 **Never:** shake on BLOCK, infinite pulses on alerts, odometer number rolls, `filter: blur()` reveals, animated `box-shadow`, colour or opacity overshoot, anything over three flashes per second.
 
@@ -164,5 +164,5 @@ Easing (`ease-*` utilities): `arrive` cubic-bezier(0.05, 0.7, 0.1, 1) (M3 emphas
 | Put `lang` on Indic text (`scriptLang`) | Track, italicise, uppercase or truncate Indic text |
 | Animate `transform` and `opacity`, with a named keyframe | Add a loop that is not a real live state |
 | Re-run `node web/scripts/contrast.mjs` after a colour change | Lighten `ink-soft` or the light Verdict colours by eye |
-| Check `/design` in both themes and with Reduce motion on | Ship a screen you have only seen in one theme |
+| Check every screen in both themes and with Reduce motion on | Ship a screen you have only seen in one theme |
 | Keep Hang up alone in the thumb zone | Put "Call again" where Hang up was |

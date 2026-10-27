@@ -207,7 +207,7 @@ export function useStage(): boolean {
   return stageOf(useLocation().search) !== null;
 }
 
-/** Reduced motion from the OS, or from the /design toggle (html[data-motion="reduce"]). */
+/** Reduced motion from the OS, or html[data-motion="reduce"] (localStorage "motion" = "reduce"). */
 export function prefersReducedMotion(): boolean {
   if (typeof document !== "undefined" && document.documentElement.dataset.motion === "reduce") return true;
   return typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
