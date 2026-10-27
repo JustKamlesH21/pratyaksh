@@ -1,10 +1,12 @@
 """Interpreter: understand any Caller utterance, so the Voice Agent never gets stuck.
 
-Internal to the Verifier. Keyword rules run first (fast, offline, deterministic); the LLM
-handles everything else (ADR-0002: it may talk about anything, but it never decides a Verdict,
-never reveals account data and never skips a Challenge). Questions are answered from
-knowledge.yaml with the answer that fits where the Call is: before a Request, during a Whisper
-Phrase or during a Possession Code.
+Internal to the Verifier. Keyword rules run first (fast, offline, deterministic), together with
+loanwords that sound like a Request's keywords, because speech-to-text mangles English words said
+in Hindi or Kannada ("payee add" -> "पाई आड़"). The LLM handles everything else (ADR-0002: it may
+talk about anything, but it never decides a Verdict, never reveals account data and never skips a
+Challenge); after it fails, it rests for a minute so no Call waits on an LLM that is offline.
+Questions are answered from knowledge.yaml with the answer that fits where the Call is: before a
+Request, during a Whisper Phrase or during a Possession Code.
 
 Seam: ChatModel (OllamaChat in production, a stub in tests).
 """
@@ -15,6 +17,7 @@ import json
 import logging
 import math
 import re
+import time
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -24,9 +27,10 @@ from typing import Protocol
 
 import httpx
 import yaml
+from rapidfuzz import fuzz
 
 from ..domain import ChallengeKind, RequestKind
-from ..language import fold, language_of
+from ..language import fold, language_of, sound_key
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +128,143 @@ _REQUESTS: list[tuple[RequestKind, _Keys]] = [
         "बैलेंस", "बकाया", "बाकी", "ಬ್ಯಾಲೆನ್ಸ್*", "ಬಾಕಿ", "ಎಷ್ಟು ಹಣ",
     ])),
 ]
+
+
+class _Loanword:
+    """An English word as speech-to-text writes it when a Caller says it in Hindi or Kannada
+    ("balance" -> "बेलेंस", "ಬ್ಯಾಲನ್ಸ್"): the spellings seen, anything with the same consonant
+    skeleton, or anything spelled nearly the same. Short words only match a spelling seen: a near
+    miss of a short word is usually another word."""
+
+    def __init__(self, spellings: str, near: int = 88):
+        self._seen = frozenset(fold(spellings).split())
+        self._keys = frozenset(sound_key(w) for w in self._seen if len(w) >= 5)
+        self._near = near
+
+    def __call__(self, word: str) -> bool:
+        return any(self._like(w) for w in _without_case_ending(word))
+
+    def _like(self, word: str) -> bool:
+        if word in self._seen:
+            return True
+        if len(word) < 5:
+            return False
+        key = sound_key(word)
+        return key in self._keys or any(
+            sound_key(seen)[0] == key[0] and fuzz.ratio(word, seen) >= self._near for seen in self._seen if len(seen) >= 5
+        )
+
+
+def _without_case_ending(word: str) -> list[str]:
+    """The word, and the word without a Kannada case ending ("ಬ್ಯಾಲನ್ಸನ್ನು" -> "byalans")."""
+    out = [word]
+    for ending in ("annu", "anu", "nu", "ige", "ge", "alli", "inda", "u"):
+        if word.endswith(ending) and len(word) - len(ending) >= 5:
+            out.append(word[: -len(ending)])
+            break
+    return out
+
+
+def _words(text: str) -> frozenset[str]:
+    return frozenset(fold(text).split())
+
+
+def _stems(*stems: str):
+    return lambda w: w.startswith(stems)
+
+
+# Loanwords that speech-to-text mangles (variants seen from faster-whisper, folded).
+_PASSWORD = _Loanword("password pasvord pasvard pasavard pasabard")
+_RESET = re.compile(r"r[ie]s(?:e|ai)[td]").fullmatch  # रीसेट, रिसैट, reset; not रास्ता, रिसीट (receipt)
+_SIM_WORDS = _words("mpin empin emapin enpin simkard simakard")
+_NUMBER_WORD = _Loanword("number nanbar nambar numbar")
+_MOBILE = _words("mobile mobail mobayil phone pon pone")
+_CHANGE = _stems("badal", "cenj", "change", "cange")
+_TRANSFER = _Loanword("transfer transapar transpar trainspar transfar")
+_LAKHS = _words("lac lacs lyak")
+_BENEFICIARY = _Loanword("beneficiary benipisiyari benipisari benepisiyari", near=85)
+_PAYEE = _words("payee pei peyi payi paye peye pey")
+_PAYEE_SHORT = _words("pe pai pay")  # also ordinary words: "पे" (on), "पाई" (pie, a paisa), "pay"
+_ADD = _words("add aid ed ar ayad")  # ऐड, एड, आड़ (Whisper hears "ad" as "आड़")
+_JOIN = _stems("jor", "jod", "jur", "jud", "seris", "sers")  # जोड़, ಸೇರಿಸು
+_NEW = _words("naya nai nae naye nayi new nyu hosa hosadu")
+_FILLER = _NEW | _words("a an the one ek ondu ko ka ke ki my mera meri mere mujhe nanna nanage")
+_BALANCE = _Loanword("balance bailens byalens belens balans", near=85)
+_NOT_YOUR_BALANCE = _words("minimum minimam min average avarej evarej kam nyunatam kanist ಕನಿಷ್ಠ")  # a Question
+
+
+def _is_add(word: str | None) -> bool:
+    return word is not None and (word in _ADD or _JOIN(word))
+
+
+def _next_word(said: list[str], i: int, step: int) -> str | None:
+    """The nearest word before (step -1) or after (step 1) said[i] that is not a filler."""
+    i += step
+    while 0 <= i < len(said) and said[i] in _FILLER:
+        i += step
+    return said[i] if 0 <= i < len(said) else None
+
+
+def _sounds_like_add_payee(said: list[str]) -> bool:
+    """A beneficiary, or a payee next to "add". A short form ("pai", "pe") is also an ordinary
+    word, so it needs the English "add" right before it, or must start the Request ("पे ऐड करना है",
+    "नया पाई आड़ करना है"); with जोड़ (join) it needs "new" ("नया पाई जोड़ना है"), because
+    "पाई पाई जोड़ के रखा है" is saving every paisa and "फोन पे जोर से" is "loudly on the phone"."""
+    for i, w in enumerate(said):
+        if _BENEFICIARY(w):
+            return True
+        before, after = _next_word(said, i, -1), _next_word(said, i, 1)
+        if w in _PAYEE and (_is_add(before) or _is_add(after)):
+            return True
+        if w in _PAYEE_SHORT:
+            starts = i == 0 or said[i - 1] in _FILLER
+            new = i > 0 and said[i - 1] in _NEW
+            if before in _ADD or (starts and after in _ADD) or (new and _is_add(after)):
+                return True
+    return False
+
+
+def _sounds_like_sim_swap(said: list[str]) -> bool:
+    for i, w in enumerate(said):
+        if _PASSWORD(w) or _RESET(w) or w in _SIM_WORDS:
+            return True
+        if _NUMBER_WORD(w):  # "मोबाइल नंबर बदलना है"
+            near = (_next_word(said, i, -1), _next_word(said, i, 1))
+            if any(n is not None and (n in _MOBILE or _CHANGE(n)) for n in near):
+                return True
+    return False
+
+
+def _sounds_like_transfer(said: list[str]) -> bool:
+    return any(_TRANSFER(w) or w in _LAKHS for w in said)
+
+
+def _sounds_like_balance(said: list[str]) -> bool:
+    return any(_BALANCE(w) for w in said) and not any(w in _NOT_YOUR_BALANCE for w in said)
+
+
+# Checked with the keywords of the same Request, so the riskiest Request still wins.
+_SOUNDS_LIKE = {
+    RequestKind.SIM_SWAP: _sounds_like_sim_swap,
+    RequestKind.HIGH_VALUE_TRANSFER: _sounds_like_transfer,
+    RequestKind.ADD_PAYEE: _sounds_like_add_payee,
+    RequestKind.BALANCE_ENQUIRY: _sounds_like_balance,
+}
+
+
+def _request_in(said: list[str], question: bool, do_it: bool) -> RequestKind | None:
+    """The riskiest Request said, by keyword or by a loanword that sounds like one. A Question that
+    only sounds like a risky Request ("पाई ऐड करने का तरीका क्या है?") is not taken as one."""
+    for kind, keys in _REQUESTS:
+        if keys.found_in(said):
+            return kind
+        if kind in _SOUNDS_LIKE and _SOUNDS_LIKE[kind](said):
+            if kind is RequestKind.BALANCE_ENQUIRY or do_it or not question:
+                return kind
+            return None
+    return None
+
+
 # Asking for the app, or saying a voice task is not possible. Multi-word on purpose: "app"
 # alone folds to "ap", which collides with Hindi "aap" (you); a bare "can't" may be "can't hear".
 _APP = _Keys([
@@ -256,10 +397,17 @@ class Faq:
         return "\n".join(f"- {answer}" for answer in dict.fromkeys(e.answers["en"] for e in self.entries))
 
 
+LLM_REST_S = 60.0  # after the LLM fails, keyword rules alone answer for this long, so no Call waits on it
+
+
 class Interpreter:
-    def __init__(self, llm: ChatModel | None = None, faq: Faq | None = None):
+    def __init__(self, llm: ChatModel | None = None, faq: Faq | None = None,
+                 clock=time.monotonic, llm_rest_s: float = LLM_REST_S):
         self._llm = llm
         self._faq = faq or Faq.load()
+        self._clock = clock
+        self._llm_rest_s = llm_rest_s
+        self._llm_back_at = 0.0  # when the LLM may be asked again after a failure
 
     def understand(self, transcript: str, context: Context = Context()) -> Understanding:
         """What the Caller meant, given where the Call is.
@@ -286,12 +434,13 @@ class Interpreter:
             return self._during_challenge(text, said, question, wants_app, context, language)
 
         answer = self._faq.match(said)
-        request = next((kind for kind, keys in _REQUESTS if keys.found_in(said)), None)
+        do_it = _DO_IT.found_in(said)
+        request = _request_in(said, question, do_it)
         if answer and (question or answer.report):
             # "Should I share my PIN?" is a Question, not a PIN reset Request, and "someone transferred
             # money from my account" is a fraud report. "Is this safe? I want to transfer 6 lakh" is
             # both: answer it, then carry on with the Request.
-            if request and _DO_IT.found_in(said):
+            if request and do_it:
                 return Understanding(TurnKind.REQUEST, request, answer.answer_in(language), wants_app)
             return Understanding(TurnKind.QUESTION, reply=answer.answer_in(language))
         if request:
@@ -306,8 +455,10 @@ class Interpreter:
             return Understanding(TurnKind.QUESTION, reply=answer.answer_in(language))
         if _GOODBYE.found_in(said):
             return Understanding(TurnKind.GOODBYE)
-        if self._llm is not None:  # before canned small talk: it handles "hello, my money went…" better
-            return self._ask_llm(text, context, language)
+        # Before canned small talk: the LLM handles "hello, my money went…" better.
+        understood = self._ask_llm(text, context, language)
+        if understood is not None:
+            return understood
         chat = self._faq.match(said, small_talk=True)
         if chat:
             return Understanding(TurnKind.CHAT, reply=chat.answer_in(language))
@@ -333,15 +484,19 @@ class Interpreter:
             return Understanding(TurnKind.CHAT, reply=chat.answer_in(language))
         if not question:
             return Understanding(TurnKind.UNCLEAR)
-        if self._llm is not None:  # only Questions, Repeats and Waits: keywords alone change the Call's path
-            u = self._ask_llm(text, context, language)
-            if u.kind in (TurnKind.REPEAT, TurnKind.WAIT):
-                return Understanding(u.kind, by_llm=True)
-            if u.kind is TurnKind.QUESTION and u.reply:
-                return u
+        # Only Questions, Repeats and Waits: keywords alone change the Call's path.
+        u = self._ask_llm(text, context, language)
+        if u is not None and u.kind in (TurnKind.REPEAT, TurnKind.WAIT):
+            return Understanding(u.kind, by_llm=True)
+        if u is not None and u.kind is TurnKind.QUESTION and u.reply:
+            return u
         return Understanding(TurnKind.QUESTION, reply=_NO_ANSWER_IN.get(language, NO_ANSWER))
 
-    def _ask_llm(self, text: str, context: Context, language: str) -> Understanding:
+    def _ask_llm(self, text: str, context: Context, language: str) -> Understanding | None:
+        """The LLM's reading of what was said, or None when there is no LLM, it is resting after a
+        failure, or its reply made no sense; the keyword rules then answer alone."""
+        if self._llm is None or self._clock() < self._llm_back_at:
+            return None
         system = (
             "You are the voice assistant on a bank's secure phone line in India. The caller may mix Kannada, "
             "Hindi and English, possibly romanised. Classify the caller's words and reply with JSON only:\n"
@@ -362,6 +517,14 @@ class Interpreter:
         )
         try:
             out = self._llm.complete_json(system, text)
+        except ValueError as e:  # it answered, but not with JSON
+            log.warning("LLM reply was not JSON: %r", e)
+            return None
+        except Exception as e:  # unreachable, slow or failing: don't make the next Calls wait on it too
+            self._llm_back_at = self._clock() + self._llm_rest_s
+            log.warning("LLM failed (%r); keyword rules alone for the next %.0f s", e, self._llm_rest_s)
+            return None
+        try:
             raw = out.get("request")
             request = RequestKind(raw) if raw in RequestKind._value2member_map_ else None
             if out.get("kind") in TurnKind._value2member_map_:
@@ -376,8 +539,8 @@ class Interpreter:
                 kind, reply = TurnKind.QUESTION, _NO_ANSWER_IN.get(language, NO_ANSWER)
             return Understanding(kind, request if kind is TurnKind.REQUEST else None, reply, by_llm=True)
         except Exception as e:  # the LLM is optional; never let it break a Call
-            log.warning("LLM interpretation failed: %r", e)
-            return Understanding(TurnKind.UNCLEAR)
+            log.warning("LLM reply not understood: %r", e)
+            return None
 
 
 def _where(context: Context) -> str:
@@ -447,9 +610,12 @@ def _clean_reply(reply: str, allowed_numbers: frozenset[str] = frozenset({"1930"
 class OllamaChat:
     """Ollama chat API. Works with Ollama Cloud (https://ollama.com + API key) or a local server."""
 
-    def __init__(self, host: str, model: str, api_key: str | None = None, timeout_s: float = 6.0):
+    def __init__(self, host: str, model: str, api_key: str | None = None, timeout_s: float = 6.0,
+                 connect_timeout_s: float = 1.0):
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        self._client = httpx.Client(base_url=host.rstrip("/"), headers=headers, timeout=timeout_s)
+        # Offline (no internet at the venue) a connection fails fast; a reachable model may take its time.
+        timeout = httpx.Timeout(timeout_s, connect=connect_timeout_s)
+        self._client = httpx.Client(base_url=host.rstrip("/"), headers=headers, timeout=timeout)
         self._model = model
 
     def complete_json(self, system: str, user: str) -> dict:
