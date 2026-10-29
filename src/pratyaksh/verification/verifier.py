@@ -123,6 +123,8 @@ _HANDOVER_LEADS = ("Sure.", "I'm having trouble on this line.", "I'm sorry, I co
 CODE_PROMPT = "I've sent a six-digit code to the bank app on your registered phone. Please read it out."
 # Said by the Voice Agent while a reply that was not voiced ahead of time (an LLM answer) is synthesised.
 ONE_MOMENT = "One moment, please."
+# An open Call the Voice Agent has not moved on this long is dead (see Verifier._close_silent_calls).
+SILENT_CALL_S = 5 * 60
 
 
 def _whisper_prompt(phrase: str, language: str) -> str:
@@ -224,6 +226,7 @@ class Verifier:
             if s.get(CustomerRow, customer_id) is None:
                 raise UnknownCustomer(customer_id)
             now = self._now()
+            silent = self._close_silent_calls(s, customer_id, now)
             call = CallRow(
                 id=str(uuid.uuid4()),
                 customer_id=customer_id,
@@ -242,8 +245,27 @@ class Verifier:
             s.flush()
             self._audit(s, call, "call_started", {"customer_id": customer_id, "room": room})
             step = self._set_step(s, call, Step(call.id, GREETING, listen=True, state=CallState.AWAITING_REQUEST))
+        for old_id in silent:
+            self._publish_after(old_id)
         self._publish_after(call.id)
         return step
+
+    def _close_silent_calls(self, s: Session, customer_id: str, now: datetime) -> list[str]:
+        """Close this Customer's open Calls the Voice Agent has not moved on for SILENT_CALL_S: its worker
+        died or restarted mid-Call (Oct 29), so nobody will ever hang them up. A live Call is never idle
+        that long (the agent waits at most code_listen_timeout_s for a reply), so a second, real Call
+        running at the same time is left alone."""
+        ids = s.scalars(select(CallRow.id).where(
+            CallRow.customer_id == customer_id, CallRow.outcome.is_(None),
+            CallRow.updated_at < now - timedelta(seconds=SILENT_CALL_S),
+        )).all()
+        for call_id in ids:
+            call = self._lock(s, call_id)
+            for msg in self._open_messages(s, call):
+                msg.resolved_at = now
+            self._audit(s, call, "call_went_silent", {"minutes": SILENT_CALL_S // 60})
+            self._close(s, call, Outcome.ABANDONED, "")
+        return list(ids)
 
     def respond(self, call_id: str, response: Response) -> Step:
         try:

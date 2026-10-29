@@ -75,8 +75,12 @@ The Caller's spoken reply to one Challenge, together with how long the Caller to
 _Avoid_: answer, turn, utterance
 
 **Signal**:
-One measurement taken from a Response: Task Match, Whisper Score, Reply Latency, Spoof Score or Code Match.
+One measurement taken from a Response: Task Match, Whisper Score, Live Microphone, Reply Latency, Spoof Score or Code Match.
 _Avoid_: check, feature, metric
+
+**Live Microphone**:
+The Signal that a Whisper Phrase came through a live microphone: the gap between the reply's loud and quiet moments (its dynamic range) stays low, because a microphone always hears its room. A Clone played in digitally arrives with exact silence around the words. It does not catch a Clone played aloud into a real phone; the Possession Code does.
+_Avoid_: noise check, mic check, injection detector
 
 **Liveness Score**:
 The single number, between 0 and 1, that the Policy derives from all Signals of a Response. Higher means more likely a live human.

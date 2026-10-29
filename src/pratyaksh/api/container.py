@@ -37,6 +37,7 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
     db = Database(settings.database_url)
     missing_triggers = db.create_schema()
     db.seed_demo_customers()
+    policy = Policy.load(settings.policy_path)
 
     if speech is None:
         if settings.speech_backend == "scripted":
@@ -46,7 +47,8 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
                 whisper_model=settings.whisper_model,
                 device=settings.whisper_device,
                 compute_type=settings.whisper_compute_type,
-                spoof_model=settings.spoof_model or None,
+                # Policy spoof mode off: no Spoof Score, so the screens show none (an Eval Run loads its own).
+                spoof_model=(settings.spoof_model or None) if policy.uses_spoof_score else None,
                 spoof_fake_labels=tuple(l.strip() for l in settings.spoof_fake_labels.split(",") if l.strip()),
             )
 
@@ -54,7 +56,7 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
     events = EventHub()
     verifier = Verifier(
         db,
-        Policy.load(settings.policy_path),
+        policy,
         SignalExtractor(speech),
         Interpreter(llm),
         events,

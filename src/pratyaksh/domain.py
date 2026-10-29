@@ -116,6 +116,9 @@ class Signals:
     spoof_score: float | None = None  # 0..1, probability the audio is synthetic
     spoken_digits: str | None = None  # Possession Code only
     code_match: bool | None = None  # Possession Code only
+    # Whisper Phrase only (Live Microphone): dB between the reply's loud and quiet moments. A live microphone
+    # always hears its room, so this stays low; audio played in digitally has exact silence around the words.
+    dynamic_range_db: float | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -43,6 +43,60 @@ def test_a_genuine_caller_who_takes_time_to_find_the_code_still_passes(policy):
     assert not any("Possession Code" in r and "slow" in r for r in d.reasons)
 
 
+def test_a_whisper_started_within_two_and_a_half_seconds_is_not_slow(policy):
+    # Real iPhone Calls, Oct 29: genuine whispers took 1.5-2.9 s after the prompt ended.
+    d = policy.decide([human_whisper(task_match=1.0, whisper_score=1.0, reply_latency_ms=2464), code()])
+    assert d.verdict is Verdict.PASS
+    assert not any("slow" in r for r in d.reasons)
+    late = policy.decide([human_whisper(reply_latency_ms=2900), code()])
+    assert any("slow reply (2900 ms" in r for r in late.reasons)
+
+
+def test_the_shipped_policy_says_nothing_about_the_spoof_model(policy):
+    # Oct 29: it called a genuine Caller's code readouts synthetic (0.999, 1.0) on real Calls.
+    d = policy.decide([human_whisper(spoof_score=1.0), code(spoof=1.0)])
+    assert d.verdict is Verdict.PASS
+    assert not any("synthetic" in r for r in d.reasons)
+    assert policy.uses_spoof_score is False  # so the API does not even run the model on Calls
+    assert enforce_policy().uses_spoof_score is True
+
+
+def mic_policy(mode: str = "enforce") -> Policy:
+    raw = yaml.safe_load(resources.files("pratyaksh").joinpath("policy.yaml").read_text())
+    raw["signals"]["live_microphone"]["mode"] = mode
+    return Policy(raw)
+
+
+def test_the_shipped_policy_does_not_enforce_the_live_microphone_check(policy):
+    # Oct 29, 22:01: enforced, it BLOCKed a genuine iPhone whisper measured at 146 dB (the Caller page mutes
+    # the microphone while the Voice Agent speaks, and a quick reply carried that silent slice).
+    genuine = human_whisper(task_match=1.0, whisper_score=1.0, dynamic_range_db=145.8)
+    d = policy.decide([genuine, code()])
+    assert d.verdict is Verdict.PASS
+    assert not any("microphone" in r for r in d.reasons)
+
+
+def test_a_whisper_with_no_microphone_background_noise_does_not_count():
+    # The Clone of Oct 29: perfectly whispered, right words, but played in through a virtual cable.
+    policy = mic_policy("enforce")
+    injected = human_whisper(task_match=1.0, whisper_score=1.0, dynamic_range_db=177.0)
+    d = policy.decide([injected, code()])
+    assert d.verdict is Verdict.STEP_UP
+    assert any("no live microphone" in r for r in d.reasons)
+    # Two such whispers, even with the right code: never a PASS.
+    assert policy.decide([injected, code(), injected], step_ups_used=1).verdict is Verdict.BLOCK
+    # The loudest-floored real whisper seen (40.2 dB on the iPhone) is a live microphone.
+    real = human_whisper(task_match=1.0, whisper_score=1.0, dynamic_range_db=40.2)
+    assert policy.decide([real, code()]).verdict is Verdict.PASS
+
+
+def test_the_live_microphone_check_in_advisory_mode_only_reports():
+    injected = human_whisper(task_match=1.0, whisper_score=1.0, dynamic_range_db=177.0)
+    d = mic_policy("advisory").decide([injected, code()])
+    assert d.verdict is Verdict.PASS
+    assert any("no live microphone" in r for r in d.reasons)
+
+
 def test_wrong_code_is_a_hard_block_with_a_reason(policy):
     d = policy.decide([human_whisper(), code(match=False)])
     assert d.verdict is Verdict.BLOCK
@@ -74,7 +128,7 @@ def test_clone_like_responses_block_even_with_a_stolen_code(policy):
 
 def test_inconclusive_steps_up_then_hands_over_to_app(policy):
     # Barely whispered, barely the right words, a machine-slow reply: the right code alone is not enough.
-    meh = human_whisper(task_match=0.7, whisper_score=0.6, reply_latency_ms=3000, spoof_score=0.4)
+    meh = human_whisper(task_match=0.7, whisper_score=0.6, reply_latency_ms=6000, spoof_score=0.4)
     first = policy.decide([meh, code(latency=2000, spoof=0.4)], step_ups_used=0)
     assert first.verdict is Verdict.STEP_UP and first.next_challenge is W
     second = policy.decide([meh, code(latency=2000, spoof=0.4), meh], step_ups_used=1)

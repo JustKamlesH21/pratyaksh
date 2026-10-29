@@ -13,6 +13,7 @@ import re
 import unicodedata
 
 from indic_transliteration import sanscript
+from rapidfuzz import fuzz
 
 # Indic digits in every script sanscript knows, mapped to ASCII.
 _INDIC_SCRIPTS = [
@@ -33,7 +34,7 @@ _DIGIT_SPELLINGS = {
     "5": ["five", "paanch", "panch", "aidu"],
     "6": ["six", "chhe", "chah", "chhah", "aaru"],
     "7": ["seven", "saat", "elu", "yelu"],
-    "8": ["eight", "aath", "entu", "yentu"],
+    "8": ["eight", "ate", "aath", "entu", "yentu"],
     "9": ["nine", "nau", "ombattu", "ombatu", "onbattu"],
 }
 _REPEATS = {"double": 2, "dabal": 2, "triple": 3, "tripal": 3}
@@ -80,11 +81,24 @@ def fold_with_digits(text: str) -> str:
     return " ".join(_DIGIT_WORDS.get(w, w) for w in fold(text).split())
 
 
+def near_digit(word: str) -> str | None:
+    """The digit a folded word nearly spells ("ent" -> "8", a clipped whispered "entu"), or None. Only a
+    close match that is clearly closer to one digit than to any other: "endu" is as near 2 ("erdu") as
+    8, and "sone" is "sonne" (0) not "one" (1), so neither counts."""
+    if not word.isalpha() or word in _DIGIT_WORDS:
+        return None
+    best: dict[str, float] = {}
+    for spelling, digit in _DIGIT_WORDS.items():
+        best[digit] = max(best.get(digit, 0.0), fuzz.ratio(word, spelling))
+    (top, score), runner_up = sorted(best.items(), key=lambda kv: -kv[1])[0], sorted(best.values())[-2]
+    return top if score >= 85 and score - runner_up >= 10 else None
+
+
 def spoken_digits(text: str) -> str:
     """Every digit the Caller said, in order. "four 8 ondu" -> "481", "double four" -> "44"."""
     digits: list[str] = []
     repeat = 1
-    for w in fold(text).split():
+    for w in _split_fused_digits(fold(text).split()):
         if w in _REPEATS:
             repeat = _REPEATS[w]
             continue
@@ -94,6 +108,18 @@ def spoken_digits(text: str) -> str:
             digits.append(_DIGIT_WORDS[w] * repeat)
         repeat = 1
     return "".join(digits)
+
+
+def _split_fused_digits(words: list[str]) -> list[str]:
+    """Speech-to-text writes a spoken "eight" fused to the digits as the letter A ("A26701", iPhone
+    Call, Oct 29). A word mixing letters and digits is split into its runs, and an "a" run is an 8."""
+    out: list[str] = []
+    for w in words:
+        if w.isalpha() or w.isdigit():
+            out.append(w)
+            continue
+        out.extend("8" if run == "a" else run for run in re.findall(r"[a-z]+|[0-9]+", w))
+    return out
 
 
 def language_of(text: str) -> str:

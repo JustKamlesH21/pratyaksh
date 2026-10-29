@@ -115,6 +115,7 @@ def read_manifest(path: Path) -> list[Row]:
 CAUGHT_BY = {
     "possession_code": ("code read out does not match", "no code was read out"),
     "whisper_score": ("was not whispered",),
+    "live_microphone": ("no live microphone",),
     "task_match": ("phrase did not match",),
     "spoof_score": ("voice looks synthetic", "spoof model leans synthetic"),
     "reply_latency": ("slow reply",),

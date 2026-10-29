@@ -18,13 +18,26 @@ from .livekit_audio import LiveKitCallAudio
 from .ports import HttpVerifier
 
 log = logging.getLogger("pratyaksh.agent")
+# Dev mode logs everything at DEBUG; numba's JIT compiler (via librosa) then writes thousands of lines.
+logging.getLogger("numba").setLevel(logging.WARNING)
+
+
+def _warm_audio() -> None:
+    """Import librosa and run one resample before the first Call. Done lazily, the first Call's first
+    prompt blocked the agent's event loop for 4-5 s importing scipy and compiling numba (Oct 29)."""
+    import librosa
+    import numpy as np
+
+    librosa.resample(np.zeros(2400, dtype=np.float32), orig_sr=24_000, target_sr=48_000)
 
 
 def prewarm(proc: JobProcess) -> None:
+    _warm_audio()
     s = Settings()
-    # A low activation threshold so whispers count as speech; tune VAD_ACTIVATION on the real mics.
+    # A low activation threshold so whispers count as speech (see Settings.vad_activation).
     proc.userdata["vad"] = silero.VAD.load(
-        min_silence_duration=s.vad_min_silence_s, activation_threshold=s.vad_activation, sample_rate=16000
+        min_silence_duration=s.vad_min_silence_s, activation_threshold=s.vad_activation,
+        deactivation_threshold=s.vad_deactivation, sample_rate=16000,
     )
 
 
@@ -58,6 +71,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
 
 def main() -> None:
+    _warm_audio()  # jobs may run as threads of this process, which then never runs prewarm first
     cli.run_app(server)
 
 

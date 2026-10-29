@@ -37,6 +37,7 @@ class LiveKitCallAudio:
         self._source = rtc.AudioSource(OUT_RATE, 1)
         self._frames: asyncio.Queue[rtc.AudioFrame] = asyncio.Queue(maxsize=3000)
         self._left = asyncio.Event()
+        self._stream: rtc.AudioStream | None = None
         self._reader: asyncio.Task | None = None
         self._listening = False
         self._loudest = 0  # loudest sample heard from the Caller during this Call
@@ -48,11 +49,11 @@ class LiveKitCallAudio:
         await room.local_participant.publish_track(
             track, rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE)
         )
-        stream = rtc.AudioStream.from_participant(
+        self._stream = rtc.AudioStream.from_participant(
             participant=caller, track_source=rtc.TrackSource.SOURCE_MICROPHONE,
             sample_rate=SAMPLE_RATE, num_channels=1,
         )
-        self._reader = asyncio.create_task(self._read(stream))
+        self._reader = asyncio.create_task(self._read(self._stream))
 
         def on_left(p: rtc.RemoteParticipant):
             if p.identity == caller.identity:
@@ -194,6 +195,14 @@ class LiveKitCallAudio:
     async def aclose(self) -> None:
         if self._reader:
             self._reader.cancel()
+        # Closing the stream unsubscribes it from the process-wide LiveKit event queue. Left open, it
+        # outlived the job's event loop and every later Call's audio frame logged "error putting to
+        # queue: Event loop is closed" (~100 lines a second per finished Call, Oct 29).
+        if self._stream:
+            try:
+                await asyncio.wait_for(self._stream.aclose(), timeout=2.0)
+            except TimeoutError:
+                log.warning("caller audio stream did not close within 2 s")
         await self._source.aclose()
 
 

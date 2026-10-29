@@ -29,6 +29,8 @@ export interface Signals {
   spoof_score: number | null;
   spoken_digits: string | null;
   code_match: boolean | null;
+  /** Live Microphone: a Whisper Phrase's dynamic range in dB; above policy.yaml's max_range_db it was played in digitally. */
+  dynamic_range_db?: number | null;
 }
 
 export interface AuditEvent {

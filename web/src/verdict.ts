@@ -5,11 +5,12 @@
 import type { CallView, ChallengeKind } from "./types";
 
 /** Mirrors the defaults in policy.yaml, for threshold marks and tick labels only (the Policy decides). */
-export const T = { task: 0.7, whisper: 0.6, humanMs: 1200, machineMs: 3000, spoof: 0.85 };
+export const T = { task: 0.7, whisper: 0.6, humanMs: 2500, machineMs: 6000, spoof: 0.85, micMaxDb: 60 };
 
 export type Factor =
   | "possession_code"
   | "whisper_score"
+  | "live_microphone"
   | "task_match"
   | "no_reply"
   | "spoof_score"
@@ -22,6 +23,7 @@ export type Factor =
 export const FACTOR_LABEL: Record<Factor, string> = {
   possession_code: "Possession Code",
   whisper_score: "Whisper Score",
+  live_microphone: "Live Microphone",
   task_match: "Task Match",
   no_reply: "No reply heard",
   spoof_score: "Spoof Score",
@@ -43,6 +45,11 @@ export function isVoicePauseRefusal(call: CallView): boolean {
   return call.verdict === "BLOCK" && call.challenges.length === 0 && /voice requests are paused/i.test(call.reasons[0] ?? "");
 }
 
+/** Whether the Policy rejected a Whisper Phrase as played in digitally (live_microphone enforced or advisory). */
+export function noLiveMic(call: CallView): boolean {
+  return call.reasons.some((r) => /no live microphone/i.test(r));
+}
+
 /** The Signal, or rule, that decided the Verdict, read from the Policy's first Reason. */
 export function decidedBy(call: CallView): Factor | null {
   if (!call.verdict) return null;
@@ -51,6 +58,7 @@ export function decidedBy(call: CallView): Factor | null {
   if (/voice requests are paused/i.test(r)) return "voice_pause";
   if (/code read out does not match|no code was read out/i.test(r)) return "possession_code";
   if (/not whispered/i.test(r)) return "whisper_score";
+  if (/no live microphone/i.test(r)) return "live_microphone";
   if (/phrase did not match/i.test(r)) return "task_match";
   if (/no reply was heard/i.test(r)) return "no_reply";
   if (/looks synthetic/i.test(r)) return "spoof_score";
@@ -111,6 +119,12 @@ export function signalTicks(call: CallView): { ticks: Tick[]; spoof: number | nu
         key: `${i}-whisper`, label: "Whisper Score", value: s.whisper_score == null ? "not measured" : s.whisper_score.toFixed(2),
         need: `needs ≥ ${T.whisper.toFixed(2)}`, ok: s.whisper_score == null ? null : s.whisper_score >= T.whisper,
       });
+      // Only what the Policy decided: the raw range is shown nowhere while live_microphone is off.
+      if (noLiveMic(call) && s.dynamic_range_db != null && s.dynamic_range_db > T.micMaxDb)
+        ticks.push({
+          key: `${i}-mic`, label: "Live mic", value: `${s.dynamic_range_db.toFixed(0)} dB, no room noise`,
+          need: `range ≤ ${T.micMaxDb} dB`, ok: false,
+        });
       ticks.push({
         key: `${i}-latency`, label: "Reply Latency",
         value: s.reply_latency_ms == null ? "no reply" : `${(s.reply_latency_ms / 1000).toFixed(1)} s`,

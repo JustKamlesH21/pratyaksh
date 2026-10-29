@@ -76,7 +76,12 @@ class Settings(BaseSettings):
     code_listen_timeout_s: float = 20.0  # Possession Codes: time to unlock the phone, open the app and read
     code_pause_s: float = 1.5  # Possession Codes: pauses this long do not end the reply
     max_reply_s: float = 15.0
-    vad_activation: float = 0.35  # Silero threshold; lower catches whispers, higher ignores noise
+    # Silero thresholds. Measured Oct 29 on 66 real human whispers (EARS, Expresso, CLARIS Hindi): 0.35
+    # missed 11 (the "no speech heard" of that day's iPhone Calls), 0.15 missed 2, starting 0.3-0.8 s
+    # into the whisper; voiced speech triggers the same at both. A reply ends below vad_deactivation:
+    # Silero's default (activation - 0.15) would be 0.01, under the 0.05-0.12 of background noise alone.
+    vad_activation: float = 0.15
+    vad_deactivation: float = 0.10
     vad_min_silence_s: float = 1.2  # a pause this long ends a reply; 0.8 s cut real Callers off mid-phrase
 
     @property

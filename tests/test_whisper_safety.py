@@ -145,8 +145,10 @@ def test_whisper_detail_is_cheap_and_never_changes_the_whisper_score(caplog):
     assert min(took) < 0.030  # per 3 s Response, on top of ~0.5 s of pitch tracking that runs beside speech-to-text
 
     s = extract(audio, PHRASE)
+    # Of the diagnostics, only the dynamic range became a Signal (Live Microphone, Oct 29); flatness and the
+    # high-band share stay logged only: the iPhone microphone's real whispers measure like the Clone on both.
     assert set(s.to_dict()) == {"transcript", "task_match", "whisper_score", "reply_latency_ms", "spoof_score",
-                                "spoken_digits", "code_match"}  # a diagnostic, not a Signal
+                                "spoken_digits", "code_match", "dynamic_range_db"}
 
 
 def test_a_real_whisper_still_passes_after_noise_was_tried():

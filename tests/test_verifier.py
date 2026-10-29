@@ -218,6 +218,21 @@ def test_hang_up_and_errors(harness):
     assert h.say(call_id, "hello").end
 
 
+def test_a_call_the_agent_abandoned_is_closed_by_the_customers_next_call(harness):
+    # Oct 29: the agent was restarted while a Caller dialled in; that Call stayed "in progress" for good.
+    h = harness
+    orphan = h.verifier.start_call(C, "r1").call_id
+    live = h.verifier.start_call(C, "r2").call_id  # a moment later: still possibly real, left alone
+    assert h.verifier.call(orphan)["state"] != "closed"
+    h.clock.advance(6 * 60)
+    h.say(live, "add payee")  # the live Call carries on
+    h.verifier.start_call(C, "r3")
+    gone = h.verifier.call(orphan)
+    assert (gone["state"], gone["outcome"]) == ("closed", "abandoned")
+    assert "call_went_silent" in [e["kind"] for e in gone["events"]]
+    assert h.verifier.call(live)["state"] != "closed"
+
+
 def test_audit_trail_rejects_updates_and_deletes_in_the_database(harness):
     from sqlalchemy import text
 

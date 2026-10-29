@@ -654,7 +654,8 @@ function SignalView({ kind, s }: { kind: string; s: Signals }) {
       {kind === "whisper_phrase" && (
         <Meter label="Reply Latency" value={latencyScore} threshold={1} missed="slow" suffix={latency === null ? "none" : `${latency} ms`} />
       )}
-      <Meter label="Spoof Score" value={s.spoof_score} advisory />
+      {/* none when policy.yaml has the spoof model off */}
+      {s.spoof_score != null && <Meter label="Spoof Score" value={s.spoof_score} advisory />}
       {kind === "possession_code" && (
         <p className="text-sm">
           code read out: <span className="font-mono">{s.spoken_digits ?? "-"}</span>{" "}
