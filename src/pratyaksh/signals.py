@@ -32,7 +32,7 @@ import numpy as np
 from rapidfuzz import fuzz
 
 from .domain import SAMPLE_RATE, Audio, Challenge, ChallengeKind, Response, Signals
-from .language import fold_with_digits, spoken_digits
+from .language import fold_with_digits, near_digit, spoken_digits
 from .phrases import speakable
 
 log = logging.getLogger(__name__)
@@ -80,6 +80,7 @@ class SignalExtractor:
         # The whisper DSP is CPU work; speech-to-text and the spoof model release the GIL while they
         # infer, so the two overlap instead of adding up.
         whisper = _DSP.submit(whisper_score, audio) if challenge.kind is ChallengeKind.WHISPER_PHRASE else None
+        detail = _DSP.submit(whisper_detail, audio) if whisper is not None else None
         if whisper is not None:
             # The phrase mixes Kannada, Hindi and English words; asked for English, speech-to-text writes all
             # of it in Latin letters, and the expected words steer it toward the right spelling.
@@ -90,12 +91,14 @@ class SignalExtractor:
         spoof = self._models.spoof_probability(audio)
 
         if whisper is not None:
+            measured = detail.result()
             return Signals(
                 transcript=transcript,
                 task_match=phrase_match(challenge.phrase, transcript),
                 whisper_score=whisper.result(),
                 reply_latency_ms=response.reply_latency_ms,
                 spoof_score=spoof,
+                dynamic_range_db=measured["dynamic_range_db"] if measured else None,
             )
         digits = spoken_digits(transcript)
         return Signals(
@@ -113,9 +116,10 @@ _CODE_LANGUAGE = {"kn": "kn"}
 def phrase_match(expected: str, transcript: str) -> float:
     """0..1: how much of the phrase was said, independent of script, spelling and filler words.
 
-    Each expected word scores its best fuzzy match among the heard words; digits must match
-    exactly. A phrase whose digit is missing or wrong scores at most 0.5, because the digit is
-    the random part that stops replayed recordings.
+    Each expected word scores its best fuzzy match among the heard words; a digit must be heard as
+    that digit, or as a near miss of its word that is clearly no other digit (language.near_digit).
+    A phrase whose digit is missing or wrong scores at most 0.5, because the digit is the random
+    part that stops replayed recordings.
     """
     want = fold_with_digits(expected).split()
     heard = fold_with_digits(transcript).split()
@@ -125,7 +129,7 @@ def phrase_match(expected: str, transcript: str) -> float:
     digit_ok = True
     for w in want:
         if w.isdigit():
-            hit = w in heard
+            hit = w in heard or any(near_digit(h) == w for h in heard)
             digit_ok = digit_ok and hit
             scores.append(1.0 if hit else 0.0)
         else:
@@ -167,18 +171,23 @@ def whisper_score(audio: Audio) -> float | None:
             detail = whisper_detail(audio)
         except Exception as e:  # a diagnostic must never fail the Response
             detail = f"unavailable ({e!r})"
-        log.info("whisper DSP: whisper_score=%s detail=%s (logged only; the Policy does not use it)", score, detail)
+        log.info("whisper DSP: whisper_score=%s detail=%s (dynamic_range_db is the Live Microphone Signal; "
+                 "the rest is logged only)", score, detail)
     return score
 
 
 def whisper_detail(audio: Audio) -> dict | None:
-    """Diagnostic measurements for red-team review, never used for a Verdict (~5 ms per 3 s).
+    """Measurements for red-team review (~5 ms per 3 s). None without speech energy.
 
-    The whisper score alone is fooled by voiced synthetic speech drowned in loud noise (<= 5 dB SNR):
-    that leaves few pauses (TTS + white noise at 0 dB: dynamic_range_db ~5) and a flat, hissy spectrum
-    (flatness ~0.5). Recorded human whispers (EARS, Expresso, Claris Hindi; some with two background
-    talkers) measured dynamic_range_db 9.8-26 and flatness 0.03-0.11. Logged so real Calls show whether
-    a gate on these is safe; see scripts/redteam_whisper.py. None without speech energy.
+    dynamic_range_db is the Live Microphone Signal (Oct 29). A live microphone always hears its room, so the
+    gap between a reply's loud and quiet moments stays bounded: 30 real whispers on the iPhone and AirPods
+    measured 8.6-40.2 dB, recorded human whispers 9.8-45.6 dB. A Clone played in through a virtual cable
+    arrives with exact digital silence around the words: 177-192 dB.
+
+    flatness and high_band_share stay logged only. The whisper score alone is fooled by voiced synthetic
+    speech drowned in loud noise (<= 5 dB SNR), which is flat and hissy (flatness ~0.5); but real whispers
+    on the iPhone microphone measured flatness 0.001-0.03 and high_band_share 0.000-0.007, the same as the
+    Clone, so neither can gate. See scripts/redteam_whisper.py.
     """
     import librosa
 
@@ -196,10 +205,15 @@ def whisper_detail(audio: Audio) -> dict | None:
     band = speech[(freqs > 100) & (freqs < 7500)] + 1e-12
     flatness = np.exp(np.mean(np.log(band), axis=0)) / np.mean(band, axis=0)
     high = speech[freqs >= 4000].sum(axis=0) / (speech.sum(axis=0) + 1e-12)
+    # Logged only (Oct 29): exact digital silence comes from a virtual cable AND from the Caller page holding the
+    # microphone while the Voice Agent speaks, so the range is also measured over the frames that carried sound.
+    live = db[rms > 1e-7]
     return {
         "dynamic_range_db": round(float(np.percentile(db, 95) - np.percentile(db, 10)), 1),
         "flatness": round(float(np.median(flatness)), 3),
         "high_band_share": round(float(np.median(high)), 3),
+        "zero_share": round(float(np.mean(rms <= 1e-7)), 3),
+        "sound_range_db": round(float(np.percentile(live, 95) - np.percentile(live, 10)), 1) if live.size else None,
     }
 
 

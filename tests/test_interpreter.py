@@ -53,6 +53,20 @@ MANGLED = [
     ("ಬ್ಯಾಲನ್ಸ್ ಎಷ್ಟು ಇದೆ?", RequestKind.BALANCE_ENQUIRY),
     ("ಬ್ಯಾಲನ್ಸನ್ನು ಚೆಕ್ ಮಾಡಿ", RequestKind.BALANCE_ENQUIRY),
     ("belence check karo", RequestKind.BALANCE_ENQUIRY),
+    # Heard from an iPhone Caller on AirPods, Oct 29.
+    ("Harder pay.", RequestKind.ADD_PAYEE),
+    ("I want to change myself.", RequestKind.SIM_SWAP),
+    ("I want to change my sin.", RequestKind.SIM_SWAP),
+    # Natural sentences with the key word misheard (Indian-accented English through speech-to-text).
+    ("I would like to change my scene card", RequestKind.SIM_SWAP),
+    ("I want to change my same card", RequestKind.SIM_SWAP),
+    ("I want to change my simcard", RequestKind.SIM_SWAP),
+    ("I want to change my pass word", RequestKind.SIM_SWAP),
+    ("I want to add a new payday", RequestKind.ADD_PAYEE),
+    ("I'd like to add a new benefit sherry", RequestKind.ADD_PAYEE),
+    ("I want to add a benefactor", RequestKind.ADD_PAYEE),
+    ("I want to trans for money", RequestKind.HIGH_VALUE_TRANSFER),
+    ("चेक्ट बार्णस", RequestKind.BALANCE_ENQUIRY),  # heard on the iPhone, Oct 29: "check balance"
     # The riskiest Request still wins.
     ("पासवड रिसेट करना है और बेलेंस भी", RequestKind.SIM_SWAP),
     ("पेई ऐड करके टांसफर करना है", RequestKind.HIGH_VALUE_TRANSFER),
@@ -113,6 +127,14 @@ NOT_A_REQUEST = [
     ("transport ka kharcha bahut hai", RequestKind.HIGH_VALUE_TRANSFER),
     ("tension mat lo", RequestKind.HIGH_VALUE_TRANSFER),
     ("रास्ता बताओ", RequestKind.SIM_SWAP),
+    # Near-sound rules (Oct 29) must not fire on ordinary sentences.
+    ("I want the same card again", RequestKind.SIM_SWAP),
+    ("my son carted the boxes", RequestKind.SIM_SWAP),
+    ("is there some card offer", RequestKind.SIM_SWAP),
+    ("I want to add a payment reminder", RequestKind.ADD_PAYEE),
+    ("I got the benefit already", RequestKind.ADD_PAYEE),
+    ("Barnes and Noble", RequestKind.BALANCE_ENQUIRY),
+    ("trans people", RequestKind.HIGH_VALUE_TRANSFER),
     ("हेलो, आप कैसे हो?", None),
     ("ನಮಸ್ಕಾರ, ಹೇಗಿದ್ದೀರಾ?", None),
 ]

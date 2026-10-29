@@ -49,6 +49,9 @@ class Policy:
             self._machine_ms = float(s["reply_latency"]["machine_ms"])
             self._spoof_mode = str(s["spoof_score"]["mode"])
             self._spoof_block_at = float(s["spoof_score"]["block_at"])
+            mic = s.get("live_microphone", {"mode": "off"})
+            self._mic_mode = str(mic["mode"])
+            self._mic_max_db = float(mic.get("max_range_db", 60))
             self.max_code_digits = int(s.get("code_match", {}).get("max_digits", 8))
             self._weights = {k: float(v) for k, v in raw["weights"].items()}
             v = raw["verdict"]
@@ -69,6 +72,8 @@ class Policy:
             raise PolicyError("weights.code_match must be positive: a right Possession Code would score 0")
         if self._spoof_mode not in {"enforce", "advisory", "off"}:
             raise PolicyError("signals.spoof_score.mode must be enforce, advisory or off")
+        if self._mic_mode not in {"enforce", "advisory", "off"}:
+            raise PolicyError("signals.live_microphone.mode must be enforce, advisory or off")
         if not self._block_at < self._pass_at:
             raise PolicyError("verdict.block_at must be lower than verdict.pass_at")
         if self._machine_ms <= self._human_ms:
@@ -90,6 +95,11 @@ class Policy:
 
     def plan(self, request: RequestKind) -> Plan:
         return self._plans[request]
+
+    @property
+    def uses_spoof_score(self) -> bool:
+        """False when spoof_score.mode is off: the Spoof Score is then neither scored nor shown."""
+        return self._spoof_mode != "off"
 
     def voice_paused(self, minutes_since_block: float | None) -> Decision | None:
         """BLOCK for a risky Request when a recent Call for the same Customer was blocked and the
@@ -209,6 +219,16 @@ class Policy:
             if ws < self._whisper_min:
                 task_failed = True
                 why.append(f"phrase was not whispered (whisper score {ws:.2f}, needs {self._whisper_min:.2f}).")
+            # Live Microphone: a synthetic whisper scores like a real one, but audio played in digitally has
+            # none of the room noise a microphone always hears. Not completed, like a phrase not whispered.
+            dr = s.dynamic_range_db
+            if dr is not None and dr > self._mic_max_db and self._mic_mode != "off":
+                if self._mic_mode == "enforce":
+                    task_failed = True
+                why.append(
+                    f"no live microphone: no background noise between the words (dynamic range {dr:.0f} dB; "
+                    f"a live microphone stays under {self._mic_max_db:.0f} dB), so the audio was played in digitally."
+                )
         elif kind is ChallengeKind.POSSESSION_CODE:
             if s.code_match is False:
                 hard.append("the code read out does not match the code sent to the Registered Device.")

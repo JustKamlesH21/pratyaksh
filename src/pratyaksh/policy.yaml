@@ -20,14 +20,30 @@ signals:
   whisper_score:
     min: 0.60            # below this the phrase was not whispered
   reply_latency:
-    human_ms: 1200       # at or below: full credit
-    machine_ms: 3000     # at or above: no credit
+    # Real iPhone Calls (Oct 29): every genuine whisper took 1.5-2.9 s from the end of the prompt, so the
+    # old 1.2 s marked every genuine Caller slow (Kamlesh's call: 2.5 s).
+    human_ms: 2500       # at or below: full credit
+    machine_ms: 6000     # at or above: no credit
   spoof_score:
-    # advisory since Oct 27 (Kamlesh's OK): the model scored 67 of 87 real human whispers >= 0.85
-    # (EARS, Expresso, Hindi corpora) and Indic Parler TTS 0.0, so enforcing it would BLOCK genuine
-    # Callers. It is shown in Reasons for voiced Responses only and never decides a Verdict.
-    mode: advisory       # enforce | advisory | off
+    # off since Oct 29 (Kamlesh's call): the model scored 67 of 87 real human whispers >= 0.85 (EARS,
+    # Expresso, Hindi corpora) and Indic Parler TTS 0.0, and on the real Calls of Oct 29 it called the
+    # genuine Caller's Possession Code readouts synthetic (0.95-1.0). It never decided a Verdict; now it
+    # is not shown either. "enforce" or "advisory" bring it back for an Eval Run.
+    mode: "off"          # enforce | advisory | off (quoted: YAML reads a bare off as false)
     block_at: 0.85       # enforce mode: P(synthetic) at or above this is a hard fail
+  live_microphone:
+    # A Clone can whisper (a DSP whisperiser scores 1.0, like a real whisper), so the whisper alone does not
+    # prove a live person. A live microphone always hears its room: on Oct 29, 30 real whispers on the
+    # iPhone and AirPods measured a dynamic range of 8.6-40.2 dB and 87 recorded human whispers 9.8-45.6 dB,
+    # while the Clone played through a virtual cable measured 177-192 dB (exact digital silence around the
+    # words). Above max_range_db the Whisper Phrase is not completed. It does not stop a Clone played
+    # through a loudspeaker into a real phone: the Possession Code does.
+    # OFF since Oct 29 22:01: it BLOCKed a genuine iPhone whisper measured at 146 dB. Exact digital silence
+    # is not unique to a virtual cable: the Caller page holds (mutes) the microphone while the Voice Agent
+    # speaks, and a quick reply can carry that silent slice. Measured and logged; enforce only once the
+    # held/zero samples are excluded and real Calls show the gap again.
+    mode: "off"          # enforce | advisory | off (quoted: YAML reads a bare off as false)
+    max_range_db: 60
   code_match:
     max_digits: 8        # a readout with more digits never matches: a long run of digits would try many codes
 

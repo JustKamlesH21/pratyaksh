@@ -180,6 +180,9 @@ _RESET = re.compile(r"r[ie]s(?:e|ai)[td]").fullmatch  # रीसेट, रि�
 _SIM_WORDS = _words("mpin empin emapin enpin simkard simakard")
 _NUMBER_WORD = _Loanword("number nanbar nambar numbar")
 _MOBILE = _words("mobile mobail mobayil phone pon pone")
+_SIM_MISHEARD = _words("myself sin scene")  # "change my SIM" heard as "change myself", "change my sin" (iPhone, Oct 29)
+_CARD_KEYS = frozenset({"krd", "krt", "kt", "kd"})  # card, kard, cart, cut: sound_key() of "card" as heard
+_NOT_SIM = _words("some son")  # sound like "sim" but are ordinary words
 _CHANGE = _stems("badal", "cenj", "change", "cange")
 _TRANSFER = _Loanword("transfer transapar transpar trainspar transfar")
 _LAKHS = _words("lac lacs lyak")
@@ -187,7 +190,7 @@ _BENEFICIARY = _Loanword("beneficiary benipisiyari benipisari benepisiyari", nea
 _PAYEE = _words("payee pei peyi payi paye peye pey")
 _PAYEE_SHORT = _words("pe pai pay")  # also ordinary words: "पे" (on), "पाई" (pie, a paisa), "pay"
 _PAYEE_AS_LETTER = _words("p pee bee b bi")  # English speech-to-text writes "payee" as a letter (iPhone Caller, Oct 27)
-_ADD = _words("add aid ed ar ayad")  # ऐड, एड, आड़ (Whisper hears "ad" as "आड़")
+_ADD = _words("add aid ed ar ayad harder")  # ऐड, एड, आड़ (Whisper hears "ad" as "आड़"); "Harder pay." (iPhone, Oct 29)
 _JOIN = _stems("jor", "jod", "jur", "jud", "seris", "sers")  # जोड़, ಸೇರಿಸು
 _NEW = _words("naya nai nae naye nayi new nyu hosa hosadu")
 _FILLER = _NEW | _words("a an the one ek ondu ko ka ke ki my mera meri mere mujhe nanna nanage")
@@ -197,6 +200,27 @@ _NOT_YOUR_BALANCE = _words("minimum minimam min average avarej evarej kam nyunat
 
 def _is_add(word: str | None) -> bool:
     return word is not None and (word in _ADD or _JOIN(word))
+
+
+def _with_joins(said: list[str]) -> list[str]:
+    """The words, then each pair joined: speech-to-text splits a loanword it does not know into two
+    ("pass word", "trans for money", "benefit sherry")."""
+    return said + [a + b for a, b in zip(said, said[1:])]
+
+
+def _sounds_like_sim(word: str, after: str | None) -> bool:
+    """"SIM" as heard in a natural sentence: "simcard", or a word that sounds like it ("seem", "scene",
+    "same") right before "card" ("I'd like to change my scene card", "same card")."""
+    if sound_key(word) == "smkrd":
+        return True
+    return (after is not None and sound_key(after) in _CARD_KEYS and sound_key(word) in ("sm", "sn")
+            and word not in _NOT_SIM)
+
+
+def _sounds_like_payee_after_add(word: str) -> bool:
+    """The word right after "add" when the Caller asked to add a payee and speech-to-text heard a
+    near word: "payday", "pay" (payee), "benefactor", "benefit sherry" (beneficiary)."""
+    return (word.startswith("pay") and word != "payment") or sound_key(word).startswith("bnp")
 
 
 def _next_word(said: list[str], i: int, step: int) -> str | None:
@@ -226,26 +250,42 @@ def _sounds_like_add_payee(said: list[str]) -> bool:
             new = i > 0 and said[i - 1] in _NEW
             if before in _ADD or (starts and after in _ADD) or (new and _is_add(after)):
                 return True
-    return False
+        if before in _ADD and _sounds_like_payee_after_add(w):  # "I want to add a new payday"
+            return True
+    return any(_BENEFICIARY(w) for w in _with_joins(said)[len(said):])
 
 
 def _sounds_like_sim_swap(said: list[str]) -> bool:
     for i, w in enumerate(said):
         if _PASSWORD(w) or _RESET(w) or w in _SIM_WORDS:
             return True
+        if w in _SIM_MISHEARD and (before := _next_word(said, i, -1)) is not None and _CHANGE(before):
+            return True
+        if _sounds_like_sim(w, said[i + 1] if i + 1 < len(said) else None):
+            # "the same card again" is a real phrase: "same" counts only after "change"
+            if w != "same" or ((before := _next_word(said, i, -1)) is not None and _CHANGE(before)):
+                return True
         if _NUMBER_WORD(w):  # "मोबाइल नंबर बदलना है"
             near = (_next_word(said, i, -1), _next_word(said, i, 1))
             if any(n is not None and (n in _MOBILE or _CHANGE(n)) for n in near):
                 return True
-    return False
+    return any(_PASSWORD(w) for w in _with_joins(said)[len(said):])  # "pass word"
 
 
 def _sounds_like_transfer(said: list[str]) -> bool:
-    return any(_TRANSFER(w) or w in _LAKHS for w in said)
+    return any(_TRANSFER(w) or w in _LAKHS for w in _with_joins(said))  # "trans for money"
+
+
+_CHECK = _stems("cek", "cec", "chek")  # check, चेक (folded)
 
 
 def _sounds_like_balance(said: list[str]) -> bool:
-    return any(_BALANCE(w) for w in said) and not any(w in _NOT_YOUR_BALANCE for w in said)
+    if any(w in _NOT_YOUR_BALANCE for w in said):
+        return False
+    # "चेक्ट बार्णस": an r for the l of balance, only when the Caller asks to check something
+    return any(_BALANCE(w) for w in said) or (
+        any(_CHECK(w) for w in said) and any(sound_key(w.replace("r", "l")) == "blns" for w in said)
+    )
 
 
 # Checked with the keywords of the same Request, so the riskiest Request still wins.
@@ -511,6 +551,12 @@ class Interpreter:
             '"request": "balance_enquiry"|"add_payee"|"sim_swap"|"high_value_transfer"|"account_service"|null, '
             '"reply": string|null}\n'
             f"Where the call is: {_where(context)}\n"
+            "The words are a speech-to-text transcript of a phone call in an Indian accent, so a word may be "
+            "misheard as one that sounds like it. Read for what a bank caller most likely said: \"change myself\" "
+            "or \"change my scene card\" is change my SIM; \"harder pay\", \"add a new P\" or \"add a payday\" is add "
+            "a payee; \"trans for money\" is transfer money; \"benefit sherry\" is beneficiary; \"bellends\" is "
+            "balance. When one request is clearly the most likely, classify it as that request; say unclear only "
+            "when no request is likely.\n"
             "- request: they want the bank to DO something. account_service = any account change not in the other four "
             "(cards, limits, address, closing an account, cheque book, KYC, nominee).\n"
             "- question: they want information, or are making small talk. Put a short spoken answer (under 40 words, "

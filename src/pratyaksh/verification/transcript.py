@@ -151,6 +151,8 @@ def _system(kind: str, d: dict) -> str | None:
         return "Handed to a Bank Agent."
     if kind == "caller_hung_up":
         return "The Caller hung up."
+    if kind == "call_went_silent":
+        return f"The Voice Agent went silent for {d.get('minutes', 5)} minutes; the Call was closed."
     if kind == "review_decided":
         verb = "approved" if d.get("approved") else "rejected"
         return f"Agent Review {verb} by {d.get('reviewer') or 'a bank officer'}."

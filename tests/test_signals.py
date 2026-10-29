@@ -1,11 +1,12 @@
 from pathlib import Path
 
+import numpy as np
 import pytest
 import yaml
 from conftest import voiced, whispered
 
 import pratyaksh.policy
-from pratyaksh.domain import Challenge, ChallengeKind, Response
+from pratyaksh.domain import Audio, Challenge, ChallengeKind, Response
 from pratyaksh.language import spoken_digits
 from pratyaksh.signals import (
     ScriptedSpeechModels, SignalExtractor, TranscriptionHint, phrase_match, whisper_score,
@@ -26,6 +27,15 @@ def test_phrase_match_ignores_script_and_number_words():
     assert phrase_match(phrase, "please transfer the money now") < 0.50
 
 
+def test_a_digit_word_heard_slightly_wrong_still_counts_but_never_as_another_digit():
+    # A whispered Kannada "entu" (8) comes out clipped ("ent"); the digit is the anti-replay part, so a
+    # near miss counts only when it is clearly that digit and no other.
+    assert phrase_match("8 gantege hospital ge banni", "ent gantege hospital ge banni") >= 0.95
+    assert phrase_match("naale 2 gantege class ide", "naale endu gantege class ide") <= 0.5  # 8 or 2?
+    assert phrase_match("naale 7 baje meeting", "naale at baje meeting") <= 0.5  # "aath" is 8, not 7
+    assert phrase_match("naale 1 baje meeting", "naale sone baje meeting") <= 0.5  # "sonne" is 0
+
+
 def test_spoken_digits_in_three_languages():
     assert spoken_digits("my code is four eight ondu nine do saat") == "481927"
     assert spoken_digits("चार आठ १ ೨ six aath") == "481268"
@@ -44,6 +54,29 @@ def test_extract_whisper_phrase_signals():
     assert s.code_match is None
 
 
+def test_a_whisper_played_in_digitally_has_no_microphone_background_noise():
+    # Oct 29: the Clone, played through a virtual cable, arrived with exact digital silence around the words
+    # (dynamic range 177-192 dB). Every live microphone measured 8.6-40.2 dB (30 real whispers on the
+    # iPhone and AirPods) and recorded human whispers 9.8-45.6 dB: a room is never that quiet.
+    models = ScriptedSpeechModels(["naale seven baje meeting"] * 2)
+    challenge = Challenge(ChallengeKind.WHISPER_PHRASE, "", "naale 7 baje meeting")
+    live = SignalExtractor(models).extract(challenge, Response(whispered(), 650))
+    assert live.dynamic_range_db is not None and live.dynamic_range_db < 60
+
+    gap = Audio.silence(0.6).samples  # exact zeros, as the cable delivers between clips
+    injected = Audio(np.concatenate([gap, whispered().samples, gap]))
+    played = SignalExtractor(models).extract(challenge, Response(injected, 650))
+    assert played.dynamic_range_db > 60
+    assert played.whisper_score == live.whisper_score  # the whisper itself is just as convincing
+
+
+def test_a_possession_code_has_no_live_microphone_signal():
+    s = SignalExtractor(ScriptedSpeechModels(["4 8 1 9 2 7"])).extract(
+        Challenge(ChallengeKind.POSSESSION_CODE, ""), Response(voiced(), 900)
+    )
+    assert s.dynamic_range_db is None
+
+
 def test_extract_possession_code_reads_digits_only():
     models = ScriptedSpeechModels(["the code is 4 8 1 nine two seven"])
     s = SignalExtractor(models).extract(Challenge(ChallengeKind.POSSESSION_CODE, ""), Response(voiced(), 900))
@@ -56,6 +89,16 @@ def test_no_speech_gives_no_signals():
         Challenge(ChallengeKind.WHISPER_PHRASE, "", "x"), Response(voiced(0.05), None)
     )
     assert s.reply_latency_ms is None and s.transcript == ""
+
+
+def test_eight_heard_as_the_letter_a_still_reads_the_code():
+    # iPhone Call, Oct 29: code 826701 read as "eight two six..." was written "A26701", which read as no
+    # digits at all. A letter fused with digits never counts as nothing.
+    assert spoken_digits("A26701") == "826701"
+    assert spoken_digits("5A3, 2A1") == "583281"
+    assert spoken_digits("It's A26701.") == "826701"
+    assert spoken_digits("two six ate one") == "2681"
+    assert spoken_digits("I have a code") == ""  # an ordinary "a" is not a digit
 
 
 def test_repeated_digits_survive_folding():
