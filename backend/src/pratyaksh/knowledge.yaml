@@ -86,6 +86,25 @@
   answer: *why_code
   answer_hi: *why_code_hi
   answer_kn: *why_code_kn
+- id: code_scam_worry
+  # Asked on a real iPhone Call (Oct 29): "मैं OTP क्यों दूँ? आप स्कैम भी हो सकते हो" (why should I give the OTP,
+  # you could be a scam). A worry about this step, not a fraud report: answered here, ahead of fraud_report.
+  during: possession_code
+  keywords: [scam, स्कैम, fraud, फ्रॉड, fake, नकली, nakli, dhoka, धोखा, ಮೋಸ, ವಂಚನೆ, trust you, believe you,
+             why should i give, why give, should i give, how do i know you, kyun du*, kyon du*, kyu du*, kyundu,
+             क्यों दूँ, क्यूँ दूँ, otp kyun*, otp kyon, otp kyu, ओटीपी क्यों, yake otp, ಯಾಕೆ ಒಟಿಪಿ, otp yake]
+  answer: >-
+    You are right to be careful. Never read a code to someone who called you. You called us yourself, and this code
+    is not a payment OTP: it only shows that your phone is with you, for this call, and it works once. If you are
+    unsure, hang up and call the number on the back of your card.
+  answer_hi: >-
+    आपका सावधान रहना बिल्कुल सही है। जो आपको खुद कॉल करे, उसे कभी कोई कोड मत बताइए। यह कॉल आपने खुद बैंक को की
+    है, और यह कोड पेमेंट वाला ओटीपी नहीं है: यह सिर्फ़ इस कॉल के लिए, एक बार, यह दिखाता है कि आपका फ़ोन आपके पास है।
+    अगर शक हो, तो फ़ोन काटिए और अपने कार्ड के पीछे लिखे नंबर पर कॉल कीजिए।
+  answer_kn: >-
+    ನೀವು ಎಚ್ಚರದಿಂದಿರುವುದು ಸರಿಯೇ. ನಿಮಗೆ ತಾವಾಗಿ ಕರೆ ಮಾಡಿದವರಿಗೆ ಯಾವ ಕೋಡ್ ಅನ್ನೂ ಹೇಳಬೇಡಿ. ಈ ಕರೆಯನ್ನು ನೀವೇ ಬ್ಯಾಂಕಿಗೆ
+    ಮಾಡಿದ್ದೀರಿ, ಮತ್ತು ಈ ಕೋಡ್ ಪೇಮೆಂಟ್ ಒಟಿಪಿ ಅಲ್ಲ: ಇದು ಈ ಕರೆಗೆ ಮಾತ್ರ, ಒಂದೇ ಬಾರಿ, ನಿಮ್ಮ ಫೋನ್ ನಿಮ್ಮ ಬಳಿಯೇ ಇದೆ
+    ಎಂದು ತೋರಿಸುತ್ತದೆ. ಅನುಮಾನ ಬಂದರೆ, ಕರೆ ಕಟ್ ಮಾಡಿ ನಿಮ್ಮ ಕಾರ್ಡಿನ ಹಿಂಭಾಗದಲ್ಲಿರುವ ನಂಬರ್‌ಗೆ ಕರೆ ಮಾಡಿ.
 - id: code_not_received
   during: possession_code
   keywords: [not received, didn't get, did not get, not got, haven't got, haven't received, no code, not come,

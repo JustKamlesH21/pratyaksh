@@ -1,21 +1,33 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
 *.egg-info/
 .pytest_cache/
+.ruff_cache/
+
+# Runtime state (the services run from the repository root)
 .env
 *.db
 .cache/
 data/recordings/
 data/keys/
 data/eval/*.wav
-data/eval/manifest.csv
-attacker/clips/
-attacker/*.wav
-web/node_modules/
-web/dist/
-web/.env
 data/eval/**/*.wav
+data/eval/manifest.csv
 data/eval/calibration.html
 data/eval/calibration/
-web/public/pratyaksh-ca.crt
+
+# Red-team audio
+attacker/clips/
+attacker/*.wav
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/public/pratyaksh-ca.crt
+*.tsbuildinfo
+
+# Local assistant notes
+CLAUDE.md

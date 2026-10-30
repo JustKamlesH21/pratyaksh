@@ -1,6 +1,6 @@
 # Pratyaksh design system
 
-What the web app looks and moves like, and why. For engineers changing a screen and for presenters on the projector. The source of truth is `web/src/index.css`; this file explains it.
+What the web app looks and moves like, and why. For engineers changing a screen and for presenters on the projector. The source of truth is `frontend/src/index.css`; this file explains it.
 
 The direction comes from `reports/Pratyaksh demo design brief.md`: the demo is remembered for one beat (the clone ticks green for the whisper, then flips to a full-width red BLOCK because the Possession Code is missing, while the real phone shows the Security Alert). Every choice here serves that beat and the honesty behind it.
 
@@ -14,7 +14,7 @@ The direction comes from `reports/Pratyaksh demo design brief.md`: the demo is r
 
 ## Colour
 
-Defined once in `web/src/index.css` (`@theme static` for light values, `:root[data-theme="dark"]` and the `prefers-color-scheme` block for dark). Dark is the default theme; the header toggle cycles dark, light and system, and a change in one tab reaches the others (the projector window follows the laptop). Cool neutrals sit on one hue (265). Borders are hairlines; there are no drop shadows except one tinted shadow under the landing hero card.
+Defined once in `frontend/src/index.css` (`@theme static` for light values, `:root[data-theme="dark"]` and the `prefers-color-scheme` block for dark). Dark is the default theme; the header toggle cycles dark, light and system, and a change in one tab reaches the others (the projector window follows the laptop). Cool neutrals sit on one hue (265). Borders are hairlines; there are no drop shadows except one tinted shadow under the landing hero card.
 
 | Token | Dark | Light | Use |
 |---|---|---|---|
@@ -45,7 +45,7 @@ Role tokens point at the palette so a role can move without a hunt through pages
 
 ### Contrast (WCAG 2.x)
 
-`node web/scripts/contrast.mjs` reads the values straight from `index.css` and checks every pair the UI uses in both themes; it exits 1 if any falls below AA (4.5:1 text, 3:1 controls and large text). `--md` prints the full 72-row table. Tints are mixed in OKLab as Tailwind's `color-mix(in oklab, ...)` does. Results on Oct 28:
+`node frontend/scripts/contrast.mjs` reads the values straight from `index.css` and checks every pair the UI uses in both themes; it exits 1 if any falls below AA (4.5:1 text, 3:1 controls and large text). `--md` prints the full 72-row table. Tints are mixed in OKLab as Tailwind's `color-mix(in oklab, ...)` does. Results on Oct 28:
 
 | Pair | Dark | Light |
 |---|---|---|
@@ -163,6 +163,6 @@ Easing (`ease-*` utilities): `arrive` cubic-bezier(0.05, 0.7, 0.1, 1) (M3 emphas
 | Pair every state colour with an icon shape and a word | Use green, amber or red for turns, live states or the Spoof Score |
 | Put `lang` on Indic text (`scriptLang`) | Track, italicise, uppercase or truncate Indic text |
 | Animate `transform` and `opacity`, with a named keyframe | Add a loop that is not a real live state |
-| Re-run `node web/scripts/contrast.mjs` after a colour change | Lighten `ink-soft` or the light Verdict colours by eye |
+| Re-run `node frontend/scripts/contrast.mjs` after a colour change | Lighten `ink-soft` or the light Verdict colours by eye |
 | Check every screen in both themes and with Reduce motion on | Ship a screen you have only seen in one theme |
 | Keep Hang up alone in the thumb zone | Put "Call again" where Hang up was |

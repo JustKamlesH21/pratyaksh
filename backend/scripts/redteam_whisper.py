@@ -14,7 +14,7 @@ Scores synthetic speech (the Clone side) under the conditions an attacker or a n
 Each condition can also go through a channel: none (16 kHz, so already band-limited to 8 kHz, like Opus
 wideband speech), opus (a real Ogg/Opus round trip via libsndfile at 48 kHz) or nb (8 kHz telephone band).
 
-    python scripts/redteam_whisper.py --tts E:/AVISHKAR/pratyaksh/.cache/tts E:/AVISHKAR/tmp/voice-samples \
+    python backend/scripts/redteam_whisper.py --tts E:/AVISHKAR/pratyaksh/.cache/tts E:/AVISHKAR/tmp/voice-samples \
         --real whisper=E:/rec/whispers normal=E:/rec/normal \
         --out E:/AVISHKAR/tmp/redteam-whisper --clips 30 --channel none opus nb
 
@@ -278,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     out = Path(args.out)
-    repo = Path(__file__).resolve().parents[1]
+    repo = Path(__file__).resolve().parents[2]
     if (repo / ".git").exists() and repo in out.resolve().parents:
         ap.error("--out must be outside the repository: it holds audio")
     out.mkdir(parents=True, exist_ok=True)

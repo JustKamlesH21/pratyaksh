@@ -231,6 +231,23 @@ def test_where_is_the_code_is_answered_offline_during_the_code_challenge(said):
     assert u.reply in [a for e in FAQ.entries if e.id == "why_code" for a in e.answers.values()]
 
 
+@pytest.mark.parametrize("said, lang", [
+    ("मैं OTP क्यूंदू, आप स्कैम भी हो सकते हो।", "hi"),  # heard in Hindi on the iPhone, Oct 29 (said with no "?")
+    ("main otp kyun du, aap scam bhi ho sakte ho", "hi"),
+    ("Why should I give you the OTP? You could be a scam.", "en"),
+    ("how do I know you are not a fraud", "en"),
+    ("ನಾನು ಯಾಕೆ ಒಟಿಪಿ ಹೇಳಬೇಕು, ನೀವು ಮೋಸ ಮಾಡಬಹುದು", "kn"),
+])
+def test_a_caller_worried_the_code_request_is_a_scam_is_reassured_at_the_code_step(said, lang):
+    # The worry, not a fraud report: the answer is the scam-safety rule and why this code is different.
+    from pratyaksh.domain import ChallengeKind
+    from pratyaksh.verification.interpreter import Context
+
+    u = Interpreter(NoLLM(), faq=FAQ).understand(said, Context(challenge=ChallengeKind.POSSESSION_CODE))
+    worry = next(e for e in FAQ.entries if e.id == "code_scam_worry")
+    assert u.kind is TurnKind.QUESTION and u.reply == worry.answers[lang]
+
+
 @pytest.mark.parametrize("said", ["pai add kaise hota hai? mera balance batao", "पाई ऐड कैसे होता है? मेरा बैलेंस बताओ"])
 def test_a_question_that_only_sounds_risky_does_not_hide_a_plain_request(said):
     # Code review (Oct 28): a payee sound-alike inside a Question stopped the search before "balance".

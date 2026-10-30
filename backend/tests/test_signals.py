@@ -77,6 +77,43 @@ def test_a_possession_code_has_no_live_microphone_signal():
     assert s.dynamic_range_db is None
 
 
+def test_a_hindi_caller_who_talks_instead_of_reading_the_code_is_heard_in_hindi():
+    # Oct 29: "मैं OTP क्यों दूँ? आप स्कैम भी हो सकते हो", heard in English as the code step then was, came
+    # out "I can't do OTP, you can do an upscam." Heard in Hindi, the Interpreter can answer it.
+    models = ScriptedSpeechModels(["मैं OTP क्यूंदू, आप स्कैम भी हो सकते हो।"])
+    s = SignalExtractor(models).extract(Challenge(ChallengeKind.POSSESSION_CODE, ""), Response(voiced(), 900), "hi")
+    assert s.transcript == "मैं OTP क्यूंदू, आप स्कैम भी हो सकते हो।"
+    assert len(s.spoken_digits or "") < 4  # not a code attempt: the Interpreter answers it
+
+
+@pytest.mark.parametrize("heard, code", [
+    # Hindi digit words as speech-to-text spelled them (Parler reading codes, Oct 30).
+    ("शून्य चे पांच तीन तीन पांच", "065335"),
+    ("पाँच दीन पाँच दीन सात शून्यू", "535370"),
+    ("चार पाँच एक दीन एक दीन", "451313"),
+    ("चे पाच तीन चे शून्य सात", "653607"),
+    ("चे तीन आज तीन नौ सात", "638397"),
+    ("शार साथ पाँच दो पाँच एक", "475251"),
+    ("टीन शून्यो नौ पाँच एक छह", "309516"),
+])
+def test_hindi_digit_words_as_speech_to_text_spells_them_read_as_the_code(heard, code):
+    assert spoken_digits(heard) == code
+
+
+def test_code_only_digit_spellings_never_change_a_whisper_phrase():
+    # "आज" (today) and "दिन" (day) are read as 8 and 3 only in a Possession Code readout.
+    assert phrase_match("aaj 7 baje dinner hai", "aaj saat baje dinner hai") == 1.0
+    assert phrase_match("aaj 7 baje dinner hai", "aaj aath baje dinner hai") <= 0.5
+
+
+@pytest.mark.parametrize("heard", ["8, 2, 3, 7, 1, 5.", "823-715", "आठ दो तीन सात एक पाँच।"])
+def test_a_hindi_caller_reading_the_code_in_english_or_hindi_words_is_heard_in_one_pass(heard):
+    models = ScriptedSpeechModels([heard])
+    s = SignalExtractor(models).extract(Challenge(ChallengeKind.POSSESSION_CODE, ""), Response(voiced(), 900), "hi")
+    assert len(models.hints) == 1
+    assert s.spoken_digits == "823715"
+
+
 def test_extract_possession_code_reads_digits_only():
     models = ScriptedSpeechModels(["the code is 4 8 1 nine two seven"])
     s = SignalExtractor(models).extract(Challenge(ChallengeKind.POSSESSION_CODE, ""), Response(voiced(), 900))
@@ -140,14 +177,16 @@ def test_a_request_is_transcribed_in_the_given_language(language):
     assert models.hints == [TranscriptionHint(language=language)]
 
 
-@pytest.mark.parametrize("customer_language, heard_in", [("kn", "kn"), ("hi", "en"), ("en", "en"), (None, "en")])
+@pytest.mark.parametrize("customer_language, heard_in", [("kn", "kn"), ("hi", "hi"), ("en", "en"), (None, "en")])
 def test_possession_code_digits_are_heard_where_they_transcribe_best(customer_language, heard_in):
-    # Measured (Oct 27): Hindi digit words forced to Hindi came out as "aart", "naav", "do", "sait"; in English as
-    # 481927. Kannada digit words in English came out as "4N2,197"; in Kannada, as Kannada digit words.
+    # Measured (Oct 27): Kannada digit words in English came out as "4N2,197"; in Kannada, as Kannada digit words.
+    # Hindi (Oct 30, Parler reading 52 codes): heard in Hindi with the Hindi digit words as hotwords, 27/40 codes
+    # read in Hindi words came out right (in English 10/40) and 12/12 read in English words (in English 12/12).
     models = ScriptedSpeechModels(["4 8 1 9 2 7"])
     challenge = Challenge(ChallengeKind.POSSESSION_CODE, "")
     SignalExtractor(models).extract(challenge, Response(voiced(), 900), customer_language)
-    assert models.hints == [TranscriptionHint(language=heard_in)]
+    assert [h.language for h in models.hints] == [heard_in]
+    assert ("सात" in (models.hints[0].hotwords or "")) == (heard_in == "hi")
 
 
 def test_a_whisper_phrase_is_heard_in_latin_whatever_the_customers_language():

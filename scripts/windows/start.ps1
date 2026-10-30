@@ -55,8 +55,8 @@ if ($Only -in 'all', 'livekit') {
 # the API and LiveKit, so browsers use one origin: https://<LAN_IP>:5173.
 $https = $envs.HTTPS -eq '1'
 if ($https -and $Only -in 'all', 'api', 'web') {
-    & "$R\.venv\Scripts\python.exe" "$R\scripts\lan_https.py" $envs.LAN_IP
-    if ($LASTEXITCODE) { throw 'could not make the HTTPS certificate (scripts\lan_https.py)' }
+    & "$R\.venv\Scripts\python.exe" "$R\backend\scripts\lan_https.py" $envs.LAN_IP
+    if ($LASTEXITCODE) { throw 'could not make the HTTPS certificate (backend\scripts\lan_https.py)' }
 }
 if ($Only -in 'all', 'api') {
     if ($https) { $env:LIVEKIT_PUBLIC_URL = "wss://$($envs.LAN_IP):5173" }  # LiveKit through the web origin
@@ -71,7 +71,7 @@ if ($Only -in 'all', 'agent') {
 }
 if ($Only -in 'all', 'web') {
     if ($https) { $env:PRATYAKSH_HTTPS = '1'; $env:VITE_SAME_ORIGIN = '1' }
-    Launch 'web' 'npm.cmd' @('run', 'dev') "$R\web"
+    Launch 'web' 'npm.cmd' @('run', 'dev') "$R\frontend"
     Remove-Item Env:PRATYAKSH_HTTPS, Env:VITE_SAME_ORIGIN -ErrorAction SilentlyContinue
 }
 if ($https) {

@@ -38,6 +38,18 @@ _DIGIT_SPELLINGS = {
     "9": ["nine", "nau", "ombattu", "ombatu", "onbattu"],
 }
 _REPEATS = {"double": 2, "dabal": 2, "triple": 3, "tripal": 3}
+# How speech-to-text spells Hindi digit words in a code readout (folded; Parler reading 40 codes, Oct 30).
+# Read as digits only in spoken_digits: several are ordinary words elsewhere ("आज" today, "दिन" day), so a
+# Whisper Phrase or a Request never sees them. A wrong spelling here can only fail to match a code, never
+# match one the Caller does not hold.
+_CODE_ONLY_DIGITS = {
+    "ce": "6",                                 # चे, छे (छह)
+    "din": "3", "tim": "3",                    # दीन, तीम (तीन)
+    "pac": "5", "bac": "5",                    # पाच, बाच (पाँच)
+    "sar": "4",                                # शार (चार)
+    "sunyo": "0", "sunyu": "0", "suniy": "0",  # शून्यो, शून्यू, शुनिय (शून्य)
+    "aj": "8", "ac": "8",                      # आज, आच (आठ)
+}
 
 
 def romanise(text: str) -> str:
@@ -106,6 +118,8 @@ def spoken_digits(text: str) -> str:
             digits.append(w[0] * repeat + w[1:])
         elif w in _DIGIT_WORDS:
             digits.append(_DIGIT_WORDS[w] * repeat)
+        elif w in _CODE_ONLY_DIGITS:
+            digits.append(_CODE_ONLY_DIGITS[w] * repeat)
         repeat = 1
     return "".join(digits)
 

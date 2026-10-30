@@ -91,14 +91,15 @@ def test_a_request_is_heard_in_the_customers_language(harness, customer, languag
     assert harness.models.hints == [TranscriptionHint(language=language)]
 
 
-@pytest.mark.parametrize("customer, language", [("cust-ananya", "kn"), ("cust-rahul", "en"), ("cust-meera", "en")])
+@pytest.mark.parametrize("customer, language", [("cust-ananya", "kn"), ("cust-rahul", "hi"), ("cust-meera", "en")])
 def test_a_possession_code_is_heard_in_the_language_its_digits_are_best_heard_in(harness, customer, language):
+    # Hindi since Oct 30, steered by the Hindi digit words (see signals._CODE_LANGUAGE).
     h = harness
     call_id = h.verifier.start_call(customer, "r").call_id
     h.say(call_id, "add a payee")
     whisper_back(h, call_id)
     h.say(call_id, " ".join(h.code_on_device(customer)), voiced(), 900)
-    assert h.models.hints[-1] == TranscriptionHint(language=language)
+    assert h.models.hints[-1].language == language
 
 
 def test_inconclusive_responses_get_one_extra_whisper_phrase(harness):

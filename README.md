@@ -12,24 +12,32 @@ Pratyaksh decides whether the person on a bank call is a **live human holding th
 ## Repository map
 
 ```
-src/pratyaksh/
-  domain.py            value types (Step, Signals, Verdict…)
-  policy.py + .yaml    Requests → Challenges, Signals → Verdict + Reasons
-  knowledge.yaml       answers the Voice Agent may give to Questions (edit freely)
-  signals.py           SignalExtractor + speech model adapters (faster-whisper, spoof classifier)
-  language.py          Kannada/Devanagari/Latin folding, spoken digits
-  phrases.py           Whisper Phrase bank
-  verification/        Verifier: Call state machine, Interpreter (any utterance), Possession Codes,
-                       Device Inbox, Audit Trail
-  voice.py             PromptVoice: Indic Parler-TTS with a disk cache
-  api/                 FastAPI verifier (HTTP + WebSocket)
-  agent/               LiveKit Voice Agent worker (thin; ADR-0001)
-  eval/                Eval Runs: export recordings, measure Catch Rate
-web/                   Vite + React + TS: landing page, Console, Caller app, Bank App, Eval page
-attacker/              red-team Clone tools (separate laptop, consent only)
-infra/                 docker-compose for MySQL + LiveKit
-tests/                 pytest, all through module interfaces
+backend/                 Python: the verifier API, the Voice Agent, Eval Runs
+  pyproject.toml
+  src/pratyaksh/
+    domain.py            value types (Step, Signals, Verdict…)
+    policy.py + .yaml    Requests → Challenges, Signals → Verdict + Reasons
+    knowledge.yaml       answers the Voice Agent may give to Questions (edit freely)
+    signals.py           SignalExtractor + speech model adapters (faster-whisper, spoof classifier)
+    language.py          Kannada/Devanagari/Latin folding, spoken digits
+    phrases.py           Whisper Phrase bank
+    verification/        Verifier: Call state machine, Interpreter (any utterance), Possession Codes,
+                         Device Inbox, Audit Trail
+    voice.py             PromptVoice: Indic Parler-TTS with a disk cache
+    api/                 FastAPI verifier (HTTP + WebSocket)
+    agent/               LiveKit Voice Agent worker (thin; ADR-0001)
+    eval/                Eval Runs: export recordings, measure Catch Rate
+  tests/                 pytest, all through module interfaces
+  scripts/               LAN HTTPS certificate, smoke Call, whisper red-team
+frontend/                Vite + React + TS: landing page, Console, Demo hub, Deepfake view, Caller app,
+                         Bank App, Eval page
+attacker/                red-team Clone tools (separate laptop, consent only)
+infra/                   docker-compose for MySQL + LiveKit
+scripts/windows/         start, stop and LAN-IP scripts for the GPU laptop
+docs/                    PRD, ADRs, design system, business case
 ```
+
+The services run from the repository root, which holds the git-ignored runtime state: `.venv`, `.env`, `.cache/` (voice cache, logs) and `data/` (keys, recordings).
 
 ## How the pieces run
 
@@ -39,7 +47,7 @@ tests/                 pytest, all through module interfaces
 | LiveKit server | GPU laptop | `livekit-server` binary or Docker |
 | Verifier API (models live here) | GPU laptop | `pratyaksh-api` |
 | Voice Agent worker | GPU laptop | `pratyaksh-agent dev` |
-| Web app | any laptop | `npm run dev` in `web/` |
+| Web app | any laptop | `npm run dev` in `frontend/` |
 | Clone tools | attacker laptop | `attacker/clone_speak.py` |
 
 ## Setup on the GPU laptop
@@ -52,12 +60,12 @@ Prerequisites: Python 3.11+, Node 20+, an NVIDIA driver with CUDA 12, Git, and e
 git clone https://github.com/JustKamlesH21/pratyaksh.git && cd pratyaksh
 python -m venv .venv
 source .venv/bin/activate                   # Windows: .venv\Scripts\activate
-pip install -e ".[agent,dev]"               # API, agent, tests
+pip install -e "backend[agent,dev]"         # API, agent, tests
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124   # CUDA builds first; a PyPI torchaudio crashes on import (WinError 127)
-pip install -e ".[ml]"                      # faster-whisper, transformers, parler-tts
-pip install -e ".[agent]" "protobuf>=6.33.5,<8"   # [ml] downgrades protobuf and LiveKit; this puts the agent's versions back
+pip install -e "backend[ml]"                # faster-whisper, transformers, parler-tts
+pip install -e "backend[agent]" "protobuf>=6.33.5,<8"   # [ml] downgrades protobuf and LiveKit; this puts the agent's versions back
 cp .env.example .env                        # then edit LAN_IP, secrets, URLs
-pytest                                      # should be all green without a GPU
+(cd backend && pytest)                      # should be all green without a GPU
 ```
 
 The last line makes pip warn that `descript-audiotools` wants `protobuf<5`. That is safe to ignore: parler-tts needs audiotools only for its audio codec, and audiotools touches protobuf only through a tensorboard import used in training. LiveKit needs protobuf 5 or newer. The CUDA libraries faster-whisper needs (cuBLAS 12, cuDNN 9) ship inside the torch wheel, so no CUDA toolkit install is needed.
@@ -112,7 +120,7 @@ Set `LIVEKIT_SERVER` to the path of `livekit-server.exe` once. Models load offli
 ### 5. Web app
 
 ```bash
-cd web
+cd frontend
 npm install
 cp .env.example .env      # VITE_API_URL=http://<LAN_IP>:8000
 npm run dev               # http://localhost:5173
@@ -137,7 +145,7 @@ Demo customers: `cust-ananya`, `cust-rahul`, `cust-meera`.
 
 Try going off-script too: ask "why should I whisper?" in the middle of a Challenge, say "hold on" or "code nahi aaya" while reading the code, ask "is this call genuine?" or "what is the transfer limit?", report "there's a transaction I didn't make", or say "let me talk to an officer". The agent answers to fit the moment and carries on; it never hangs up on a Caller it doesn't understand.
 
-Answers come from `src/pratyaksh/knowledge.yaml` (its header explains the keyword format; add an entry to teach the agent a new question). Anything the keywords miss goes to the LLM (`OLLAMA_API_KEY`, `OLLAMA_MODEL=gpt-oss:120b`), which is told where the Call is and uses the same answers as its facts.
+Answers come from `backend/src/pratyaksh/knowledge.yaml` (its header explains the keyword format; add an entry to teach the agent a new question). Anything the keywords miss goes to the LLM (`OLLAMA_API_KEY`, `OLLAMA_MODEL=gpt-oss:120b`), which is told where the Call is and uses the same answers as its facts.
 
 ## Security, in one place
 
@@ -156,21 +164,21 @@ Answers come from `src/pratyaksh/knowledge.yaml` (its header explains the keywor
 
 - **Microphone needs a secure page.** Browsers allow the mic only on `https://` or `localhost`. Run the Caller app from `localhost` on each calling laptop (with `VITE_API_URL` pointing at the GPU laptop), or in Chrome add `http://<LAN_IP>:5173` under `chrome://flags/#unsafely-treat-insecure-origin-as-secure`. The Bank App needs no mic.
 - **HTTP proxies break the agent's WebSocket** to LiveKit. Unset `HTTP_PROXY`/`HTTPS_PROXY` for the agent if you see `405 Invalid response status`.
-- **Test whispers on day one.** If the agent treats a whisper as silence, lower `VAD_ACTIVATION` (try 0.25); if room noise triggers it, raise it.
-- **Calibrate Reply Latency on the real setup.** The default 1200/3000 ms bounds in `policy.yaml` are a starting point; run an Eval Run with the finale mics and adjust.
+- **Test whispers on day one.** `VAD_ACTIVATION=0.15` caught 64 of 66 recorded human whispers (0.35 missed 11); if room noise triggers it, raise it a little.
+- **Calibrate Reply Latency on the real setup.** The 2500/6000 ms bounds in `policy.yaml` come from real iPhone Calls (genuine whispers took 1.5–2.9 s); run an Eval Run with the finale mics and adjust.
 - **Without a GPU** set `WHISPER_MODEL=small WHISPER_DEVICE=cpu WHISPER_COMPUTE_TYPE=int8 TTS_BACKEND=tone`. Calls work; the agent beeps instead of speaking.
 - **The LLM is optional.** With no `OLLAMA_API_KEY`, unclear Requests get a scripted clarification. Set `OLLAMA_MODEL` to a model your Ollama account can run.
 
 ## Tests
 
 ```bash
-pytest            # Policy, Signals, whole Calls through the Verifier, HTTP interface, call loop, Eval Runs
-cd web && npm run build
+cd backend && pytest     # Policy, Signals, whole Calls through the Verifier, HTTP interface, call loop, Eval Runs
+cd frontend && npm run build
 ```
 The same suite runs on MySQL (tables in that database are dropped before each test, so use a spare one):
 ```bash
 mysql -uroot -p -e "CREATE DATABASE pratyaksh_test CHARACTER SET utf8mb4; GRANT ALL PRIVILEGES ON pratyaksh_test.* TO 'pratyaksh'@'%';"
-PRATYAKSH_TEST_DATABASE_URL=mysql+pymysql://pratyaksh:pratyaksh-dev@127.0.0.1:3306/pratyaksh_test pytest
+cd backend && PRATYAKSH_TEST_DATABASE_URL=mysql+pymysql://pratyaksh:pratyaksh-dev@127.0.0.1:3306/pratyaksh_test pytest
 ```
 The Voice Agent's LiveKit adapter was verified against a local `livekit-server` with a scripted caller; it is not part of `pytest` because it needs the server binary.
 
