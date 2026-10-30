@@ -159,11 +159,11 @@ eval/ ──imports──▶ pratyaksh package (Signals + Policy)
 
 | Module | Interface (all a caller needs) | Hides | Seam / adapters | Tested through |
 |---|---|---|---|---|
-| `Verifier` | `start_call`, `respond`, `current_step`, `app_approval`, `review`, `hang_up`, plus reads | Call state machine, Request classification, Challenge planning, phrase generation, Possession Codes, Device Inbox, Policy calls, Audit Trail, events | DB is local-substitutable (MySQL in prod, SQLite in tests, same models). Speech models and LLM injected | `tests/test_verifier.py`: full Calls with fake speech models |
-| `SignalExtractor` | `transcribe(audio)`, `extract(challenge, response)` | Romanisation of Kannada/Devanagari, digit words in 3 languages, fuzzy matching, whisper DSP, STT + spoof inference | `SpeechModels` port: `LocalSpeechModels` (faster-whisper + transformers) and `ScriptedSpeechModels` (tests) | `tests/test_signals.py` with synthetic voiced/whispered audio |
-| `Policy` | `plan(request)`, `decide(evidence, step_ups_used)` | Signal → component mapping, weights, hard fails, STEP-UP and App Approval rules, Reasons text | none (pure, in-process) | `tests/test_policy.py` |
+| `Verifier` | `start_call`, `respond`, `current_step`, `app_approval`, `review`, `hang_up`, plus reads | Call state machine, Request classification, Challenge planning, phrase generation, Possession Codes, Device Inbox, Policy calls, Audit Trail, events | DB is local-substitutable (MySQL in prod, SQLite in tests, same models). Speech models and LLM injected | `backend/tests/test_verifier.py`: full Calls with fake speech models |
+| `SignalExtractor` | `transcribe(audio)`, `extract(challenge, response)` | Romanisation of Kannada/Devanagari, digit words in 3 languages, fuzzy matching, whisper DSP, STT + spoof inference | `SpeechModels` port: `LocalSpeechModels` (faster-whisper + transformers) and `ScriptedSpeechModels` (tests) | `backend/tests/test_signals.py` with synthetic voiced/whispered audio |
+| `Policy` | `plan(request)`, `decide(evidence, step_ups_used)` | Signal → component mapping, weights, hard fails, STEP-UP and App Approval rules, Reasons text | none (pure, in-process) | `backend/tests/test_policy.py` |
 | `PromptVoice` | `render(text) → wav` | Parler-TTS loading, speaker description, disk cache | `ParlerVoice` and `ToneVoice` (no-GPU dev) | via API test |
-| Call loop (`agent/call_loop.py`) | `run_call(audio, verifier, customer_id, room)` | Turn-taking, playout waits, listen timeouts, App Approval polling, hang-up | `CallAudio` port: LiveKit adapter + scripted fake; `VerifierPort`: HTTP adapter + in-process adapter | `tests/test_call_loop.py`: real Verifier + fake audio |
+| Call loop (`agent/call_loop.py`) | `run_call(audio, verifier, customer_id, room)` | Turn-taking, playout waits, listen timeouts, App Approval polling, hang-up | `CallAudio` port: LiveKit adapter + scripted fake; `VerifierPort`: HTTP adapter + in-process adapter | `backend/tests/test_call_loop.py`: real Verifier + fake audio |
 
 Rule we followed: a seam only exists where two adapters exist today (production + test/dev). Everything else is plain code inside a module.
 

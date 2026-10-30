@@ -11,8 +11,9 @@ Which language speech-to-text is told to use (measured Oct 27 with large-v3-turb
                      6 of 6 Requests; told "kn", it wrote Kannada. English stays English whatever it is told,
                      and a forced language saves the detection pass (a second encoder run).
     Whisper Phrase   "en" with the phrase as hotwords: the code-mixed phrase comes out in Latin letters.
-    Possession Code  "kn" for a Kannada Customer, else "en": Hindi digit words forced to Hindi came out as
-                     other words, in English as digits; Kannada digit words only survive in Kannada.
+    Possession Code  "kn" for a Kannada Customer (Kannada digit words only survive in Kannada); "hi" with the
+                     Hindi digit words as hotwords for a Hindi Customer (Oct 30: reads Hindi and English digit
+                     words, and keeps their side questions readable); else "en".
 
 Seam: SpeechModels (speech-to-text + spoof probability), steered by a TranscriptionHint.
     LocalSpeechModels    faster-whisper + a transformers audio classifier (GPU or CPU)
@@ -86,7 +87,8 @@ class SignalExtractor:
             # of it in Latin letters, and the expected words steer it toward the right spelling.
             hint = TranscriptionHint(language="en", hotwords=speakable(challenge.phrase, language or "en"))
         else:
-            hint = TranscriptionHint(language=_CODE_LANGUAGE.get(language or "", "en"))
+            lang = language or ""
+            hint = TranscriptionHint(language=_CODE_LANGUAGE.get(lang, "en"), hotwords=_DIGIT_HOTWORDS.get(lang))
         transcript = self._transcribe(audio, hint)
         spoof = self._models.spoof_probability(audio)
 
@@ -109,8 +111,13 @@ class SignalExtractor:
         )
 
 
-# The language a Possession Code readout is heard in, by the Customer's language (default "en").
-_CODE_LANGUAGE = {"kn": "kn"}
+# The language a Possession Code readout is heard in, by the Customer's language (default "en"), and the
+# digit words that steer it. Hindi with its digit words (Oct 30, Parler reading 52 codes): 27/40 read in
+# Hindi words right (English 10/40), 12/12 read in English words (English 12/12); and what a Hindi Caller
+# says instead of the code ("मैं OTP क्यों दूँ? आप स्कैम भी हो सकते हो") comes out as Hindi the Interpreter
+# understands, where English gave "I can't do OTP, you can do an upscam." (Oct 29).
+_CODE_LANGUAGE = {"kn": "kn", "hi": "hi"}
+_DIGIT_HOTWORDS = {"hi": "शून्य एक दो तीन चार पाँच छह सात आठ नौ"}
 
 
 def phrase_match(expected: str, transcript: str) -> float:

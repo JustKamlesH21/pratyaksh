@@ -7,8 +7,8 @@ whisper, so this is a Clone attempt: expect BLOCK (or STEP-UP then BLOCK), a Sec
 Registered Device, and a Voice Pause when calling straight back. Afterwards it dismisses the alert,
 as the Customer would, so the demo Customer is clean again.
 
-    python scripts/smoke_call.py                       # cust-rahul, "I want to add a new payee"
-    python scripts/smoke_call.py --customer cust-meera --request "transfer six lakh to my brother"
+    python backend/scripts/smoke_call.py                       # cust-rahul, "I want to add a new payee"
+    python backend/scripts/smoke_call.py --customer cust-meera --request "transfer six lakh to my brother"
 
 Reads AGENT_KEY, CONSOLE_KEY, VERIFIER_URL and DATABASE_URL from .env (run it from the repo root).
 Prints hearing time per step: upload to next Step, the PRD's verifier turnaround (target 1.5 s).

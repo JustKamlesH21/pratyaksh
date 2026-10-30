@@ -33,8 +33,8 @@ from pathlib import Path
 
 import numpy as np
 
-# Make src/pratyaksh importable whether or not PYTHONPATH is set.
-_SRC = Path(__file__).resolve().parent.parent / "src"
+# Make backend/src/pratyaksh importable whether or not PYTHONPATH is set.
+_SRC = Path(__file__).resolve().parent.parent / "backend" / "src"
 if _SRC.is_dir() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 

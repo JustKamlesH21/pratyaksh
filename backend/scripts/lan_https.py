@@ -5,9 +5,9 @@ authority once (data/keys/lan-ca.*, git-ignored) and, on every run, a server cer
 current LAN IP signed by it (data/keys/lan-https.*). Install the CA on each phone once; a new
 venue IP then needs only a new server certificate, which start.ps1 makes by running this.
 
-  python scripts/lan_https.py 172.16.0.124        # -> data/keys/lan-https.{crt,key}
+  python backend/scripts/lan_https.py 172.16.0.124        # -> data/keys/lan-https.{crt,key}
 
-The CA certificate (public, not secret) is also copied to web/public/pratyaksh-ca.crt, so a
+The CA certificate (public, not secret) is also copied to frontend/public/pratyaksh-ca.crt, so a
 phone can download it from https://<LAN IP>:5173/pratyaksh-ca.crt.
 """
 
@@ -23,11 +23,11 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]  # the repository root: this file is in backend/scripts/
 KEYS = ROOT / "data" / "keys"
 CA_KEY, CA_CRT = KEYS / "lan-ca.key", KEYS / "lan-ca.crt"
 SERVER_KEY, SERVER_CRT = KEYS / "lan-https.key", KEYS / "lan-https.crt"
-PUBLIC_CA = ROOT / "web" / "public" / "pratyaksh-ca.crt"
+PUBLIC_CA = ROOT / "frontend" / "public" / "pratyaksh-ca.crt"
 
 
 def _key() -> rsa.RSAPrivateKey:
@@ -90,6 +90,6 @@ def issue(ip: str) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        sys.exit("usage: python scripts/lan_https.py <LAN IP>")
+        sys.exit("usage: python backend/scripts/lan_https.py <LAN IP>")
     issue(sys.argv[1])
     print(f"HTTPS certificate for {sys.argv[1]}, localhost: {SERVER_CRT.relative_to(ROOT)}")
