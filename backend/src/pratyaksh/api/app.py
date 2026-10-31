@@ -234,6 +234,10 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     def dismiss_alerts(customer_id: str, request: Request, x_device_token: str = Header(default="")):
         return {"dismissed": c(request).verifier.dismiss_alerts(customer_id, x_device_token)}
 
+    @app.post("/v1/customers/{customer_id}/next-steps/done")
+    def finish_next_steps(customer_id: str, request: Request, x_device_token: str = Header(default="")):
+        return {"cleared": c(request).verifier.finish_next_steps(customer_id, x_device_token)}
+
     @app.post("/v1/calls/{call_id}/app-approval")
     def app_approval(call_id: str, body: AppApproval, request: Request, x_device_token: str = Header(default="")):
         return c(request).verifier.app_approval(call_id, body.customer_id, x_device_token, body.approve).to_dict()

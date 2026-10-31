@@ -128,7 +128,7 @@ Per Response, each Signal becomes a 0–1 component; the Liveness Score is their
 
 | Signal | Component | Default |
 |---|---|---|
-| Task Match | fuzzy ratio of romanised transcript vs phrase | must be ≥ 0.70 |
+| Task Match | fuzzy ratio of romanised transcript vs phrase | must be ≥ 0.60 |
 | Whisper Score | share of speech frames without voicing | ≥ 0.60 counts as whispered |
 | Reply Latency | 1.0 at ≤ 1200 ms, falling to 0 at ≥ 3000 ms | |
 | Spoof Score | 1 − P(synthetic) | `enforce`: P ≥ 0.85 is a hard fail |

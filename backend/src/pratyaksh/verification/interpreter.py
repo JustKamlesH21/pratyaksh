@@ -376,8 +376,8 @@ NO_ANSWER = (
     "or I can connect you to a bank officer."
 )
 _NO_ANSWER_IN = {
-    "hi": "इस सुरक्षित लाइन पर मैं इसका जवाब नहीं दे सकती, लेकिन बैंक ऐप में पूरी जानकारी है, "
-          "या मैं आपको किसी बैंक अधिकारी से जोड़ सकती हूँ।",
+    "hi": "इस सुरक्षित लाइन पर मैं इसका जवाब नहीं दे सकता, लेकिन बैंक ऐप में पूरी जानकारी है, "
+          "या मैं आपको किसी बैंक अधिकारी से जोड़ सकता हूँ।",
     "kn": "ಈ ಸುರಕ್ಷಿತ ಲೈನ್‌ನಲ್ಲಿ ನಾನು ಅದಕ್ಕೆ ಉತ್ತರಿಸಲು ಆಗುವುದಿಲ್ಲ, ಆದರೆ ಬ್ಯಾಂಕ್ ಆ್ಯಪ್‌ನಲ್ಲಿ ಎಲ್ಲಾ ವಿವರಗಳಿವೆ, "
           "ಅಥವಾ ನಾನು ನಿಮ್ಮ ಕರೆಯನ್ನು ಬ್ಯಾಂಕ್ ಅಧಿಕಾರಿಗೆ ಕನೆಕ್ಟ್ ಮಾಡಬಹುದು.",
 }
@@ -565,7 +565,7 @@ class Interpreter:
             "  If you don't know, say the bank app has the details or offer a bank officer.\n"
             "- repeat: they want to hear the last thing again. wait: they need a moment.\n"
             "- unclear: put one short sentence in reply asking what they need.\n"
-            "How to speak: you are a patient, courteous bank officer. Never rush, scold or blame the caller. If they "
+            "How to speak: you are a patient, courteous bank officer; in Hindi you speak as a man (कर सकता हूँ). Never rush, scold or blame the caller. If they "
             "sound worried (a lost card, money gone, a strange call), first acknowledge it in a few words, then give "
             "the one next safe step (block the card in the bank app; report cyber fraud on 1930). If they are "
             "confused, explain simply. If a security check is in progress, answer briefly, then gently invite them "

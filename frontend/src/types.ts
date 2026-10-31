@@ -54,6 +54,8 @@ export interface CallView {
   step_ups: number;
   verdict: Verdict | null;
   liveness: number | null;
+  /** Advisory, from pitch on spoken turns; never part of the Verdict. Null until a spoken turn was measured. */
+  ai_voice?: { score: number; label: "likely_ai" | "unsure" | "likely_human"; turns: number } | null;
   reasons: string[];
   outcome: Outcome | null;
   created_at: string;
@@ -147,8 +149,11 @@ export interface Stats {
 export interface DeviceMessage {
   id: number;
   call_id: string;
-  kind: "possession_code" | "app_approval" | "security_alert";
-  body: { code?: string; request?: RequestKind; request_text?: string; blocked_at?: string };
+  kind: "possession_code" | "app_approval" | "security_alert" | "next_step";
+  body: {
+    code?: string; request?: RequestKind; request_text?: string; blocked_at?: string;
+    title?: string; steps?: string[]; reference?: string;
+  };
   created_at: string;
   expires_at: string;
   seconds_left: number;

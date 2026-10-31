@@ -1,20 +1,23 @@
-/* The landing page: for judges and bank decision-makers. Dark by default, one accent (cobalt), Verdict
+/* The landing page: for judges and bank decision-makers. Dark by default, one accent (cerulean), Verdict
    colours only for Verdicts. Every product picture is a real component preview (LandingParts.tsx), every
    figure is either live from this verifier, measured by us, read from policy.yaml, or cited with its source.
    Motion is CSS only (index.css, "Landing page" block), driven by IntersectionObserver, and off under
-   prefers-reduced-motion. Radii: landing cards rounded-2xl, buttons rounded-xl, chips and badges full. */
+   prefers-reduced-motion. Radii: landing cards rounded-2xl; buttons (.btn), chips and badges are pills.
+   Each section opens with a mono eyebrow index (01 to 06) so the page reads as one argument. */
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowRight, ArrowUpRight, Broadcast, ChatsCircle, DeviceMobile, Gavel, HardDrives, type Icon, LinkSimple,
-  Plugs, Scales, SealCheck, Siren, UserPlus, Waveform,
+  ArrowRight, ArrowUpRight, Broadcast, ChatsCircle, Check, DeviceMobile, Gavel, HardDrives, type Icon, LinkSimple,
+  LockSimple,
+  Plugs, Scales, SealCheck, Siren, Waveform,
 } from "@phosphor-icons/react";
 import { api } from "../api";
 import { LiveNumber, Logo, Reveal, VerdictBadge } from "../components";
 import type { EvalRun, Stats } from "../types";
 import {
-  AgentLine, CallerLine, DeviceFrame, PossessionCodePreview, SecurityAlertPreview, Source, useInView,
+  AgentLine, CallerLine, PossessionCodePreview, Source, useInView,
 } from "./LandingParts";
+import { HeroReel } from "./LandingHero";
 
 const H2 = "font-display text-3xl font-semibold leading-[1.08] tracking-[-0.02em] md:text-5xl";
 
@@ -22,10 +25,7 @@ const H2 = "font-display text-3xl font-semibold leading-[1.08] tracking-[-0.02em
 
 function PrimaryCta() {
   return (
-    <Link
-      to="/demo"
-      className="press group inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-accent px-5 py-3 font-semibold text-on-accent hover:bg-accent/90"
-    >
+    <Link to="/demo" className="group btn btn-primary btn-lg">
       Open the demo
       <ArrowRight size={18} weight="bold" className="nudge group-hover:translate-x-0.5" />
     </Link>
@@ -34,12 +34,20 @@ function PrimaryCta() {
 
 function ConsoleCta() {
   return (
-    <Link
-      to="/console"
-      className="press inline-flex items-center gap-2 whitespace-nowrap rounded-xl bg-surface px-5 py-3 font-semibold ring-1 ring-line hover:ring-accent/50"
-    >
+    <Link to="/console" className="btn btn-quiet btn-lg">
       Open the Console
     </Link>
+  );
+}
+
+/** The mono index above each section heading ("01 The threat"): where the reader is in the story. */
+function Eyebrow({ n, children }: { n: string; children: ReactNode }) {
+  return (
+    <p className="eyebrow mb-5">
+      <b>{n}</b>
+      <span className="h-0.5 w-6 rounded-full bg-brand-red" aria-hidden />
+      {children}
+    </p>
   );
 }
 
@@ -49,54 +57,52 @@ function Hero() {
   return (
     <section className="relative">
       <div className="lp-halo pointer-events-none absolute inset-0" aria-hidden />
-      <div className="relative mx-auto grid min-h-[calc(100dvh-3.5rem)] max-w-7xl items-center gap-12 px-4 py-12 lg:grid-cols-[1.1fr_1fr] lg:py-10">
+      <div className="lp-field pointer-events-none absolute inset-0" aria-hidden />
+      <div className="relative mx-auto grid min-h-[min(calc(100dvh-4rem),56rem)] max-w-7xl items-center gap-12 px-4 py-12 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:py-10">
         <div className="flex flex-col items-start gap-7">
+          <p className="motion-enter eyebrow">
+            <b>Pratyaksh</b>
+            <span className="h-0.5 w-6 rounded-full bg-brand-red" aria-hidden />
+            Call verification for banks
+          </p>
           <h1 className="motion-enter font-display text-[2.75rem] font-semibold leading-[1.04] tracking-[-0.025em] sm:text-6xl">
             Verify the person,
-            <span className="block text-ink-soft">not the voice.</span>
+            <span className="block text-ink-soft">
+              not the{" "}
+              <span className="relative inline-block pb-1">
+                voice.
+                <svg className="lp-underline absolute -bottom-1 left-0 h-3 w-[92%] text-brand-red" viewBox="0 0 120 12" preserveAspectRatio="none" aria-hidden>
+                  <path d={WAVE_PATH} fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+              </span>
+            </span>
           </h1>
           <p className="motion-enter max-w-[44ch] text-lg leading-relaxed text-ink-soft" style={{ "--i": 2 } as CSSProperties}>
             On risky bank calls, the Caller whispers a random phrase and reads a code shown only on their Registered
             Device.
           </p>
-          <p className="motion-enter max-w-[40ch] border-l-2 border-accent pl-4 font-display text-xl font-semibold leading-snug tracking-[-0.01em]" style={{ "--i": 3 } as CSSProperties}>
+          <p className="motion-enter max-w-[40ch] border-l-2 border-brand-red pl-4 font-display text-xl font-semibold leading-snug tracking-[-0.01em]" style={{ "--i": 3 } as CSSProperties}>
             A cloned voice can fool your ear. It can't hold your phone.
           </p>
           <div className="motion-enter flex flex-wrap gap-3" style={{ "--i": 4 } as CSSProperties}>
             <PrimaryCta />
             <ConsoleCta />
           </div>
+          <p className="motion-enter flex flex-wrap items-center gap-2 text-sm text-ink-soft" style={{ "--i": 5 } as CSSProperties}>
+            Listens in
+            {[["English", undefined], ["हिन्दी", "hi"], ["ಕನ್ನಡ", "kn"]].map(([w, l]) => (
+              <span key={w} lang={l} className="rounded-full bg-sunken px-3 py-1 font-medium text-ink ring-1 ring-line">{w}</span>
+            ))}
+          </p>
         </div>
-        <HeroPreview />
+        <HeroReel />
       </div>
     </section>
   );
 }
 
-/** What a blocked Clone leaves behind: the Console's Verdict, then the Security Alert on the
- *  Customer's Registered Device. The two arrive in that order, as they do on a real Call. */
-function HeroPreview() {
-  return (
-    <figure className="relative mx-auto w-full max-w-md lg:mr-0" aria-label="A blocked Call: the Verdict on the Console and the Security Alert on the Customer's Registered Device">
-      <div className="lp-rise mx-auto w-full max-w-[19rem] lg:mr-4">
-        <DeviceFrame name="Rahul Verma" phone="+91 99xxxx2087">
-          <SecurityAlertPreview request="add a new payee" className="lp-alert" />
-        </DeviceFrame>
-      </div>
-      <div className="lp-slide relative mx-auto mt-4 w-full max-w-[19rem] rounded-2xl border border-line bg-surface p-4 shadow-[0_24px_60px_-30px_color-mix(in_oklab,var(--color-accent)_45%,transparent)] lg:absolute lg:-left-24 lg:bottom-12 lg:mt-0 lg:max-w-[16.5rem]">
-        <p className="flex items-center gap-2 text-xs text-ink-soft">
-          <UserPlus size={15} /> Call as Rahul Verma: add payee
-        </p>
-        <div className="mt-3">
-          <VerdictBadge verdict="BLOCK" large />
-        </div>
-        <p className="mt-2 text-sm leading-relaxed">
-          Challenge 2 (Possession Code): the code read out does not match the code sent to the Registered Device.
-        </p>
-      </div>
-    </figure>
-  );
-}
+/** A short voice wave for the red stroke under "voice" (viewBox 120 x 12). */
+const WAVE_PATH = Array.from({ length: 8 }, (_, i) => `${i === 0 ? "M0 6 " : ""}Q ${i * 15 + 7.5} ${i % 2 ? 11 : 1} ${i * 15 + 15} 6`).join(" ");
 
 /* ------------------------------------------------------------------ the threat (cited) */
 
@@ -104,11 +110,13 @@ function Threat() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-20 md:py-28">
       <Reveal>
+        <Eyebrow n="01">The threat</Eyebrow>
         <h2 className={`${H2} max-w-[20ch]`}>Cloned voices already fool people, and bank voice ID.</h2>
       </Reveal>
       <div className="mt-12 grid gap-12 md:grid-cols-[1.35fr_1fr] md:gap-16">
         <Reveal className="flex flex-col gap-4">
-          <p className="font-display text-5xl font-semibold tracking-[-0.03em] sm:text-6xl md:text-8xl">
+          <span className="h-1 w-14 rounded-full bg-brand-red" aria-hidden />
+          <p className="font-display text-5xl font-medium tracking-[-0.035em] sm:text-6xl md:text-8xl">
             ₹22,846<span className="text-3xl text-ink-soft md:text-4xl"> crore</span>
           </p>
           <p className="max-w-[40ch] text-lg leading-relaxed text-ink-soft">
@@ -120,11 +128,11 @@ function Threat() {
         </Reveal>
         <div className="flex flex-col gap-10 md:pt-4">
           <Reveal i={1} className="flex flex-col gap-2">
-            <p className="font-display text-5xl font-semibold tracking-tight">69%</p>
+            <p className="font-display text-5xl font-medium tracking-[-0.03em]">69%</p>
             <p className="text-ink-soft">of Indian adults could not tell a cloned voice from a real one.</p>
           </Reveal>
           <Reveal i={2} className="flex flex-col gap-2">
-            <p className="font-display text-5xl font-semibold tracking-tight">47%</p>
+            <p className="font-display text-5xl font-medium tracking-[-0.03em]">47%</p>
             <p className="text-ink-soft">had faced an AI voice scam, or knew someone who had.</p>
             <Source href="https://businessworld.in/article/ai-voice-scams-more-prevalent-in-india-affects-almost-50-indians-mcafee-report-475192">
               McAfee survey, 2023 (BusinessWorld)
@@ -150,6 +158,8 @@ function Threat() {
 interface FlowStep {
   name: string;
   icon: Icon;
+  at: string; // when it happens on a typical Call
+  who: string; // who acts at this step
   body: string;
   preview: (seen: boolean) => ReactNode;
 }
@@ -158,24 +168,32 @@ const FLOW: FlowStep[] = [
   {
     name: "Request",
     icon: ChatsCircle,
+    at: "0:00",
+    who: "Caller speaks",
     body: "The Voice Agent works out what the Caller wants, in English, Hindi or Kannada. The Policy picks the Challenges.",
     preview: () => <RequestPreview />,
   },
   {
     name: "Whisper Phrase",
     icon: Waveform,
+    at: "0:08",
+    who: "Caller whispers",
     body: "A random everyday phrase in the Customer's language, whispered back. It shows a live person is answering, right now.",
     preview: () => <WhisperPreview />,
   },
   {
     name: "Possession Code",
     icon: DeviceMobile,
+    at: "0:15",
+    who: "Registered Device",
     body: "A one-time code appears only in the Bank App on the Registered Device. The Caller reads it aloud. A Clone does not hold the phone.",
     preview: () => <CodePreview />,
   },
   {
     name: "Verdict",
     icon: SealCheck,
+    at: "0:22",
+    who: "Policy decides",
     body: "The Policy, never the LLM, returns PASS, STEP-UP or BLOCK, with a plain-language Reason for each Signal that drove it.",
     preview: (seen) => <VerdictPreview seen={seen} />,
   },
@@ -268,20 +286,37 @@ function VerdictPreview({ seen }: { seen: boolean }) {
   );
 }
 
-function FlowStepCard({ step, k, setRef }: { step: FlowStep; k: number; setRef: (el: HTMLLIElement | null) => void }) {
+/** One step of the Call: a big numeral that fills in while this step is the one being read, when it happens
+ *  on the Call and who acts, then the real screen for that step. */
+function FlowStepCard({ step, k, active, setRef }: {
+  step: FlowStep;
+  k: number;
+  active: boolean;
+  setRef: (el: HTMLLIElement | null) => void;
+}) {
   const [ref, seen] = useInView<HTMLDivElement>();
   const Glyph = step.icon;
   return (
     <li ref={setRef} data-step={k} className="scroll-mt-24">
       <div
         ref={ref}
-        className={`reveal ${seen ? "is-visible" : ""} grid gap-8 rounded-2xl border border-line bg-surface p-6 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:p-8`}
+        className={`reveal ${seen ? "is-visible" : ""} grid gap-8 rounded-2xl border bg-surface p-6 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:p-8 ${
+          active ? "elev-2 border-accent/40" : "elev-1 border-line"
+        }`}
       >
-        <div className="flex flex-col gap-3">
-          <span className="grid size-11 place-items-center rounded-xl bg-accent/12 text-accent">
-            <Glyph size={22} />
-          </span>
-          <h3 className="mt-1 font-display text-2xl font-semibold tracking-tight">{step.name}</h3>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-end justify-between gap-4">
+            <span className={`lp-numeral ${active ? "is-on" : ""} font-display text-7xl font-semibold leading-none tracking-[-0.04em]`} aria-hidden>
+              0{k + 1}
+            </span>
+            <span className="mb-1.5 inline-flex items-center gap-2 rounded-full bg-sunken px-3 py-1 font-mono text-xs text-ink-soft ring-1 ring-line">
+              <span className="size-1.5 rounded-full bg-brand-red" aria-hidden /> {step.at}
+            </span>
+          </div>
+          <p className="eyebrow">
+            <Glyph size={15} className="text-accent" aria-hidden /> {step.who}
+          </p>
+          <h3 className="font-display text-3xl font-semibold tracking-[-0.02em]">{step.name}</h3>
           <p className="leading-relaxed text-ink-soft">{step.body}</p>
         </div>
         <div>{step.preview(seen)}</div>
@@ -311,6 +346,7 @@ function CallFlow() {
       <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 md:py-28 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-16">
         <div className="lg:sticky lg:top-24 lg:self-start">
           <Reveal>
+            <Eyebrow n="02">How it works</Eyebrow>
             <h2 className={H2}>How a Call is checked</h2>
             <p className="mt-4 max-w-[40ch] leading-relaxed text-ink-soft">
               Balance enquiries go straight through. Adding a payee, a SIM swap or a big transfer gets live
@@ -318,14 +354,16 @@ function CallFlow() {
             </p>
           </Reveal>
           <ol className="relative mt-10 hidden flex-col gap-5 lg:flex" aria-hidden>
-            <span className="absolute bottom-2 left-[5px] top-2 w-px bg-line" />
+            {/* the Call's timeline: a red thread that fills as you read, like a recording's progress */}
+            <span className="absolute bottom-2 left-[5px] top-2 w-0.5 rounded-full bg-line" />
             <span
-              className="lp-rail-fill absolute bottom-2 left-[5px] top-2 w-px bg-accent"
+              className="lp-rail-fill absolute bottom-2 left-[5px] top-2 w-0.5 rounded-full bg-brand-red"
               style={{ "--p": active / (FLOW.length - 1) } as CSSProperties}
             />
             {FLOW.map((s, k) => (
               <li key={s.name} className="relative flex items-center gap-4">
-                <span className={`lp-mark size-[11px] rounded-full ${k <= active ? "bg-accent" : "bg-line"}`} />
+                <span className={`lp-mark size-3 rounded-full ring-4 ring-canvas ${k <= active ? "bg-brand-red" : "bg-line-strong"}`} />
+                <span className="w-10 font-mono text-xs text-ink-soft">{s.at}</span>
                 <span className={`lp-mark text-sm font-medium ${k === active ? "text-ink" : "text-ink-soft"}`}>{s.name}</span>
               </li>
             ))}
@@ -333,7 +371,7 @@ function CallFlow() {
         </div>
         <ol className="flex flex-col gap-6">
           {FLOW.map((s, k) => (
-            <FlowStepCard key={s.name} step={s} k={k} setRef={(el) => {
+            <FlowStepCard key={s.name} step={s} k={k} active={k === active} setRef={(el) => {
                 items.current[k] = el;
               }} />
           ))}
@@ -347,26 +385,55 @@ function CallFlow() {
 
 function WhatEachProves() {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-20 md:py-28">
-      <Reveal>
-        <h2 className="max-w-[24ch] font-display text-3xl font-semibold leading-[1.12] tracking-[-0.02em] md:text-5xl">
-          The whisper proves a live person. <span className="text-accent">The code proves it is the Customer.</span>
-        </h2>
-      </Reveal>
-      <Reveal i={1} className="mt-8 max-w-[62ch]">
-        <p className="text-lg leading-relaxed text-ink-soft">
-          We attacked our own Whisper Score: text-to-speech run through a whisper filter passed it 30 times out of 30.
-          So no single Signal decides. Every risky Request also needs the Possession Code, and the spoof model only
-          advises.
-        </p>
-      </Reveal>
+    // The bank's navy band: the one claim the whole design rests on, said plainly, with the red under it.
+    <section className="relative overflow-hidden bg-brand text-on-fill">
+      <div className="pointer-events-none absolute -right-24 top-1/2 -translate-y-1/2 opacity-[0.07]" aria-hidden>
+        <Logo size={560} />
+      </div>
+      <div className="relative mx-auto max-w-7xl px-4 py-20 md:py-28">
+        <Reveal>
+          <p className="eyebrow mb-5 text-on-fill/75">
+            <b className="text-on-fill">03</b>
+            <span className="h-0.5 w-6 rounded-full bg-brand-red" aria-hidden />
+            The honest limit
+          </p>
+          <h2 className="max-w-[22ch] font-display text-3xl font-semibold leading-[1.12] tracking-[-0.02em] md:text-6xl">
+            The whisper proves a live person.{" "}
+            <span>
+              The code proves it is the Customer.
+            </span>
+          </h2>
+          <span className="mt-6 block h-1 w-24 rounded-full bg-brand-red" aria-hidden />
+        </Reveal>
+        <div className="mt-12 grid gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
+          <Reveal i={1} className="flex flex-col gap-3">
+            <span className="grid size-11 place-items-center rounded-full bg-on-fill/12"><Waveform size={22} /></span>
+            <p className="font-semibold">Whisper Phrase</p>
+            <p className="text-sm leading-relaxed text-on-fill/80">Someone is on the line right now, saying words they could not have recorded in advance.</p>
+          </Reveal>
+          <Reveal i={2} className="flex flex-col gap-3">
+            <span className="grid size-11 place-items-center rounded-full bg-on-fill/12"><DeviceMobile size={22} /></span>
+            <p className="font-semibold">Possession Code</p>
+            <p className="text-sm leading-relaxed text-on-fill/80">That someone holds the Customer's Registered Device. A cloned voice cannot.</p>
+          </Reveal>
+          <Reveal i={3} className="rounded-2xl bg-on-fill/8 p-6 ring-1 ring-on-fill/15">
+            <p className="text-sm leading-relaxed text-on-fill/85">
+              We attacked our own Whisper Score: text-to-speech run through a whisper filter passed it 30 times out of
+              30. So no single Signal decides. Every risky Request also needs the Possession Code, and the spoof model
+              only advises.
+            </p>
+          </Reveal>
+        </div>
+      </div>
     </section>
   );
 }
 
 /* ------------------------------------------------------------------ around every Verdict */
 
-const DEFENCES: { icon: Icon; title: string; body: string; cls: string }[] = [
+const CHIP = "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-xs";
+
+const DEFENCES: { icon: Icon; title: string; body: string; cls: string; visual?: ReactNode }[] = [
   {
     icon: Gavel,
     title: "The LLM never decides",
@@ -378,36 +445,70 @@ const DEFENCES: { icon: Icon; title: string; body: string; cls: string }[] = [
     title: "Security Alert and Voice Pause",
     body: "Every BLOCK alerts the Registered Device. Risky voice Requests stay paused until the Customer dismisses it.",
     cls: "bg-surface md:col-span-2",
+    visual: (
+      <div className="flex flex-wrap gap-2">
+        <span className={`${CHIP} bg-block/10 font-sans font-semibold text-block`}><Siren size={14} weight="fill" aria-hidden /> Blocked call attempt</span>
+        <span className={`${CHIP} bg-sunken text-ink-soft ring-1 ring-line`}><LockSimple size={13} weight="fill" aria-hidden /> Voice Pause · 30 min</span>
+      </div>
+    ),
   },
   {
     icon: Broadcast,
     title: "Attack Wave",
     body: "Blocked Calls for 3 Customers within 15 minutes put Agent Review on every risky Request.",
     cls: "bg-sunken md:col-span-2",
+    visual: (
+      <div className="flex items-center gap-3">
+        <span className="flex -space-x-2" aria-hidden>
+          {["AN", "MS", "RV"].map((n) => (
+            <span key={n} className="grid size-9 place-items-center rounded-full bg-surface text-xs font-semibold ring-2 ring-block">{n}</span>
+          ))}
+        </span>
+        <span className="font-mono text-xs text-ink-soft">3 of 3 Customers · 15 min → Agent Review</span>
+      </div>
+    ),
   },
   {
     icon: LinkSimple,
     title: "Insert-only Audit Trail",
     body: "Each event is hash-chained to the one before. Edit or remove one and the Console shows where.",
     cls: "lp-dots md:col-span-2",
+    visual: (
+      <div className="flex flex-wrap items-center gap-1.5" aria-hidden>
+        {["#41 a3f9", "#42 7c21", "#43 e04b"].map((h, n) => (
+          <span key={h} className="flex items-center gap-1.5">
+            <span className={`${CHIP} bg-surface text-ink ring-1 ring-line`}>{h}</span>
+            {n < 2 && <LinkSimple size={13} className="text-brand-red" />}
+          </span>
+        ))}
+      </div>
+    ),
   },
   {
     icon: SealCheck,
     title: "Signed Verification Receipts",
     body: "Ed25519-signed, a standard JWT. Core banking checks it and redeems it once before acting.",
     cls: "bg-surface md:col-span-2",
+    visual: (
+      <div className="flex flex-wrap items-center gap-2" aria-hidden>
+        <span className={`${CHIP} max-w-[14rem] truncate bg-sunken text-ink-soft ring-1 ring-line`}>eyJhbGciOiJFZERTQSJ9.eyJzdWIi…</span>
+        <span className={`${CHIP} bg-accent/12 font-sans font-semibold text-accent`}><Check size={13} weight="bold" /> redeemed once</span>
+      </div>
+    ),
   },
 ];
 
 function Defences() {
   return (
-    <section className="mx-auto max-w-7xl px-4 pb-20 md:pb-28">
+    <section className="mx-auto max-w-7xl px-4 py-20 md:py-28">
       <Reveal className="mb-10">
+        <Eyebrow n="04">Safeguards</Eyebrow>
         <h2 className={H2}>Around every Verdict</h2>
       </Reveal>
       <div className="grid gap-4 md:grid-cols-4">
-        {DEFENCES.map(({ icon: Glyph, title, body, cls }, k) => (
+        {DEFENCES.map(({ icon: Glyph, title, body, cls, visual }, k) => (
           <Reveal key={title} i={k} className={`lift flex flex-col gap-3 rounded-2xl border border-line p-6 ${cls}`}>
+            {visual && <div className="order-last mt-auto pt-3">{visual}</div>}
             <Glyph size={k === 0 ? 34 : 26} className="text-accent" />
             <h3 className={k === 0 ? "font-display text-2xl font-semibold tracking-tight" : "font-semibold"}>{title}</h3>
             <p className={`leading-relaxed text-ink-soft ${k === 0 ? "max-w-[44ch]" : "text-sm"}`}>{body}</p>
@@ -484,7 +585,7 @@ function LiveNumbers({ onState }: { onState: (s: LiveState) => void }) {
         {tiles.map(([label, value, decimals, unit, hint], k) => (
           <Reveal key={label} i={k} className="flex flex-col gap-1 bg-surface p-5">
             <span className="text-xs font-medium text-ink-soft">{label}</span>
-            <span className="font-display text-3xl font-semibold tracking-tight md:text-4xl">
+            <span className="font-display text-3xl font-medium tracking-[-0.03em] md:text-4xl">
               {value === null ? "-" : <LiveNumber value={value} decimals={decimals} />}
               {value !== null && <span className="text-xl text-ink-soft">{unit}</span>}
             </span>
@@ -515,6 +616,7 @@ function Live() {
     <section className="border-t border-line">
       <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 md:py-28 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14">
         <div>
+          <Eyebrow n="05">Evidence</Eyebrow>
           <Reveal className="mb-8 flex flex-wrap items-center gap-x-4 gap-y-2">
             <h2 className={H2}>Live from this verifier</h2>
             {state === "live" && (
@@ -529,7 +631,7 @@ function Live() {
           <h3 className="font-semibold">Measured on our GPU laptop, Oct 27</h3>
           {MEASURED.map(([value, what]) => (
             <div key={value} className="flex flex-col gap-1">
-              <p className="font-display text-3xl font-semibold tracking-tight">{value}</p>
+              <p className="font-display text-3xl font-medium tracking-[-0.03em]">{value}</p>
               <p className="text-sm leading-relaxed text-ink-soft">{what}</p>
             </div>
           ))}
@@ -571,6 +673,7 @@ function Adoption() {
     <section className="border-t border-line bg-surface/40">
       <div className="mx-auto max-w-7xl px-4 py-20 md:py-28">
         <Reveal>
+          <Eyebrow n="06">Adoption</Eyebrow>
           <h2 className={`${H2} max-w-[22ch]`}>Why a bank can adopt it</h2>
         </Reveal>
         <div className="mt-14 grid gap-14 md:grid-cols-2 md:gap-16">
@@ -610,24 +713,30 @@ const MORE: [string, string][] = [
 function FinalCta() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-20 md:py-28">
-      <Reveal className="lp-tint rounded-2xl border border-line p-8 md:p-14">
-        <div className="grid gap-8 md:grid-cols-[minmax(0,1.4fr)_auto] md:items-end">
+      <Reveal className="relative overflow-hidden rounded-[2rem] bg-brand p-8 text-on-fill md:p-14">
+        <div className="pointer-events-none absolute -bottom-40 -right-28 opacity-[0.08]" aria-hidden>
+          <Logo size={420} />
+        </div>
+        <div className="relative grid gap-8 md:grid-cols-[minmax(0,1.4fr)_auto] md:items-end">
           <div>
+            <span className="mb-6 block h-1 w-14 rounded-full bg-brand-red" aria-hidden />
             <h2 className={H2}>Follow a Call from Request to Verdict.</h2>
-            <p className="mt-4 max-w-[52ch] leading-relaxed text-ink-soft">
+            <p className="mt-4 max-w-[52ch] leading-relaxed text-on-fill/80">
               Open the demo to see Pratyaksh at work, or the Console for live Calls with their Signals, Verdicts and
               Transcripts.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 md:justify-end">
-            <PrimaryCta />
-            <ConsoleCta />
+            <Link to="/demo" className="group btn btn-on-brand btn-lg">
+              Open the demo <ArrowRight size={18} weight="bold" className="nudge group-hover:translate-x-0.5" />
+            </Link>
+            <Link to="/console" className="btn btn-outline-on-brand btn-lg">Open the Console</Link>
           </div>
         </div>
-        <nav className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-line pt-6 text-sm" aria-label="More of Pratyaksh">
+        <nav className="relative mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-on-fill/15 pt-6 text-sm" aria-label="More of Pratyaksh">
           {MORE.map(([to, label]) => (
-            <Link key={to} to={to} className="group inline-flex items-center gap-1.5 font-medium text-ink-soft hover:text-ink">
-              {label} <ArrowUpRight size={15} className="nudge group-hover:text-accent" />
+            <Link key={to} to={to} className="group inline-flex items-center gap-1.5 font-medium text-on-fill/80 hover:text-on-fill">
+              {label} <ArrowUpRight size={15} className="nudge group-hover:text-brand-red" />
             </Link>
           ))}
         </nav>
@@ -647,13 +756,22 @@ export default function LandingPage() {
       <Live />
       <Adoption />
       <FinalCta />
-      <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-8 text-sm text-ink-soft">
-          <Logo size={24} />
-          <span>
-            <b lang="hi" className="font-display text-ink">प्रत्यक्ष</b>: perceived directly, with one's own senses.
-          </span>
-          <span className="ml-auto">Team Omnitrons, FET Aavishkar 2026</span>
+      <footer className="border-t border-line bg-surface/40">
+        <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+          <div className="flex flex-col gap-4">
+            <Logo size={36} />
+            <p className="max-w-[36ch] font-display text-2xl font-medium leading-snug tracking-[-0.015em]">
+              <b lang="hi" className="font-semibold">प्रत्यक्ष</b>: perceived directly, with one's own senses.
+            </p>
+          </div>
+          <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm" aria-label="Pratyaksh pages">
+            {[["/demo", "Demo"], ["/deepfake", "Deepfake"], ["/console", "Console"], ...MORE].map(([to, label]) => (
+              <Link key={to} to={to} className="font-medium text-ink-soft hover:text-ink">{label}</Link>
+            ))}
+          </nav>
+        </div>
+        <div className="border-t border-line">
+          <p className="eyebrow mx-auto flex max-w-7xl px-4 py-5">Team Omnitrons · FET Aavishkar 2026</p>
         </div>
       </footer>
     </div>

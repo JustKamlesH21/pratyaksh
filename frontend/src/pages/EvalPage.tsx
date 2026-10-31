@@ -1,7 +1,7 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { ChartBar, Warning } from "@phosphor-icons/react";
 import { api } from "../api";
-import { Card, VerdictBadge } from "../components";
+import { Card, PageHeader, VerdictBadge } from "../components";
 import type { EvalRate, EvalRun } from "../types";
 import { REQUEST_LABEL } from "../types";
 
@@ -62,12 +62,9 @@ export default function EvalPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h1 className="font-display text-3xl font-semibold tracking-tight">Eval Run #{run.id}</h1>
-        <span className="text-ink-soft">
-          {run.label} · {new Date(run.created_at + "Z").toLocaleString()} · {s.real_calls} real, {s.clone_calls} Clone Calls
-        </span>
-      </div>
+      <PageHeader eyebrow="Eval Run" title={`Eval Run #${run.id}`}>
+        {run.label} · {new Date(run.created_at + "Z").toLocaleString()} · {s.real_calls} real, {s.clone_calls} Clone Calls
+      </PageHeader>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat i={0} label="Catch Rate" value={pct(s.catch_rate)}
           note={s.catch ? `${counted(s.catch)} Clone Calls BLOCKed` : `share of ${s.clone_calls} Clone calls that ended in BLOCK`} />
@@ -213,10 +210,10 @@ export default function EvalPage() {
 
 function Stat({ i, label, value, note }: { i: number; label: string; value: string; note: string }) {
   return (
-    <div className="motion-enter rounded-xl border border-line bg-surface p-5" style={{ "--i": i } as CSSProperties}>
-      <p className="text-sm font-medium text-ink-soft">{label}</p>
-      <p className="mt-1 font-mono text-4xl font-semibold tracking-tight text-ink">{value}</p>
-      <p className="mt-1 text-xs text-ink-soft">{note}</p>
+    <div className="motion-enter elev-1 flex flex-col rounded-2xl border border-line bg-surface p-5" style={{ "--i": i } as CSSProperties}>
+      <p className="eyebrow">{label}</p>
+      <p className="mt-4 font-mono text-[2.75rem] font-medium leading-none tracking-[-0.04em] text-ink">{value}</p>
+      <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-soft">{note}</p>
     </div>
   );
 }

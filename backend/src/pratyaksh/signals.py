@@ -13,7 +13,8 @@ Which language speech-to-text is told to use (measured Oct 27 with large-v3-turb
     Whisper Phrase   "en" with the phrase as hotwords: the code-mixed phrase comes out in Latin letters.
     Possession Code  "kn" for a Kannada Customer (Kannada digit words only survive in Kannada); "hi" with the
                      Hindi digit words as hotwords for a Hindi Customer (Oct 30: reads Hindi and English digit
-                     words, and keeps their side questions readable); else "en".
+                     words, and keeps their side questions readable); else "en". A Hindi or Kannada Customer's
+                     code is also heard in "en" (Oct 31): the Verifier accepts the code in either reading.
 
 Seam: SpeechModels (speech-to-text + spoof probability), steered by a TranscriptionHint.
     LocalSpeechModels    faster-whisper + a transformers audio classifier (GPU or CPU)
@@ -26,7 +27,7 @@ import logging
 import threading
 from collections import deque
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Callable, Iterable, Protocol
 
 import numpy as np
@@ -67,6 +68,10 @@ class SignalExtractor:
         """A Request, heard in `language` (the Customer's profile language); None lets the model detect it."""
         return self._transcribe(audio, TranscriptionHint(language=language))
 
+    def check_voice(self, audio: Audio) -> Future:
+        """The AI Voice Check of spoken audio, started beside speech-to-text so it adds no wait."""
+        return _DSP.submit(_voice_check_safely, audio)
+
     def _transcribe(self, audio: Audio, hint: TranscriptionHint) -> str:
         if audio.seconds < 0.2:
             return ""
@@ -103,11 +108,18 @@ class SignalExtractor:
                 dynamic_range_db=measured["dynamic_range_db"] if measured else None,
             )
         digits = spoken_digits(transcript)
+        # Neither language hears every readout, so a Hindi or Kannada Customer's code is heard both ways: the
+        # right code in either reading counts (Oct 31, 24 Parler codes per row, hi / en / both: Hindi words 13 / 6
+        # / 15, in hall chatter 7 / 11 / 12). Rahul read 740065 and Hindi alone heard 7400-065, then 540065.
+        other = ""
+        if hint.language != "en":
+            other = spoken_digits(self._transcribe(audio, TranscriptionHint(language="en")))
         return Signals(
             transcript=transcript,
             reply_latency_ms=response.reply_latency_ms,
             spoof_score=spoof,
-            spoken_digits=digits or None,
+            spoken_digits=digits or other or None,
+            other_digits=other if digits and other != digits and other else None,
         )
 
 
@@ -145,6 +157,59 @@ def phrase_match(expected: str, transcript: str) -> float:
     if not digit_ok:
         score = min(score, 0.5)
     return round(score, 3)
+
+
+# AI Voice Check: advisory, shown to staff, never part of a Verdict. A human voice's pitch moves a little from
+# moment to moment, within a range; generated voices came out shakier or dead steady. Measured Oct 31 on 2 s windows
+# of consented audio (real 0.0058-0.0115, Clones 0.0000-0.0347, Parler 0.0000-0.0293): one real speaker on a clean
+# microphone, so tune these on phone-line Calls ("voice check" in the API log). A whisper has no pitch: not measured.
+_PITCH_STEADY_BELOW = 0.003  # steadier than any real window
+_PITCH_HUMAN_UP_TO = 0.0115  # the most any real window moved
+_PITCH_AI_FROM = 0.02  # score 1.0 from here
+_VOICE_CHECK_MAX_S = 6.0
+_MIN_PITCH_STEPS = 20  # about 0.3 s of voiced speech
+
+
+def voice_check(audio: Audio) -> dict | None:
+    """Pitch wobble of spoken audio and how AI-like it is (0 human range, 1 outside it), or None when too little
+    of it was voiced to measure. Median of frame-to-frame pitch change inside voiced runs, so the number of word
+    boundaries in a clip does not move it. Only ever on the DSP thread."""
+    import librosa
+
+    y = audio.samples
+    if audio.sample_rate != SAMPLE_RATE:
+        y = librosa.resample(y, orig_sr=audio.sample_rate, target_sr=SAMPLE_RATE)
+    y = y[: int(_VOICE_CHECK_MAX_S * SAMPLE_RATE)]
+    if y.size < 2048 or float(np.abs(y).max()) < 1e-3:
+        return None
+    f0, voiced, _ = librosa.pyin(y, fmin=65.0, fmax=400.0, sr=SAMPLE_RATE, frame_length=1024, hop_length=256)
+    steps = [abs(f0[i + 1] - f0[i]) / f0[i] for i in range(len(f0) - 1) if voiced[i] and voiced[i + 1]]
+    if len(steps) < _MIN_PITCH_STEPS:
+        return None
+    wobble = float(np.median(steps))
+    if wobble < _PITCH_STEADY_BELOW:
+        score = 1.0
+    else:
+        score = min(1.0, max(0.0, (wobble - _PITCH_HUMAN_UP_TO) / (_PITCH_AI_FROM - _PITCH_HUMAN_UP_TO)))
+    log.info("voice check: wobble=%.4f score=%.2f from %d pitch steps", wobble, score, len(steps))
+    return {"wobble": round(wobble, 4), "score": round(score, 2)}
+
+
+def _voice_check_safely(audio: Audio) -> dict | None:
+    try:
+        return voice_check(audio)
+    except Exception:  # advisory: it must never fail a Response
+        log.exception("voice check failed")
+        return None
+
+
+def ai_voice_summary(readings: list[dict]) -> dict | None:
+    """One Call's AI Voice Check from its spoken turns."""
+    if not readings:
+        return None
+    score = round(sum(r["score"] for r in readings) / len(readings), 2)
+    label = "likely_ai" if score >= 0.7 else "unsure" if score >= 0.3 else "likely_human"
+    return {"score": score, "label": label, "turns": len(readings)}
 
 
 _dsp_lock = threading.Lock()

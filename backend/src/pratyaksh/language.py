@@ -43,12 +43,13 @@ _REPEATS = {"double": 2, "dabal": 2, "triple": 3, "tripal": 3}
 # Whisper Phrase or a Request never sees them. A wrong spelling here can only fail to match a code, never
 # match one the Caller does not hold.
 _CODE_ONLY_DIGITS = {
-    "ce": "6",                                 # चे, छे (छह)
-    "din": "3", "tim": "3",                    # दीन, तीम (तीन)
-    "pac": "5", "bac": "5",                    # पाच, बाच (पाँच)
+    "ce": "6", "cai": "6", "cek": "6", "sek": "6",               # चे, छे, चै, चेक, शेक (छह)
+    "din": "3", "tim": "3", "tin": "3", "team": "3",             # दीन, तीम, tin, team (तीन)
+    "pac": "5", "bac": "5", "banc": "5", "punc": "5",            # पाच, बाच, banch, punch (पाँच)
     "sar": "4",                                # शार (चार)
     "sunyo": "0", "sunyu": "0", "suniy": "0",  # शून्यो, शून्यू, शुनिय (शून्य)
     "aj": "8", "ac": "8",                      # आज, आच (आठ)
+    "don": "2", "dol": "2", "dole": "2",       # डों, डोल, dole (दो), in a noisy hall (Oct 31)
 }
 
 

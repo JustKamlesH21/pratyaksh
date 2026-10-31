@@ -2,11 +2,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+
+from pratyaksh import signals
 import yaml
 from conftest import voiced, whispered
 
 import pratyaksh.policy
-from pratyaksh.domain import Audio, Challenge, ChallengeKind, Response
+from pratyaksh.domain import SAMPLE_RATE, Audio, Challenge, ChallengeKind, Response
 from pratyaksh.language import spoken_digits
 from pratyaksh.signals import (
     ScriptedSpeechModels, SignalExtractor, TranscriptionHint, phrase_match, whisper_score,
@@ -95,6 +97,10 @@ def test_a_hindi_caller_who_talks_instead_of_reading_the_code_is_heard_in_hindi(
     ("चे तीन आज तीन नौ सात", "638397"),
     ("शार साथ पाँच दो पाँच एक", "475251"),
     ("टीन शून्यो नौ पाँच एक छह", "309516"),
+    # In hall chatter (Parler with other speech mixed in, Oct 31).
+    ("आठ चै तीन नौ एक एक", "863911"),
+    ("डों एक आठ तीन दो दो", "218322"),
+    ("Shunya Che, punch din din punch.", "065335"),
 ])
 def test_hindi_digit_words_as_speech_to_text_spells_them_read_as_the_code(heard, code):
     assert spoken_digits(heard) == code
@@ -107,11 +113,39 @@ def test_code_only_digit_spellings_never_change_a_whisper_phrase():
 
 
 @pytest.mark.parametrize("heard", ["8, 2, 3, 7, 1, 5.", "823-715", "आठ दो तीन सात एक पाँच।"])
-def test_a_hindi_caller_reading_the_code_in_english_or_hindi_words_is_heard_in_one_pass(heard):
+def test_a_hindi_caller_reading_the_code_in_english_or_hindi_words_is_read(heard):
     models = ScriptedSpeechModels([heard])
     s = SignalExtractor(models).extract(Challenge(ChallengeKind.POSSESSION_CODE, ""), Response(voiced(), 900), "hi")
-    assert len(models.hints) == 1
     assert s.spoken_digits == "823715"
+
+
+def _read_code(transcripts, language):
+    models = ScriptedSpeechModels(transcripts)
+    challenge = Challenge(ChallengeKind.POSSESSION_CODE, "")
+    return SignalExtractor(models).extract(challenge, Response(voiced(), 900), language), models
+
+
+def test_a_hindi_callers_code_is_heard_in_hindi_and_in_english():
+    # Oct 31, venue: Rahul read 740065; heard in Hindi alone it came out 7400-065, then 540065.
+    s, models = _read_code(["7400-065", "7 4 0 0 6 5"], "hi")
+    assert [h.language for h in models.hints] == ["hi", "en"]
+    assert (s.spoken_digits, s.other_digits) == ("7400065", "740065")
+    assert s.transcript == "7400-065"  # what the Caller sees and the Interpreter hears stays the Hindi reading
+
+
+def test_when_only_the_english_reading_has_digits_it_is_the_reading():
+    s, _ = _read_code(["कृपया रुकिए", "8 2 3 7 1 5"], "hi")
+    assert (s.spoken_digits, s.other_digits) == ("823715", None)
+
+
+def test_two_readings_that_agree_are_one_reading():
+    s, _ = _read_code(["8 2 3 7 1 5", "823715"], "kn")
+    assert (s.spoken_digits, s.other_digits) == ("823715", None)
+
+
+def test_an_english_customers_code_is_heard_once():
+    s, models = _read_code(["8 2 3 7 1 5"], "en")
+    assert len(models.hints) == 1 and s.other_digits is None
 
 
 def test_extract_possession_code_reads_digits_only():
@@ -185,7 +219,7 @@ def test_possession_code_digits_are_heard_where_they_transcribe_best(customer_la
     models = ScriptedSpeechModels(["4 8 1 9 2 7"])
     challenge = Challenge(ChallengeKind.POSSESSION_CODE, "")
     SignalExtractor(models).extract(challenge, Response(voiced(), 900), customer_language)
-    assert [h.language for h in models.hints] == [heard_in]
+    assert models.hints[0].language == heard_in
     assert ("सात" in (models.hints[0].hotwords or "")) == (heard_in == "hi")
 
 
@@ -209,3 +243,37 @@ def test_the_logged_whisper_diagnostic_can_never_fail_a_response(monkeypatch):
     monkeypatch.setattr(signals, "whisper_detail", broken)
     logging.getLogger("pratyaksh.signals").setLevel(logging.INFO)
     assert signals.whisper_score(whispered()) is not None
+
+
+def _hum(pitch_hz):
+    """Voiced sound whose pitch follows pitch_hz(t)."""
+    t = np.arange(int(3 * SAMPLE_RATE)) / SAMPLE_RATE
+    phase = 2 * np.pi * np.cumsum(pitch_hz(t)) / SAMPLE_RATE
+    return Audio(sum((0.3 / k) * np.sin(k * phase) for k in range(1, 6)).astype(np.float32))
+
+
+def test_a_voice_with_dead_steady_pitch_is_flagged():
+    assert signals.voice_check(_hum(lambda t: 150 + 0 * t))["score"] == 1.0
+
+
+def test_a_voice_whose_pitch_moves_like_speech_is_in_the_human_range():
+    assert signals.voice_check(_hum(lambda t: 150 + 25 * np.sin(2 * np.pi * 0.7 * t)))["score"] == 0.0
+
+
+def test_a_shaky_pitch_is_flagged():
+    shaky = np.random.default_rng(1).normal(0, 16, int(3 * SAMPLE_RATE) // 256 + 2)
+    assert signals.voice_check(_hum(lambda t: 150 + shaky[(t * SAMPLE_RATE / 256).astype(int)]))["score"] > 0.5
+
+
+def test_silence_has_no_pitch_to_check():
+    assert signals.voice_check(Audio(np.zeros(SAMPLE_RATE, dtype=np.float32))) is None
+
+
+@pytest.mark.parametrize("scores, label", [([0.0, 0.1], "likely_human"), ([0.0, 0.8], "unsure"), ([0.9, 0.8], "likely_ai")])
+def test_a_calls_ai_voice_check_is_the_mean_of_its_spoken_turns(scores, label):
+    summary = signals.ai_voice_summary([{"wobble": 0.01, "score": s} for s in scores])
+    assert summary["label"] == label and summary["turns"] == 2
+
+
+def test_no_spoken_turn_means_no_ai_voice_check():
+    assert signals.ai_voice_summary([]) is None

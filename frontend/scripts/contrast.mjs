@@ -51,6 +51,10 @@ const PAIRS = [
   ["on-fill", "pass-fill", null, 4.5],
   ["on-fill", "stepup-fill", null, 4.5],
   ["on-fill", "block-fill", null, 4.5],
+  ["on-fill", "brand", null, 4.5],
+  ["on-fill", "brand", ["on-fill", 0.15], 4.5],
+  ["brand-red", "canvas", null, 3], // marks only (logo line, rules, rail), never text
+  ["brand-red", "brand", null, 3],
   ["accent", "canvas", null, 3],
   ["line-strong", "surface", null, 3],
   ["line-strong", "canvas", null, 3],

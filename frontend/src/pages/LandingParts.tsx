@@ -42,7 +42,7 @@ export function DeviceFrame({ name, phone, children, className = "" }: {
 }) {
   return (
     <div className={`overflow-hidden rounded-[2.2rem] border-[10px] border-bezel bg-surface ring-1 ring-line ${className}`}>
-      <div className="bg-accent px-5 pb-5 pt-6 text-on-accent">
+      <div className="bg-brand px-5 pb-5 pt-6 text-on-fill">
         <p className="flex items-center gap-1.5 text-xs font-medium opacity-80"><Bank size={15} /> Your bank</p>
         <p className="text-lg font-bold">{name}</p>
         <p className="text-sm opacity-80">{phone}</p>
@@ -69,12 +69,15 @@ export function SecurityAlertPreview({ request, className = "" }: { request: str
 }
 
 /** The Possession Code card from the Bank App inbox. Digits arrive one by one when revealed. */
-export function PossessionCodePreview({ code, request }: { code: string; request: string }) {
+export function PossessionCodePreview({ code, request, compact = false }: { code: string; request: string; compact?: boolean }) {
   return (
     <div className="rounded-xl bg-sunken p-4 text-center">
       <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft"><Password size={17} /> Code for your call with the bank</p>
       <p className="mt-0.5 text-sm font-semibold">{request}</p>
-      <p className="my-2 font-mono text-[2.25rem] font-semibold tracking-[0.12em] text-ink" aria-label={code.split("").join(" ")}>
+      <p
+        className={`my-2 whitespace-nowrap font-mono font-semibold text-ink ${compact ? "text-[1.75rem] tracking-[0.06em]" : "text-[2.25rem] tracking-[0.12em]"}`}
+        aria-label={code.split("").join(" ")}
+      >
         {code.split("").map((d, i) => (
           <span key={i} className={`lp-digit inline-block ${i === 3 ? "ml-[0.45em]" : ""}`} style={{ "--i": i } as CSSProperties} aria-hidden>{d}</span>
         ))}

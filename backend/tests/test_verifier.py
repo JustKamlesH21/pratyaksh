@@ -10,7 +10,8 @@ from pratyaksh.phrases import speakable
 from pratyaksh.signals import TranscriptionHint
 from pratyaksh.verification import CallNotFound, Database, DeviceNotPaired, NotAllowed, UnknownCustomer
 
-C = "cust-ananya"
+C = "cust-meera"  # English: most tests read what the Voice Agent says
+KN = "cust-ananya"  # Kannada: a Whisper Phrase in Kannada, and a code heard twice
 
 
 def whisper_back(h: Harness, call_id: str, latency_ms: int = 700):
@@ -77,11 +78,11 @@ def test_synthetic_voice_alone_blocks_even_with_the_right_code():
 
 def test_a_whisper_phrase_is_heard_in_latin_with_the_phrase_as_hotwords(harness):
     h = harness
-    call_id = h.verifier.start_call(C, "r").call_id
+    call_id = h.verifier.start_call(KN, "r").call_id
     h.say(call_id, "add payee please")
     phrase = h.current_phrase(call_id)
     whisper_back(h, call_id)
-    assert h.models.hints[-1] == TranscriptionHint(language="en", hotwords=speakable(phrase, "kn"))  # C is Kannada
+    assert h.models.hints[-1] == TranscriptionHint(language="en", hotwords=speakable(phrase, "kn"))  # KN is Kannada
 
 
 @pytest.mark.parametrize("customer, language", [("cust-ananya", "kn"), ("cust-rahul", "hi"), ("cust-meera", "en")])
@@ -99,7 +100,7 @@ def test_a_possession_code_is_heard_in_the_language_its_digits_are_best_heard_in
     h.say(call_id, "add a payee")
     whisper_back(h, call_id)
     h.say(call_id, " ".join(h.code_on_device(customer)), voiced(), 900)
-    assert h.models.hints[-1].language == language
+    assert language in [hint.language for hint in h.models.hints[-2:]]  # first reading; a second one in English
 
 
 def test_inconclusive_responses_get_one_extra_whisper_phrase(harness):
@@ -557,6 +558,38 @@ def test_customer_risk_shows_alerts_voice_pause_and_history(harness):
         h.verifier.customer_risk("nobody")
 
 
+def test_the_right_code_in_the_second_reading_counts(harness):
+    # KN is a Kannada Customer, so a code is heard twice. The first reading has it wrong (Oct 31, venue).
+    h = harness
+    call_id = h.verifier.start_call(KN, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    h.models.push("5 4 0 0 6 5")
+    step = h.say(call_id, " ".join(h.code_on_device(KN)), voiced(), 900)
+    assert step.end and step.outcome is Outcome.PASSED
+
+
+def test_a_wrong_code_in_both_readings_is_wrong(harness):
+    h = harness
+    call_id = h.verifier.start_call(KN, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    wrong = "".join("1" if d != "1" else "2" for d in h.code_on_device(KN))
+    h.models.push(" ".join(wrong))
+    assert not h.say(call_id, " ".join(wrong), voiced(), 900).end  # one retry
+    h.models.push(" ".join(wrong))
+    assert h.say(call_id, " ".join(wrong), voiced(), 900).outcome is Outcome.BLOCKED
+
+
+def test_a_long_run_of_digits_in_a_second_reading_tries_no_codes(harness):
+    h = harness
+    call_id = h.verifier.start_call(KN, "r").call_id
+    h.say(call_id, "add a payee")
+    whisper_back(h, call_id)
+    h.models.push("5 4 0 0 6 5")
+    assert not h.say(call_id, "1 2 " + " ".join(h.code_on_device(KN)) + " 3 4", voiced(), 900).end  # no match: a retry
+
+
 def test_a_correct_code_read_after_it_expired_gets_a_fresh_code_not_a_block(harness):
     h = harness
     call_id = h.verifier.start_call(C, "r").call_id
@@ -677,7 +710,7 @@ def test_a_step_says_which_challenge_is_open_and_the_words_to_whisper(harness):
     from pratyaksh.phrases import spoken
 
     h = harness  # Ananya's profile language is Kannada
-    call_id = h.verifier.start_call(C, "r").call_id
+    call_id = h.verifier.start_call(KN, "r").call_id
     assert h.verifier.current_step(call_id).challenge is None
     step = h.say(call_id, "I want to add a payee")
     words = spoken(h.current_phrase(call_id), "kn")
@@ -688,5 +721,102 @@ def test_a_step_says_which_challenge_is_open_and_the_words_to_whisper(harness):
 
     step = whisper_back(h, call_id)
     assert step.challenge is ChallengeKind.POSSESSION_CODE and step.words == ""
-    step = h.say(call_id, " ".join(h.code_on_device(C)), voiced(), 900)
+    step = h.say(call_id, " ".join(h.code_on_device(KN)), voiced(), 900)
     assert step.end and step.challenge is None
+
+
+def test_the_ai_voice_check_shows_on_the_live_call_and_never_changes_the_verdict(harness, monkeypatch):
+    from pratyaksh import signals
+
+    h = harness
+    monkeypatch.setattr(signals, "voice_check", lambda audio: {"wobble": 0.03, "score": 1.0})
+    call_id = h.verifier.start_call(C, "r").call_id
+    assert h.verifier.call(call_id)["ai_voice"] is None
+    h.say(call_id, "add a payee")
+    assert h.verifier.call(call_id)["ai_voice"]["label"] == "likely_ai"  # live, from the Request alone
+    whisper_back(h, call_id)
+    step = h.say(call_id, " ".join(h.code_on_device(C)), voiced(), 900)
+    view = h.verifier.call(call_id)
+    assert view["ai_voice"]["turns"] == 1  # the Request: not the whisper (no pitch), not the code (choppy digits)
+    assert step.outcome is Outcome.PASSED and view["verdict"] == "PASS"
+
+
+def _finish_with_code(h, customer, call_id):
+    while h.verifier.call(call_id)["challenges"][-1]["kind"] == "whisper_phrase":
+        whisper_back(h, call_id)
+    return h.say(call_id, " ".join(h.code_on_device(customer)), voiced(), 900)
+
+
+def test_a_password_reset_ends_with_next_steps_in_the_bank_app(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "reset my password")
+    step = _finish_with_code(h, C, call_id)
+    assert step.outcome is Outcome.PASSED
+    assert "password reset to your bank app" in step.say and "request is done" not in step.say
+    card = next(m for m in h.inbox(C)["messages"] if m["kind"] == "next_step")
+    assert card["body"]["title"] == "Set a new password" and len(card["body"]["steps"]) == 3
+
+
+def test_a_sim_change_ends_with_next_steps_in_the_bank_app(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "I want to change my sim")
+    step = _finish_with_code(h, C, call_id)
+    assert "SIM change is approved" in step.say
+    assert next(m for m in h.inbox(C)["messages"] if m["kind"] == "next_step")["body"]["title"] == "Finish your SIM change"
+
+
+def test_a_sim_change_is_two_whispers_and_the_code(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "I want to change my sim")
+    assert whisper_back(h, call_id).challenge.value == "whisper_phrase"
+    assert whisper_back(h, call_id).challenge.value == "possession_code"
+
+
+def test_one_missed_whisper_on_a_sim_change_gets_a_third_and_then_passes(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "I want to change my sim")
+    h.say(call_id, "something else entirely", whispered(), 700)  # the words were lost
+    whisper_back(h, call_id)
+    third = h.say(call_id, " ".join(h.code_on_device(C)), voiced(), 900)
+    assert third.challenge.value == "whisper_phrase" and not third.end
+    assert whisper_back(h, call_id).outcome is Outcome.PASSED
+
+
+def test_next_steps_follow_app_approval_too(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "reset my password, use the bank app")
+    step = h.approve(call_id, C)
+    assert step.outcome is Outcome.APPROVED_IN_APP and "password reset to your bank app" in step.say
+    assert any(m["kind"] == "next_step" for m in h.inbox(C)["messages"])
+
+
+def test_other_requests_get_no_next_steps_card(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "add a payee")
+    _finish_with_code(h, C, call_id)
+    assert not any(m["kind"] == "next_step" for m in h.inbox(C)["messages"])
+
+
+def test_done_clears_the_next_steps_and_is_on_the_audit_trail(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "reset my password")
+    _finish_with_code(h, C, call_id)
+    assert h.verifier.finish_next_steps(C, h.verifier.pairing(C)) == 1
+    assert not any(m["kind"] == "next_step" for m in h.inbox(C)["messages"])
+    assert any("finished the next steps" in ln["text"] for ln in h.verifier.call(call_id)["transcript"])
+
+
+def test_a_hang_up_after_the_verdict_leaves_the_next_steps_on_the_phone(harness):
+    h = harness
+    call_id = h.verifier.start_call(C, "r").call_id
+    h.say(call_id, "reset my password")
+    _finish_with_code(h, C, call_id)
+    h.verifier.hang_up(call_id)
+    assert any(m["kind"] == "next_step" for m in h.inbox(C)["messages"])

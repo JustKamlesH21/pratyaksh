@@ -45,6 +45,13 @@ class Settings(BaseSettings):
         "Mary speaks in a calm, warm and friendly voice at a moderate pace with a moderate pitch. "
         "Very clear audio, with a very close recording that has no background noise."
     )
+    parler_hindi_description: str = (  # chosen by ear on Oct 31 from the native Hindi speakers
+        "Aman's voice is warm, friendly and calm, at a moderate pace, with a very close recording that has "
+        "no background noise."
+    )
+    # Hindi Whisper Phrases in play; 0 = all 344. Set in .env for the finale: only phrases already voiced with the
+    # new voice are used, so no prompt pauses to synthesise. A demo setting: the digit and the code carry the security.
+    hindi_phrase_pool: int = 0
     tts_cache_dir: str = "./.cache/tts"
 
     # LLM fallback for Request classification (ADR-0002). Leave the key empty to disable.

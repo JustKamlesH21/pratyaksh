@@ -5,6 +5,7 @@ import re
 
 import pytest
 
+from pratyaksh.verification.lines import in_language
 from pratyaksh.phrases import LANGUAGES, all_phrases, phrase_count, pronunciation, random_phrase, speakable, spoken
 
 # Words of one language that must not appear in another language's phrases (a Caller would not know them).
@@ -55,7 +56,7 @@ def test_the_verifier_gives_each_customer_a_phrase_in_their_language(customer, l
     phrase = h.current_phrase(call_id)
     assert phrase in all_phrases(language)
     # Its own sentence, said naturally after the instruction.
-    assert step.say.endswith(f"Please whisper these words. {spoken(phrase, language)}.")
+    assert step.say.endswith(f"{in_language('Please whisper these words.', language)} {spoken(phrase, language)}.")
 
 
 @pytest.mark.parametrize("language, said", [
@@ -86,3 +87,27 @@ def test_a_digit_whispered_in_hindi_or_kannada_still_matches(language):
 def test_english_words_and_digits_are_voiced_as_written():
     assert pronunciation("meeting", "hi") == "meeting"
     assert pronunciation("five", "kn") == "five"
+
+
+def test_a_phrase_pool_is_the_same_spread_of_real_phrases_every_time():
+    from pratyaksh.phrases import phrase_pool
+
+    pool = phrase_pool("hi", 24)
+    assert len(set(pool)) == 24 and set(pool) <= set(all_phrases("hi")) and pool == phrase_pool("hi", 24)
+    assert len({p.split()[1] for p in pool}) > 3  # across the templates, not the first few
+
+
+def test_a_hindi_customer_only_gets_phrases_from_the_pool():
+    import random
+
+    from conftest import Harness
+    from pratyaksh.phrases import phrase_pool
+
+    h = Harness()
+    h.verifier._hindi_phrases = phrase_pool("hi", 24)
+    h.verifier._rng = random.Random(3)
+    for n in range(6):
+        call_id = h.verifier.start_call("cust-rahul", f"r{n}").call_id
+        h.say(call_id, "I want to add a new payee")
+        assert h.current_phrase(call_id) in phrase_pool("hi", 24)
+        h.verifier.hang_up(call_id)

@@ -234,3 +234,13 @@ def test_an_abbreviation_does_not_end_a_sentence(tmp_path):
     synth = CountingVoice()
     PromptVoice(synth, tmp_path).render("Daily UPI transfers are capped at Rs. 1 lakh. Is there anything else?")
     assert synth.said == ["Daily UPI transfers are capped at Rs. 1 lakh.", "Is there anything else?"]
+
+
+def test_hindi_has_its_own_speaker_and_other_languages_keep_their_cached_audio():
+    from pratyaksh.voice import ParlerVoice
+
+    same = ParlerVoice("m", "Mary speaks.")
+    voice = ParlerVoice("m", "Mary speaks.", hindi_description="Aman speaks.")
+    assert voice.name == same.name  # English and Kannada lines stay in the cache
+    assert voice.name_for("Thank you.") == voice.name_for("ಧನ್ಯವಾದಗಳು.") == same.name
+    assert voice.name_for("कल सात बजे meeting है.") != same.name

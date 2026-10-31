@@ -149,3 +149,5 @@ _Avoid_: accuracy, detection rate
 **False Reject Rate**:
 The share of real-Customer Calls that did not end in PASS.
 _Avoid_: error rate, FRR (in prose)
+
+**AI Voice Check**: an advisory reading of how AI-like a Call's spoken turns sound, from pitch movement. Shown to staff; never a Signal in the Liveness Score and never part of a Verdict.

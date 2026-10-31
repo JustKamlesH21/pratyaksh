@@ -6,7 +6,7 @@ from conftest import Harness, enforce_policy, voiced, whispered
 from pratyaksh.domain import CallState, Outcome, Response
 from pratyaksh.verification.interpreter import NO_ANSWER
 
-C = "cust-ananya"
+C = "cust-meera"
 
 
 def start(h: Harness) -> str:
@@ -245,7 +245,7 @@ def test_a_wrong_answer_to_a_challenge_is_scored_not_taken_as_a_side_turn(answer
 
 @pytest.mark.parametrize("asked, answer, anything_else", [
     ("is my voice being recorded?", "never store your voice", "anything else I can help you with?"),
-    ("kya meri awaaz record ho rahi hai?", "कभी सेव नहीं करते", "और कोई मदद कर सकती हूँ?"),
+    ("kya meri awaaz record ho rahi hai?", "कभी सेव नहीं करते", "और कोई मदद कर सकता हूँ?"),
     ("ನನ್ನ ಧ್ವನಿಯನ್ನು ಉಳಿಸುತ್ತೀರಾ?", "ಎಂದಿಗೂ ಉಳಿಸಿಕೊಳ್ಳುವುದಿಲ್ಲ", "ಇನ್ನೇನಾದರೂ ಸಹಾಯ ಮಾಡಬಹುದೇ?"),
     ("ನನ್ನ ಧ್ವನಿ record ಆಗುತ್ತಾ? is my voice stored?", "never store your voice", "anything else I can help you with?"),
 ])

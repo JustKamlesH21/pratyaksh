@@ -6,12 +6,12 @@ import {
 } from "@phosphor-icons/react";
 import { HttpError, api, setConsoleKey } from "../api";
 import {
-  ErrorNote, KeyGate, OutcomeLabel, REQUEST_ICON, VerdictBadge, prefersReducedMotion, scriptLang, useLiveCalls,
-  useStage,
+  ErrorNote, KeyGate, LivePill, OutcomeLabel, PageHeader, REQUEST_ICON, VerdictBadge, prefersReducedMotion, scriptLang,
+  useLiveCalls, useStage,
 } from "../components";
 import type { CallView, DemoCustomer, Verdict } from "../types";
 import { REQUEST_LABEL } from "../types";
-import { CHALLENGE_LABEL, FACTOR_LABEL, decidedBy, elapsed, headline, isVoicePauseRefusal, signalTicks } from "../verdict";
+import { AI_VOICE_LABEL, AI_VOICE_NOTE, CHALLENGE_LABEL, FACTOR_LABEL, decidedBy, elapsed, headline, isVoicePauseRefusal, signalTicks } from "../verdict";
 import { BankApp } from "./BankAppPage";
 
 // English first, then Hindi, then Kannada: the order the demo usually runs in. Others follow by name.
@@ -90,36 +90,26 @@ export default function DemoPage() {
   return (
     <div className={`flex flex-col ${stage ? "gap-4" : "gap-6"}`}>
       {!stage && (
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">Demo</h1>
-            <p className="mt-1 max-w-2xl text-sm text-ink-soft">
-              Every demo Customer on one screen: their Bank App, their Call and their Voice Pause. Place a Call from a
-              card, read the Possession Code off that Customer's phone, and lift a Voice Pause here. For the projector,
-              open{" "}
-              <a href="/demo?stage=1" target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline-offset-4 hover:underline">
-                /demo?stage=1
-              </a>
-              .
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {connected ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/12 px-2.5 py-1 text-xs font-medium text-accent">
-                <span className="live-dot" aria-hidden /> Live
-              </span>
-            ) : (
-              <span className="rounded-full bg-block/10 px-2.5 py-1 text-xs font-medium text-block">Reconnecting</span>
-            )}
-            <Link
-              to="/console"
-              className="press inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-ink-soft ring-1 ring-line hover:text-ink"
-            >
-              <ShieldCheck size={16} aria-hidden /> Console
-            </Link>
-            <ResetDemo onDone={refresh} />
-          </div>
-        </header>
+        <PageHeader
+          eyebrow="Demo hub"
+          title="Every Customer, one screen"
+          actions={
+            <>
+              <LivePill connected={connected} />
+              <Link to="/console" className="btn btn-quiet">
+                <ShieldCheck size={16} aria-hidden /> Console
+              </Link>
+              <ResetDemo onDone={refresh} />
+            </>
+          }
+        >
+          Their Bank App, their Call and their Voice Pause. Place a Call from a card, read the Possession Code off that
+          Customer's phone, and lift a Voice Pause here. For the projector, open{" "}
+          <a href="/demo?stage=1" target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline-offset-4 hover:underline">
+            /demo?stage=1
+          </a>
+          .
+        </PageHeader>
       )}
 
       <VerdictRibbon call={latest} name={subject?.name ?? latest?.customer.name ?? ""} stage={stage} connected={connected} />
@@ -191,7 +181,7 @@ export function VerdictRibbon({ call, name, stage, connected = true }: {
   const pad = stage ? "min-h-[15rem] px-8 py-6" : "min-h-[9rem] px-5 py-4";
   if (!call)
     return (
-      <section aria-label="Verdict" aria-live="polite" className={`ribbon flex flex-col justify-center gap-4 rounded-2xl border border-line bg-surface ${pad}`}>
+      <section aria-label="Verdict" aria-live="polite" className={`ribbon elev-1 flex flex-col justify-center gap-4 rounded-2xl border border-line bg-surface ${pad}`}>
         <p className={`text-ink-soft ${stage ? "text-[2rem]" : "text-xl"}`}>{connected ? "Waiting for a Call" : "Connecting to the verifier…"}</p>
         {stage && <RibbonFooter decided={false} />}
       </section>
@@ -218,7 +208,7 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
       aria-live="polite"
       data-verdict={verdict ?? undefined}
       className={`ribbon flex flex-col gap-4 rounded-2xl border ${pad} ${
-        verdict ? "border-transparent text-on-fill" : "border-line bg-surface text-ink"
+        verdict ? "elev-2 border-transparent text-on-fill" : "elev-1 border-line bg-surface text-ink"
       }`}
     >
       {/* who and what */}
@@ -255,7 +245,7 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
       )}
 
       {/* Signals as they landed; the advisory Spoof Score set apart */}
-      {(ticks.length > 0 || spoof !== null) && !refused && (
+      {(ticks.length > 0 || spoof !== null || call.ai_voice) && !refused && (
         <ul className={`flex flex-wrap items-center gap-2 ${stage ? "text-lg" : "text-sm"}`} aria-label="Signals">
           {ticks.slice(0, shown).map((t) => (
             <li
@@ -286,6 +276,19 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
               <span>Spoof Score</span>
               <span className="font-mono">{spoof.toFixed(2)}</span>
               <span className="text-[0.8em]">advisory, not used in the Verdict</span>
+            </li>
+          )}
+          {call.ai_voice && (
+            <li
+              className={`tick inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1 sm:ml-auto ${
+                verdict ? "border-on-fill/50" : "border-line-strong text-ink-soft"
+              }`}
+              title={AI_VOICE_NOTE}
+            >
+              <span>AI voice check</span>
+              <span className="font-semibold">{AI_VOICE_LABEL[call.ai_voice.label]}</span>
+              <span className="font-mono">{call.ai_voice.score.toFixed(2)}</span>
+              <span className="text-[0.8em]">advisory</span>
             </li>
           )}
         </ul>
@@ -363,7 +366,7 @@ function CustomerCard({ customer, call, stage, active, dim, onChanged }: {
   return (
     <section
       aria-label={customer.name}
-      className={`tile flex min-w-0 flex-col gap-3 rounded-xl border border-line bg-surface p-4 ${
+      className={`tile flex min-w-0 flex-col gap-3 rounded-2xl border border-line bg-surface p-4 ${
         tone && (active || !stage) ? ring[tone] : ""
       } ${dim ? "is-dim" : ""}`}
     >
@@ -410,7 +413,7 @@ function CustomerCard({ customer, call, stage, active, dim, onChanged }: {
             href={`/call?customer=${encodeURIComponent(customer.id)}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="press inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent hover:bg-accent/90"
+            className="btn btn-primary"
           >
             <PhoneCall size={18} weight="bold" aria-hidden /> Call as {first}
             <ArrowSquareOut size={14} className="opacity-70" aria-hidden />
@@ -430,7 +433,7 @@ function CallState({ call }: { call: CallView | null }) {
   const Glyph = call?.request ? REQUEST_ICON[call.request] : PhoneCall;
   const challenge = call?.challenges[call.challenges.length - 1];
   return (
-    <div className={`flex min-h-[5.5rem] flex-col justify-center gap-1 rounded-lg px-3 py-2 text-sm ${live ? "bg-accent/10" : "bg-sunken"}`} aria-live="polite">
+    <div className={`flex min-h-[5.5rem] flex-col justify-center gap-1 rounded-xl px-3 py-2 text-sm ${live ? "bg-accent/10" : "bg-sunken"}`} aria-live="polite">
       {!call && (
         <>
           <p className="font-semibold text-ink-soft">Idle</p>
@@ -525,7 +528,7 @@ function VoicePause({ customer, onLifted, controls }: { customer: DemoCustomer; 
 
   return (
     <div>
-      <div key={on ? "on" : "off"} className={`flex h-14 items-center gap-3 rounded-lg px-3 ring-1 ${on ? "pause-scrim ring-block/45" : "ring-line"}`}>
+      <div key={on ? "on" : "off"} className={`flex h-14 items-center gap-3 rounded-xl px-3 ring-1 ${on ? "pause-scrim ring-block/45" : "ring-line"}`}>
         {on ? (
           <LockSimple size={22} weight="fill" className="shackle shrink-0 text-block" aria-hidden />
         ) : (
@@ -545,7 +548,7 @@ function VoicePause({ customer, onLifted, controls }: { customer: DemoCustomer; 
           <button
             onClick={lift}
             disabled={busy}
-            className="press motion-pop shrink-0 rounded-lg bg-ink px-3 py-2 text-xs font-bold text-canvas disabled:opacity-50"
+            className="motion-pop btn btn-strong btn-sm shrink-0"
           >
             {busy ? "Lifting…" : "Lift Voice Pause"}
           </button>
@@ -585,7 +588,7 @@ function PairingLink({ customer }: { customer: DemoCustomer }) {
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="press inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-ink-soft ring-1 ring-line hover:text-ink"
+        className="btn btn-quiet w-full font-medium text-ink-soft hover:text-ink"
       >
         <DeviceMobile size={17} aria-hidden /> {open ? "Hide phone link" : "Open Bank App on a phone"}
       </button>
@@ -596,7 +599,7 @@ function PairingLink({ customer }: { customer: DemoCustomer }) {
         inert={!open}
       >
         <div className="overflow-hidden">
-          <div className="mt-2 flex flex-col gap-2 rounded-lg bg-sunken p-3">
+          <div className="mt-2 flex flex-col gap-2 rounded-xl bg-sunken p-3">
             <div className="flex gap-2">
               <label className="sr-only" htmlFor={`pair-${customer.id}`}>Pairing link for {customer.name}</label>
               <input
@@ -605,11 +608,11 @@ function PairingLink({ customer }: { customer: DemoCustomer }) {
                 readOnly
                 value={url}
                 onFocus={(e) => e.currentTarget.select()}
-                className="min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-2 py-1.5 font-mono text-xs text-ink"
+                className="field min-h-8 min-w-0 flex-1 rounded-full px-3 font-mono text-xs"
               />
               <button
                 onClick={copy}
-                className="press inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 text-xs font-semibold text-on-accent"
+                className="btn btn-primary btn-sm shrink-0"
               >
                 {copied ? <Check size={14} weight="bold" aria-hidden /> : <Copy size={14} aria-hidden />}
                 {copied ? "Copied" : "Copy"}
@@ -618,7 +621,7 @@ function PairingLink({ customer }: { customer: DemoCustomer }) {
                 href={url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="press grid w-8 shrink-0 place-items-center rounded-md text-ink-soft ring-1 ring-line hover:text-ink"
+                className="press grid size-8 shrink-0 place-items-center rounded-full text-ink-soft ring-1 ring-line hover:text-ink"
                 aria-label={`Open ${customer.name}'s Bank App in a new tab`}
                 title="Open in a new tab"
               >
@@ -667,15 +670,12 @@ function ResetDemo({ onDone }: { onDone: () => void }) {
   return (
     <div className="relative">
       {stage === "confirm" ? (
-        <div className="motion-pop flex items-center gap-1.5 rounded-lg bg-surface p-1 ring-1 ring-line">
-          <span className="px-1.5 text-xs text-ink-soft">End open Calls and dismiss all alerts?</span>
-          <button
-            onClick={() => setStage("idle")}
-            className="press rounded-md px-2.5 py-1 text-xs font-medium text-ink-soft hover:bg-sunken hover:text-ink"
-          >
+        <div className="motion-pop flex items-center gap-1 rounded-full bg-surface p-1 pl-3 ring-1 ring-line">
+          <span className="pr-1 text-xs text-ink-soft">End open Calls and dismiss all alerts?</span>
+          <button onClick={() => setStage("idle")} className="btn btn-ghost btn-sm">
             Cancel
           </button>
-          <button onClick={reset} className="press rounded-md bg-ink px-2.5 py-1 text-xs font-semibold text-canvas">
+          <button onClick={reset} className="btn btn-strong btn-sm">
             Reset
           </button>
         </div>
@@ -684,13 +684,13 @@ function ResetDemo({ onDone }: { onDone: () => void }) {
           onClick={() => setStage("confirm")}
           disabled={stage === "busy"}
           title="Dismiss every Security Alert and end Calls left open. The Audit Trail keeps everything."
-          className="press inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-ink-soft ring-1 ring-line hover:text-ink disabled:opacity-50"
+          className="btn btn-quiet"
         >
           <ArrowCounterClockwise size={16} aria-hidden /> {stage === "busy" ? "Resetting…" : "Reset demo"}
         </button>
       )}
       {note && (
-        <p role="status" className="motion-enter absolute right-0 top-full z-10 mt-2 w-max max-w-xs rounded-lg bg-surface px-3 py-2 text-xs text-ink ring-1 ring-line">
+        <p role="status" className="motion-enter elev-2 absolute right-0 top-full z-10 mt-2 w-max max-w-xs rounded-xl border border-line bg-surface px-3 py-2 text-xs text-ink">
           {note}
         </p>
       )}

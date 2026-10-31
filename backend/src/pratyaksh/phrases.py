@@ -125,6 +125,12 @@ def all_phrases(language: str | None = None) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def phrase_pool(language: str, size: int) -> list[str]:
+    """`size` phrases spread evenly across the bank, the same ones every time, so they can be voiced first."""
+    phrases = all_phrases(language)
+    return phrases[:: max(1, len(phrases) // size)][:size]
+
+
 def phrase_count(language: str | None = None) -> int:
     """How many different Whisper Phrases random_phrase() can produce (for one language, or all)."""
     return len(all_phrases(language))

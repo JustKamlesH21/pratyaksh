@@ -7,6 +7,7 @@ requests:
   add_payee:
     challenges: [whisper_phrase, possession_code]
   sim_swap:
+    # Two whispers and the code; one missed whisper gets a third (verdict.max_step_ups, Kamlesh's call, Oct 31).
     challenges: [whisper_phrase, whisper_phrase, possession_code]
   high_value_transfer:
     challenges: [whisper_phrase, whisper_phrase, possession_code]
@@ -16,7 +17,9 @@ requests:
 
 signals:
   task_match:
-    min: 0.70            # below this the phrase was not said
+    # 0.60 since Oct 31: whispers in a loud hall were heard at 0.64 by genuine Callers, and a Clone says the words
+    # right anyway. The random digit is what stops a replay: a wrong or missing digit caps the match at 0.50.
+    min: 0.60            # below this the phrase was not said
   whisper_score:
     min: 0.60            # below this the phrase was not whispered
   reply_latency:

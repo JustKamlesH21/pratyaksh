@@ -272,4 +272,4 @@ def test_an_eval_run_hears_each_response_in_the_customers_language(tmp_path):
               language="kn")
     models = ScriptedSpeechModels(["ಐದು ಏಳು"])
     evaluate([row], Policy.load(), lambda r: models)
-    assert models.hints[-1].language == "kn"
+    assert models.hints[-2].language == "kn"  # then a second reading in English

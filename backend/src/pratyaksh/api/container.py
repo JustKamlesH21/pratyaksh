@@ -64,6 +64,7 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
         approval_ttl_s=settings.approval_ttl_seconds,
         signer=ReceiptSigner.load_or_create(settings.receipt_key_path),
         receipt_ttl_s=settings.receipt_ttl_seconds,
+        hindi_phrase_pool=settings.hindi_phrase_pool,
     )
     voice = PromptVoice(_synth(settings), settings.tts_cache_dir, fallback=ToneVoice())
     return Container(settings, db, events, speech, verifier, voice, missing_triggers)
@@ -71,7 +72,10 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
 
 def _synth(settings: Settings):
     if settings.tts_backend == "parler":
-        return ParlerVoice(settings.parler_model, settings.parler_description, settings.whisper_device)
+        return ParlerVoice(
+            settings.parler_model, settings.parler_description, settings.whisper_device,
+            hindi_description=settings.parler_hindi_description,
+        )
     return ToneVoice()
 
 

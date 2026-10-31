@@ -84,6 +84,9 @@ function Shell() {
   // Stage mode (/demo?stage=1, /console?stage=1): the projector shows only the page, at 125% (112.5% with
   // stage=small). The nav goes; the theme still follows the laptop's toggle through storage.
   const stage = ["/demo", "/console"].includes(location.pathname) ? stageOf(location.search) : null;
+  // The Caller app and the Bank App are phone screens: they own the whole viewport (safe areas included),
+  // with no site header, which on an iPhone in Safari pushed Hang up under the toolbar (Oct 30).
+  const phone = ["/call", "/bank"].includes(location.pathname);
   useEffect(() => {
     if (stage) document.documentElement.dataset.stage = stage;
     else delete document.documentElement.dataset.stage;
@@ -91,35 +94,40 @@ function Shell() {
   return (
     <div className="min-h-[100dvh]">
       <header
-        hidden={!!stage}
+        hidden={!!stage || phone}
         className={`sticky top-0 z-30 border-b backdrop-blur-md ${
           landing ? "border-transparent bg-canvas/70" : "border-line bg-surface/85"
         }`}
       >
-        <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
-          <Link to="/" className="press flex items-center gap-2 rounded-lg" aria-label="Pratyaksh home">
+        <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4">
+          <Link to="/" className="press flex items-center gap-2.5 rounded-full" aria-label="Pratyaksh home">
             <Logo />
             <span className="font-display text-base font-semibold tracking-tight sm:text-lg">Pratyaksh</span>
           </Link>
-          <nav className="ml-auto flex gap-0.5 sm:gap-1">
+          {/* A segmented track: the current page is an accent-tinted pill with a filled icon. */}
+          <nav className="ml-auto flex gap-0.5 rounded-full bg-sunken p-1 ring-1 ring-line">
             {tabs.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 aria-label={label}
                 className={({ isActive }) =>
-                  `press flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-sm font-medium ${
-                    isActive ? "bg-accent/12 text-accent" : "text-ink-soft hover:bg-sunken hover:text-ink"
+                  `press flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-sm font-medium md:px-3 ${
+                    isActive ? "bg-accent/15 text-ink" : "text-ink-soft hover:text-ink"
                   }`
                 }
               >
-                <Icon size={17} aria-hidden />
-                <span className="hidden md:inline">{label}</span>
+                {({ isActive }) => (
+                  <>
+                    <Icon size={17} weight={isActive ? "fill" : "duotone"} className={isActive ? "text-accent" : ""} aria-hidden />
+                    <span className="hidden md:inline">{label}</span>
+                  </>
+                )}
               </NavLink>
             ))}
           </nav>
           <button
-            className="press grid size-9 place-items-center rounded-lg text-ink-soft ring-1 ring-line hover:text-ink"
+            className="press grid size-10 place-items-center rounded-full text-ink-soft ring-1 ring-line hover:text-ink"
             onClick={cycleTheme}
             aria-label={`Colour theme: ${theme}. Change`}
             title={`Theme: ${theme}`}
@@ -128,7 +136,7 @@ function Shell() {
           </button>
         </div>
       </header>
-      <main className={landing ? "" : stage ? "px-4 py-4" : "mx-auto max-w-7xl px-4 py-6"}>
+      <main className={landing || phone ? "" : stage ? "px-4 py-4" : "mx-auto max-w-7xl px-4 py-6"}>
         <Suspense fallback={<PageSkeleton />}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
