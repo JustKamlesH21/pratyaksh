@@ -5,13 +5,14 @@ import {
 } from "@phosphor-icons/react";
 import { HttpError, api, downloadTranscript, setConsoleKey } from "../api";
 import {
-  Card, ErrorNote, KeyGate, Meter, OutcomeLabel, REQUEST_ICON, VerdictBadge, scriptLang, useLiveCalls, useStage,
+  Card, ErrorNote, KeyGate, Meter, OutcomeLabel, PageHeader, REQUEST_ICON, VerdictBadge, scriptLang, useLiveCalls,
+  useStage,
 } from "../components";
 import type {
   AuditCheck, CallView, CustomerRisk, ReceiptCheck, Signals, Stats, Status, TranscriptLine,
 } from "../types";
 import { REQUEST_LABEL } from "../types";
-import { FACTOR_LABEL, T, decidedBy, headline } from "../verdict";
+import { AI_VOICE_LABEL, AI_VOICE_NOTE, FACTOR_LABEL, T, decidedBy, headline } from "../verdict";
 
 type Filter = "all" | "live" | "review" | "blocked" | "passed";
 const FILTERS: [Filter, string, (c: CallView) => boolean][] = [
@@ -45,6 +46,12 @@ export default function ConsolePage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {!stage && (
+        <PageHeader eyebrow="Console · bank staff" title="Live Calls">
+          Every Call with the Signals that landed, the Verdict and the Reason the Policy gave, its Transcript and the
+          Audit Trail behind it.
+        </PageHeader>
+      )}
       <StatusBar />
       <div className="grid gap-6 lg:grid-cols-[21rem_1fr]">
         <Card
@@ -97,11 +104,11 @@ export default function ConsolePage() {
                 <li key={c.id} className="motion-enter" style={{ "--i": i } as CSSProperties}>
                   <button
                     onClick={() => setSelected(c.id)}
-                    className={`press flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left ${
+                    className={`press flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left ${
                       call?.id === c.id ? "bg-accent/10 ring-1 ring-accent/30" : "hover:bg-sunken"} ${c.verdict === "BLOCK" ? "border-l-2 border-block" : ""
                     }`}
                   >
-                    <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${c.state === "closed" ? "bg-sunken text-ink-soft" : "bg-accent/12 text-accent"}`}>
+                    <span className={`grid size-9 shrink-0 place-items-center rounded-full ${c.state === "closed" ? "bg-sunken text-ink-soft" : "bg-accent/12 text-accent"}`}>
                       <Glyph size={17} />
                     </span>
                     <span className="min-w-0 flex-1">
@@ -161,7 +168,7 @@ function StatusBar() {
           </span>
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border border-line bg-surface px-4 py-3 text-sm">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 elev-1 rounded-2xl border border-line bg-surface px-4 py-3 text-sm">
         <span
           className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${
             !status ? "bg-block/10 text-block ring-block/30"
@@ -233,7 +240,7 @@ function RiskPanel({ customerId, refresh }: { customerId: string; refresh: strin
   if (!risk) return <div className="skeleton h-10" />;
   const style = { high: "bg-block/10 text-block ring-block/30", elevated: "bg-stepup/10 text-stepup ring-stepup/30", normal: "bg-pass/10 text-pass ring-pass/30" }[risk.risk];
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg bg-sunken px-3 py-2.5 text-sm">
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl bg-sunken px-3.5 py-3 text-sm">
       <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ring-1 ${style}`}>{risk.risk} risk</span>
       <span className="text-ink-soft">{risk.customer.phone_masked}</span>
       <span><b>{risk.calls_7d}</b> Calls in 7 days{risk.blocked_24h > 0 && <>, <b className="text-block">{risk.blocked_24h} blocked</b> today</>}</span>
@@ -278,16 +285,16 @@ function ReceiptPanel({ callId, onLocked }: { callId: string; onLocked: () => vo
   }
   const c = check?.claims;
   return (
-    <div className="rounded-lg bg-sunken p-3 text-sm">
+    <div className="rounded-xl bg-sunken p-3.5 text-sm">
       <div className="flex flex-wrap items-center gap-3">
         <span className="inline-flex items-center gap-1.5 font-semibold"><SealCheck size={17} className="text-accent" /> Verification Receipt</span>
         <span className="ml-auto flex gap-2">
           {check?.valid && c?.executable && !check.redeemed && (
-            <button className="press rounded-lg bg-surface px-3 py-1.5 text-sm font-semibold ring-1 ring-line hover:ring-accent/50" onClick={redeem}>
+            <button className="btn btn-quiet btn-sm" onClick={redeem}>
               Redeem as core banking
             </button>
           )}
-          <button className="press rounded-lg bg-accent px-3 py-1.5 text-sm font-bold text-on-accent" onClick={issue}>
+          <button className="btn btn-primary btn-sm" onClick={issue}>
             {check ? "Issue again" : "Issue & verify"}
           </button>
         </span>
@@ -367,6 +374,13 @@ function CallDetail({ call, onUpdate, onLocked }: { call: CallView; onUpdate: (c
             <p className="text-xs font-medium text-ink-soft">Liveness</p>
             <p className="font-display text-2xl font-semibold tabular-nums">{call.liveness?.toFixed(2) ?? "-"}</p>
           </div>
+          <div title={AI_VOICE_NOTE}>
+            <p className="text-xs font-medium text-ink-soft">AI voice check · advisory</p>
+            <p className="font-display text-2xl font-semibold">
+              {call.ai_voice ? AI_VOICE_LABEL[call.ai_voice.label] : "-"}
+              {call.ai_voice && <span className="ml-2 font-mono text-sm font-normal text-ink-soft">{call.ai_voice.score.toFixed(2)}</span>}
+            </p>
+          </div>
           <div className="ml-auto flex flex-col items-end gap-1">
             <VerdictBadge verdict={call.verdict} large />
             <OutcomeLabel outcome={call.outcome} />
@@ -383,14 +397,14 @@ function CallDetail({ call, onUpdate, onLocked }: { call: CallView; onUpdate: (c
             </ul>
           )}
           {call.review_status === "pending" && (
-            <div className="motion-enter flex flex-wrap items-center gap-3 rounded-lg border border-stepup/30 bg-stepup/10 p-3">
+            <div className="motion-enter flex flex-wrap items-center gap-3 rounded-xl border border-stepup/30 bg-stepup/10 p-3">
               <User size={20} className="text-stepup" />
               <span className="text-sm font-semibold">Agent Review: a bank officer must confirm this Request.</span>
               <span className="ml-auto flex gap-2">
-                <button className="press rounded-lg bg-surface px-3 py-1.5 text-sm font-bold text-block ring-1 ring-block/40" onClick={() => review(false)}>
+                <button className="btn btn-danger btn-sm" onClick={() => review(false)}>
                   Reject
                 </button>
-                <button className="press rounded-lg bg-accent px-3 py-1.5 text-sm font-bold text-on-accent" onClick={() => review(true)}>
+                <button className="btn btn-primary btn-sm" onClick={() => review(true)}>
                   Approve
                 </button>
               </span>
@@ -406,20 +420,23 @@ function CallDetail({ call, onUpdate, onLocked }: { call: CallView; onUpdate: (c
       </Card>
 
       <div className="flex flex-wrap items-center gap-2">
-        {tabs.map(([t, label, Icon]) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`press inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${
-              tab === t ? "bg-accent/12 text-accent" : "text-ink-soft hover:bg-sunken hover:text-ink"
-            }`}
-          >
-            <Icon size={16} /> {label}
-          </button>
-        ))}
+        <div className="flex gap-0.5 rounded-full bg-sunken p-1 ring-1 ring-line">
+          {tabs.map(([t, label, Icon]) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              aria-pressed={tab === t}
+              className={`press inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 text-sm font-semibold ${
+                tab === t ? "bg-accent/15 text-ink" : "text-ink-soft hover:text-ink"
+              }`}
+            >
+              <Icon size={16} weight={tab === t ? "fill" : "duotone"} className={tab === t ? "text-accent" : ""} /> {label}
+            </button>
+          ))}
+        </div>
         {tab === "transcript" && (
           <button
-            className="press ml-auto inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-ink-soft ring-1 ring-line hover:text-ink"
+            className="btn btn-quiet ml-auto"
             onClick={() => downloadTranscript(call.id).catch((e) => setError(String(e)))}
           >
             <DownloadSimple size={16} /> Download .txt
@@ -552,7 +569,7 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
   if (l.speaker === "agent") {
     return (
       <div className="motion-enter flex max-w-[85%] items-start gap-2.5" style={style}>
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent" aria-hidden>
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent/12 text-accent" aria-hidden>
           <Waveform size={17} />
         </span>
         <div className="min-w-0">
@@ -576,7 +593,7 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
   if (s.code_match != null) chips.push([s.code_match ? "code matches" : "code wrong", s.code_match ? "text-pass" : "text-block"]);
   return (
     <div className="motion-enter ml-auto flex max-w-[85%] flex-row-reverse items-start gap-2.5" style={style}>
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-sunken text-ink-soft" aria-hidden>
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sunken text-ink-soft" aria-hidden>
         <User size={17} />
       </span>
       <div className="flex min-w-0 flex-col items-end">

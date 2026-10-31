@@ -3,10 +3,10 @@ import { type CSSProperties, Fragment, type ReactNode, useEffect, useRef, useSta
 import { useSearchParams } from "react-router-dom";
 import {
   Bank, ChatText, CheckCircle, CircleNotch, DeviceMobile, Headset, type Icon, Microphone, MicrophoneSlash, PhoneCall,
-  PhoneDisconnect, ShieldCheck, ShieldSlash, SpeakerSimpleLow, User, Warning, XCircle,
+  PhoneDisconnect, ShieldCheck, ShieldSlash, SlidersHorizontal, SpeakerSimpleLow, User, Warning, XCircle,
 } from "@phosphor-icons/react";
 import { api } from "../api";
-import { ErrorNote, Logo, scriptLang, useCustomers } from "../components";
+import { ErrorNote, Logo, prefersReducedMotion, scriptLang, useCustomers } from "../components";
 import type { Outcome } from "../types";
 
 type Status = "idle" | "connecting" | "in-call" | "ended";
@@ -276,6 +276,24 @@ const FILL: Record<string, string> = {
 };
 
 /** The honest line status in the call header: nobody is verified until the Policy says so. */
+/** The Bank's newest caption, revealed word by word as if spoken (about a second in all, however long the
+ *  line). Every word holds its place from the first frame, so the bubble never grows or reflows; words split
+ *  on spaces only, so Devanagari and Kannada clusters stay whole. */
+function Spoken({ text }: { text: string }) {
+  const words = text.split(/\s+/).filter(Boolean);
+  const step = Math.round(Math.min(70, Math.max(25, 1100 / words.length)));
+  return (
+    <span lang={scriptLang(text)} style={{ "--step": `${step}ms` } as CSSProperties}>
+      {words.map((w, i) => (
+        <span key={i}>
+          <span className="caption-word" style={{ "--i": i } as CSSProperties}>{w}</span>
+          {i < words.length - 1 ? " " : ""}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function CallStatus({ outcome }: { outcome: Outcome | null }) {
   if (outcome && PASSED.includes(outcome))
     return (
@@ -328,6 +346,7 @@ export default function CallerPage() {
   const [endedAt, setEndedAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [phase, setPhase] = useState<Phase>("waiting");
+  const [micSheet, setMicSheet] = useState(false); // microphone settings, as a bottom sheet during a Call
   const level = useMicLevel(micTrack, micHeld);
   const roomRef = useRef<Room | null>(null);
   const stopHolding = useRef<(() => void) | null>(null);
@@ -402,8 +421,9 @@ export default function CallerPage() {
 
   // Keep the newest line in view inside the conversation box (not the page: the status and the Challenge stay put).
   useEffect(() => {
+    // Glides rather than jumps, so the eye can follow the new line in (instant under reduced motion).
     const box = transcriptBox.current;
-    if (box) box.scrollTop = box.scrollHeight;
+    if (box) box.scrollTo({ top: box.scrollHeight, behavior: prefersReducedMotion() ? "auto" : "smooth" });
   }, [lines.length, status]);
 
   /** Show the applied capture settings and tell the Voice Agent about them. */
@@ -545,7 +565,7 @@ export default function CallerPage() {
       <label htmlFor="mic" className="font-medium text-ink-soft">Microphone</label>
       <select
         id="mic"
-        className="min-h-12 rounded-xl border border-line-strong bg-surface px-3 text-base text-ink disabled:opacity-40"
+        className="min-h-13 rounded-xl border border-line-strong bg-sunken px-3.5 text-base text-ink disabled:opacity-40"
         value={mic}
         disabled={!!MIC_BLOCKED || status === "connecting"}
         onChange={(e) => void chooseMic(e.target.value)}
@@ -592,20 +612,21 @@ export default function CallerPage() {
 
   // ---------------------------------------------------------------- before a Call
   if (status === "idle" || status === "connecting") {
+    // A phone screen: the whole viewport, the notch and the home indicator kept clear, Call in the thumb zone.
     return withAudio(
-      <div className="mx-auto flex w-full max-w-md flex-col gap-6">
-        <div className="flex flex-col items-center gap-3 pt-2 text-center">
-          <Logo size={56} />
-          <h1 className="font-display text-2xl font-semibold tracking-tight">Call your bank</h1>
-          <p className="max-w-xs text-sm text-ink-soft">
+      <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col px-5 pt-[max(1.5rem,env(safe-area-inset-top))]">
+        <div className="flex flex-col gap-3.5 pt-4">
+          <Logo size={48} />
+          <h1 className="font-display text-[2.125rem] font-semibold leading-[1.05] tracking-tight">Call your bank</h1>
+          <p className="max-w-[32ch] text-base text-ink-soft">
             The bank checks that it is really you, live, holding your registered phone. No voice is stored.
           </p>
         </div>
-        <div className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4">
+        <div className="mt-7 flex flex-col gap-4 rounded-2xl border border-line bg-surface p-4">
           <label className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-ink-soft">Calling as</span>
             <select
-              className="min-h-12 rounded-xl border border-line-strong bg-surface px-3 text-base text-ink"
+              className="min-h-13 rounded-xl border border-line-strong bg-sunken px-3.5 text-base text-ink"
               value={customer}
               disabled={status === "connecting"}
               onChange={(e) => setCustomer(e.target.value)}
@@ -620,22 +641,27 @@ export default function CallerPage() {
           </label>
           {micPicker}
         </div>
-        <button
-          className="press inline-flex min-h-16 items-center justify-center gap-2.5 rounded-full bg-accent px-6 text-lg font-bold text-on-accent disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={!customer || !!MIC_BLOCKED || status === "connecting"}
-          onClick={call}
-        >
-          <PhoneCall size={24} weight="fill" aria-hidden /> {status === "connecting" ? "Connecting…" : "Call"}
-        </button>
-        <ErrorNote error={MIC_BLOCKED ?? error} />
-        <details className="text-xs text-ink-soft">
-          <summary className="cursor-pointer font-semibold">Red-team mode</summary>
-          <p className="mt-2">
-            On the attacker laptop, choose the victim as "Calling as", pick{" "}
-            <b>CABLE Output (VB-Audio Virtual Cable)</b> as the Microphone. <code>attacker/clone_speak.py</code> plays the
-            Clone into that cable, so the Voice Agent hears the Clone, not you.
-          </p>
-        </details>
+        <div className="mt-4">
+          <ErrorNote error={MIC_BLOCKED ?? error} />
+        </div>
+        <div className="flex-1" />
+        <div className="sticky bottom-0 -mx-5 flex flex-col gap-3 bg-canvas px-5 pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          <button
+            className="press inline-flex min-h-16 items-center justify-center gap-2.5 rounded-full bg-accent px-6 text-lg font-bold text-on-accent disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={!customer || !!MIC_BLOCKED || status === "connecting"}
+            onClick={call}
+          >
+            <PhoneCall size={24} weight="fill" aria-hidden /> {status === "connecting" ? "Connecting…" : "Call"}
+          </button>
+          <details className="text-center text-sm text-ink-soft">
+            <summary className="cursor-pointer font-semibold">Red-team mode</summary>
+            <p className="mt-2 text-left text-xs">
+              On the attacker laptop, choose the victim as "Calling as", pick{" "}
+              <b>CABLE Output (VB-Audio Virtual Cable)</b> as the Microphone. <code>attacker/demo_clone.py</code> plays
+              the Clone into that cable, so the Voice Agent hears the Clone, not you.
+            </p>
+          </details>
+        </div>
       </div>
     );
   }
@@ -661,7 +687,7 @@ export default function CallerPage() {
                 {l.who === "bank" ? <Bank size={13} aria-hidden /> : <User size={13} aria-hidden />}
                 {l.who === "bank" ? "Bank" : "You"}
               </span>
-              <span lang={scriptLang(l.text)}>{l.text}</span>
+              {l.who === "bank" && i === lines.length - 1 ? <Spoken text={l.text} /> : <span lang={scriptLang(l.text)}>{l.text}</span>}
             </li>
           ))}
         </ol>
@@ -674,35 +700,41 @@ export default function CallerPage() {
     const end = ending(outcome);
     const Glyph = end.icon;
     return withAudio(
-      <div className="mx-auto flex w-full max-w-md flex-col gap-6">
-        <div className="flex flex-col items-center gap-3 pt-4 text-center" aria-live="polite">
-          <span className={`motion-pop grid size-32 place-items-center rounded-full ${FILL[end.tone]}`}>
-            <Glyph size={96} weight="fill" aria-hidden />
+      <div className="mx-auto flex h-[100dvh] w-full max-w-md flex-col px-5 pt-[max(1.5rem,env(safe-area-inset-top))]">
+        <div className="flex flex-col items-start gap-3 pt-6" aria-live="polite">
+          <span className={`motion-pop grid size-22 place-items-center rounded-full ${FILL[end.tone]}`}>
+            <Glyph size={52} weight="fill" aria-hidden />
           </span>
           {end.badge && (
-            <span className={`motion-pop rounded-full px-3 py-1 text-sm font-bold ring-1 ${TONE[end.tone]}`}>{end.badge}</span>
+            <span className={`motion-pop mt-1 rounded-full px-3 py-1 text-sm font-bold ring-1 ${TONE[end.tone]}`}>{end.badge}</span>
           )}
-          <h1 className="font-display text-3xl font-semibold tracking-tight">{end.title}</h1>
-          <p className="max-w-xs text-ink-soft">{end.text}</p>
+          <h1 className="font-display text-[2.125rem] font-semibold leading-[1.05] tracking-tight">{end.title}</h1>
+          <p className="max-w-[32ch] text-base text-ink-soft">{end.text}</p>
           {startedAt && (
             <p className="font-mono text-sm text-ink-soft">
-              {name ? `${name} · ` : ""}call lasted {clock((endedAt ?? Date.now()) - startedAt)}
+              {name ? `${name}, ` : ""}call lasted {clock((endedAt ?? Date.now()) - startedAt)}
             </p>
           )}
         </div>
-        <ErrorNote error={error} />
-        {lines.length > 0 && (
-          <div ref={transcriptBox} className="max-h-[45dvh] overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface p-3">
+        <div className="mt-3">
+          <ErrorNote error={error} />
+        </div>
+        {lines.length > 0 ? (
+          <div ref={transcriptBox} className="mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface p-3">
             {transcript}
           </div>
+        ) : (
+          <div className="flex-1" />
         )}
         {/* one Done, not "Call again" where the thumb just pressed Hang up (no accidental redial) */}
-        <button
-          className="press inline-flex min-h-14 items-center justify-center rounded-full bg-surface px-6 text-lg font-bold text-ink ring-1 ring-line-strong"
-          onClick={() => setStatus("idle")}
-        >
-          Done
-        </button>
+        <div className="pt-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+          <button
+            className="press inline-flex min-h-15 w-full items-center justify-center rounded-full bg-surface px-6 text-lg font-bold text-ink ring-1 ring-line-strong"
+            onClick={() => setStatus("idle")}
+          >
+            Done
+          </button>
+        </div>
       </div>
     );
   }
@@ -711,46 +743,64 @@ export default function CallerPage() {
   const youTalking = phase === "listening";
   const meter = Math.max(0, Math.min(1, (level.db + 70) / 60));
   const bars = [0.55, 0.85, 1, 0.75, 0.5].map((k) => (youTalking ? Math.min(1, meter * k * 1.4) : 0));
+  // The dock's meter follows the microphone whenever it is open, so a silent mic shows before the Caller speaks.
+  const micBars = [0.55, 0.85, 1, 0.75, 0.5].map((k) => (micHeld ? 0 : Math.min(1, meter * k * 1.4)));
   const end = outcome ? ending(outcome) : null;
+  const turnHint =
+    phase === "bank"
+      ? "Your microphone is paused"
+      : phase === "your-turn" || phase === "listening"
+        ? challenge?.kind === "whisper_phrase"
+          ? "Whisper the words below"
+          : challenge?.kind === "possession_code"
+            ? "Read the code out loud"
+            : null
+        : null;
 
+  // The whole screen, fixed to the visible viewport: in Safari the toolbars come and go, and Hang up must
+  // never slide under them. Only the conversation scrolls.
   return withAudio(
-    <div className="mx-auto flex h-[calc(100dvh-6.5rem)] min-h-[34rem] w-full max-w-md flex-col">
+    <div className="fixed inset-0 z-10 flex justify-center bg-canvas">
+      <div className="flex h-full w-full max-w-md flex-col px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
       {/* who is on the line, and for how long */}
-      <header className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
+      <header className="flex items-center gap-3 px-1 pb-3">
         <Logo size={40} />
         <div className="min-w-0 flex-1">
           <p className="font-semibold leading-tight">Your bank</p>
-          <p className="truncate text-sm text-ink-soft">{name ? `Calling as ${name}` : "Connected"}</p>
+          <p className="truncate text-[0.8125rem] text-ink-soft">{name ? `Calling as ${name}` : "Connected"}</p>
         </div>
-        <div className="flex flex-col items-end">
-          <span className="font-mono text-lg font-semibold tabular-nums">{startedAt ? clock(now - startedAt) : "0:00"}</span>
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="font-mono text-[1.0625rem] font-semibold tabular-nums">{startedAt ? clock(now - startedAt) : "0:00"}</span>
           <CallStatus outcome={outcome} />
         </div>
       </header>
 
-      {/* whose turn it is */}
-      <div className="flex flex-col items-center gap-3 py-5 text-center">
-        <div className="relative grid size-28 place-items-center">
+      {/* whose turn it is: one row, so the Challenge and the conversation keep the room */}
+      <div className="flex items-center gap-3.5 px-1.5 py-3">
+        <div className="relative grid size-13 shrink-0 place-items-center">
           <span className={`speaking-ring absolute inset-0 rounded-full ${PHASE_TONE[phase].ring}`} aria-hidden />
-          <span className={`relative grid size-24 place-items-center rounded-full ring-1 ${PHASE_TONE[phase].orb}`}>
+          <span className={`relative grid size-13 place-items-center rounded-full ring-1 ${PHASE_TONE[phase].orb}`}>
             {phase === "bank" ? (
-              <VoiceBars active />
+              <VoiceBars active className="is-compact" />
             ) : phase === "checking" || phase === "waiting" ? (
-              <CircleNotch size={40} weight="bold" className="spinner" aria-hidden />
+              <CircleNotch size={24} weight="bold" className="spinner" aria-hidden />
             ) : phase === "your-turn" ? (
-              <Microphone size={40} weight="fill" aria-hidden />
+              <Microphone size={24} weight="fill" aria-hidden />
             ) : (
-              <VoiceBars active={youTalking} levels={bars} />
+              <VoiceBars active={youTalking} levels={bars} className="is-compact" />
             )}
           </span>
         </div>
-        <p
-          className={`inline-flex items-center gap-2 font-display text-3xl font-semibold tracking-tight ${PHASE_TONE[phase].text}`}
-          aria-live="polite"
-        >
-          {phase === "bank" && <MicrophoneSlash size={26} aria-hidden />}
-          {PHASE_TEXT[phase]}
-        </p>
+        <div className="min-w-0">
+          <p
+            className={`inline-flex items-center gap-2 font-display text-2xl font-semibold leading-tight tracking-tight ${PHASE_TONE[phase].text}`}
+            aria-live="polite"
+          >
+            {phase === "bank" && <MicrophoneSlash size={22} aria-hidden />}
+            {PHASE_TEXT[phase]}
+          </p>
+          {turnHint && <p className="text-sm text-ink-soft">{turnHint}</p>}
+        </div>
       </div>
 
       {/* the open Challenge, or the Outcome as soon as the bank decides */}
@@ -765,14 +815,20 @@ export default function CallerPage() {
       ) : challenge?.kind === "whisper_phrase" ? (
         <div className="motion-pop flex flex-col gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-4" aria-live="polite">
           <p className="text-sm font-semibold text-accent">Whisper these words</p>
-          <p key={challenge.words} className="font-display text-phrase font-semibold leading-tight text-ink break-words" lang={scriptLang(challenge.words)}>
-            {challenge.words.split(/\s+/).map((w, i, all) => (
-              <span key={i}>
-                <span className="word" style={{ "--i": i } as CSSProperties}>{w}</span>
-                {i < all.length - 1 ? " " : ""}
-              </span>
-            ))}
-          </p>
+          {/* The words appear on the Caller's turn: shown earlier, people read along while the microphone is held
+              and the start of the whisper is lost (Oct 31, replies heard 32-44 ms after it opened). */}
+          {bankSpeaking ? (
+            <p className="font-display text-2xl font-semibold leading-tight text-ink-soft">Listen first. The words appear on your turn.</p>
+          ) : (
+            <p key={challenge.words} className="font-display text-phrase font-semibold leading-tight text-ink break-words" lang={scriptLang(challenge.words)}>
+              {challenge.words.split(/\s+/).map((w, i, all) => (
+                <span key={i}>
+                  <span className="word" style={{ "--i": i } as CSSProperties}>{w}</span>
+                  {i < all.length - 1 ? " " : ""}
+                </span>
+              ))}
+            </p>
+          )}
           <p className="inline-flex items-center gap-2 self-start rounded-full bg-surface px-3 py-1.5 text-sm font-semibold text-ink ring-1 ring-line">
             <SpeakerSimpleLow size={16} weight="bold" aria-hidden /> Speak softly, close to the phone
           </p>
@@ -789,58 +845,71 @@ export default function CallerPage() {
         </div>
       ) : null}
 
-      {/* the conversation so far */}
-      <div
-        ref={transcriptBox}
-        className="mt-4 min-h-28 flex-1 basis-0 overflow-y-auto overscroll-contain rounded-2xl border border-line bg-surface p-3"
-      >
+      {/* the conversation so far: the only part that scrolls */}
+      <div ref={transcriptBox} className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-0.5 py-1">
         {transcript}
       </div>
-
-      <details className="mt-3 rounded-2xl border border-line bg-surface p-3 text-sm">
-        <summary className="cursor-pointer font-semibold text-ink-soft">Microphone settings</summary>
-        <div className="mt-3 flex flex-col gap-3">
-          {micPicker}
-          {captureNote}
-        </div>
-      </details>
       <ErrorNote error={error} />
+      {micTrack && level.silent && !micHeld && (
+        <p className="pt-2 text-xs font-semibold text-block" aria-live="polite">
+          No sound from this microphone since the call began, so the bank cannot hear you. Tap Mic and pick
+          another microphone, or a wired headset.
+        </p>
+      )}
 
-      {/* thumb zone: the microphone level and Hang up */}
-      <div className="pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        {micTrack && (
-          <div className="mb-4 flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <Microphone size={16} className={micHeld ? "text-ink-soft" : level.silent ? "text-block" : "text-turn-you"} aria-hidden />
-              <div className="h-2 flex-1 overflow-hidden rounded-full bg-sunken" title={`${level.db.toFixed(0)} dBFS`}>
-                <div
-                  className={`h-full origin-left rounded-full motion-safe:transition-transform motion-safe:duration-100 ${
-                    level.silent ? "bg-block" : "bg-turn-you"
-                  }`}
-                  style={{ transform: `scaleX(${micHeld ? 0 : meter})` }}
-                />
-              </div>
-              <span className="w-20 text-right text-xs text-ink-soft">{micHeld ? "mic paused" : "your mic"}</span>
-            </div>
-            {level.silent && (
-              <p className="text-xs font-semibold text-block" aria-live="polite">
-                No sound from this microphone since the call began, so the bank cannot hear you. Open Microphone settings
-                and pick Microphone Array (Realtek) or a wired headset.
-              </p>
-            )}
-          </div>
-        )}
-        <div className="flex flex-col items-center gap-1.5">
+      {/* thumb zone, above the home indicator: microphone settings, Hang up, the microphone level */}
+      <div className="-mx-4 mt-2 grid grid-cols-3 items-center border-t border-line bg-canvas px-5 pt-3.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <button
+          className="press flex flex-col items-center gap-1.5 justify-self-start text-xs font-semibold text-ink"
+          onClick={() => setMicSheet(true)}
+          aria-label="Microphone settings"
+        >
+          <span className="grid size-13 place-items-center rounded-full bg-sunken">
+            <SlidersHorizontal size={22} aria-hidden />
+          </span>
+          Mic
+        </button>
+        <div className="flex flex-col items-center gap-1.5 justify-self-center">
           <button
-            className="press grid size-18 place-items-center rounded-full bg-block text-on-accent"
+            className="press grid size-18 place-items-center rounded-full bg-block-fill text-on-fill"
             onClick={() => void hangUp()}
             aria-label="Hang up"
           >
-            <PhoneDisconnect size={32} weight="fill" aria-hidden />
+            <PhoneDisconnect size={30} weight="fill" aria-hidden />
           </button>
           <span className="text-xs font-semibold text-ink-soft">Hang up</span>
         </div>
+        <div className="flex flex-col items-center gap-1.5 justify-self-end" title={micTrack ? `${level.db.toFixed(0)} dBFS` : undefined}>
+          <span className={`grid h-13 place-items-center ${micTrack && level.silent && !micHeld ? "text-block" : "text-turn-you"}`}>
+            <VoiceBars active={!!micTrack && !micHeld} levels={micBars} />
+          </span>
+          <span className="text-xs font-semibold text-ink-soft">{micHeld ? "Mic paused" : "Your mic"}</span>
+        </div>
       </div>
+      </div>
+
+      {/* microphone settings, as a bottom sheet over the call */}
+      {micSheet && (
+        <div className="fixed inset-0 z-20 flex items-end justify-center bg-canvas/70 backdrop-blur-sm">
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label="Microphone settings"
+            className="motion-enter w-full max-w-md rounded-t-3xl border-t border-line bg-surface px-5 pt-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="font-display text-xl font-semibold tracking-tight">Microphone</h2>
+              <button className="press min-h-11 rounded-full px-4 text-sm font-semibold ring-1 ring-line-strong" onClick={() => setMicSheet(false)}>
+                Done
+              </button>
+            </div>
+            <div className="flex flex-col gap-3">
+              {micPicker}
+              {captureNote}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

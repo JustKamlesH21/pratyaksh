@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle, Circle, DeviceMobile, Robot, XCircle } from "@phosphor-icons/react";
 import { api, setConsoleKey } from "../api";
-import { KeyGate, useLiveCalls } from "../components";
+import { KeyGate, LivePill, PageHeader, useLiveCalls } from "../components";
 import type { CallView, DemoCustomer, TranscriptLine } from "../types";
 import { T, isVoicePauseRefusal, noLiveMic } from "../verdict";
 import { BankApp } from "./BankAppPage";
@@ -73,7 +73,9 @@ function steps(call: CallView | null, calls: CallView[]): Step[] {
 }
 
 function Conversation({ lines, live }: { lines: TranscriptLine[]; live: boolean }) {
-  const shown = lines.filter((l) => SHOWN.has(l.event) && l.text);
+  // Every Caller line (the Request, each scored Response, a code retry) by speaker, not by event kind:
+  // filtering on caller_said alone hid what the Clone said back to a Challenge.
+  const shown = lines.filter((l) => (l.speaker === "caller" || SHOWN.has(l.event)) && l.text);
   return (
     <ol aria-live="polite" className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto pr-1">
       {shown.length === 0 && <li className="text-sm text-ink-soft">{live ? "Listening…" : "No Call yet. Press Call on the Caller tab."}</li>}
@@ -147,42 +149,39 @@ export default function DeepfakePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">Deepfake: same voice, different Verdict</h1>
-          <p className="mt-1 max-w-2xl text-sm text-ink-soft">
-            A consented Clone of {first}'s voice calls the bank. It says the Request in {first}'s voice and even
-            whispers the phrase convincingly. It cannot read the one-time code, which appears only on {first}'s real
-            phone.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-ink-soft" htmlFor="victim">Victim</label>
-          <select
-            id="victim"
-            value={victimId}
-            onChange={(e) => setVictimId(e.target.value)}
-            className="rounded-lg border border-line bg-surface px-2 py-1.5 text-sm"
-          >
-            {customers.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${connected ? "bg-accent/12 text-accent" : "bg-block/10 text-block"}`}>
-            {connected ? "Live" : "Reconnecting"}
-          </span>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Deepfake attack"
+        title="Same voice, different Verdict"
+        actions={
+          <>
+            <label className="text-xs text-ink-soft" htmlFor="victim">Victim</label>
+            <select
+              id="victim"
+              value={victimId}
+              onChange={(e) => setVictimId(e.target.value)}
+              className="field min-h-10 rounded-full text-sm"
+            >
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <LivePill connected={connected} />
+          </>
+        }
+      >
+        A consented Clone of {first}'s voice calls the bank. It says the Request in {first}'s voice and even whispers
+        the phrase convincingly. It cannot read the one-time code, which appears only on {first}'s real phone.
+      </PageHeader>
 
       <VerdictRibbon call={call} name={victim?.name ?? ""} stage={false} connected={connected} />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1fr_19rem]">
-        <section aria-label="The Call" className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+        <section aria-label="The Call" className="elev-1 flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
           <h2 className="flex items-center gap-2 font-semibold"><Robot size={18} aria-hidden /> The Call: both sides</h2>
           <Conversation lines={full?.transcript ?? []} live={!!call && call.state !== "closed"} />
         </section>
 
-        <section aria-label="What the verifier checks" className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+        <section aria-label="What the verifier checks" className="elev-1 flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
           <h2 className="font-semibold">What the verifier does</h2>
           <ol className="flex flex-col gap-3">
             {list.map((s) => (
@@ -203,13 +202,13 @@ export default function DeepfakePage() {
           </ol>
         </section>
 
-        <section aria-label={`${first}'s real phone`} className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
+        <section aria-label={`${first}'s real phone`} className="elev-1 flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
           <h2 className="flex items-center gap-2 font-semibold"><DeviceMobile size={18} aria-hidden /> {first}'s real phone</h2>
           {victim ? <BankApp customer={victim.id} device={victim.device_token} embedded /> : <p className="text-sm text-ink-soft">Loading…</p>}
         </section>
       </div>
 
-      <details className="rounded-xl border border-line bg-surface p-4 text-sm">
+      <details className="rounded-2xl border border-line bg-surface p-5 text-sm">
         <summary className="cursor-pointer font-semibold">How to run the attack (operator, on the attacker laptop)</summary>
         <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-ink-soft">
           <li>Open the Caller tab, choose {first}, set the microphone to <b>CABLE Output (VB-Audio Virtual Cable)</b>, press <b>Call</b>.</li>

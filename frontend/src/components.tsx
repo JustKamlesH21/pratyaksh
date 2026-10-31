@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckCircle, CurrencyInr, GearSix, type Icon, Key, LockKey, Prohibit, SimCard, UserPlus, Wallet, Warning, Waveform,
+  CheckCircle, CurrencyInr, GearSix, type Icon, Key, LockKey, Prohibit, SimCard, UserPlus, Wallet, Warning,
 } from "@phosphor-icons/react";
 import { useLocation } from "react-router-dom";
 import { api, consoleKey, eventsUrl } from "./api";
@@ -15,24 +15,71 @@ export const REQUEST_ICON: Record<RequestKind, Icon> = {
   account_service: GearSix,
 };
 
+/** The Pratyaksh mark, "Aksha": प्रत्यक्ष is "before the eye", so an eye whose pupil is a voice, on the bank's
+ *  navy. The red centre line is the one live Signal that counts. Detail follows size: five bars from 40 px,
+ *  three in the header, one at favicon size (drawn on the Claude Design canvas, Oct 30). */
 export function Logo({ size = 28 }: { size?: number }) {
+  const bars: [number, number][] = size >= 40 ? [[14.7, 4], [18.7, 8], [26.7, 8], [30.7, 4]] : size >= 22 ? [[18.7, 8], [26.7, 8]] : [];
   return (
-    <span
-      className="inline-grid shrink-0 place-items-center rounded-lg bg-accent text-on-accent"
-      style={{ width: size, height: size }}
-      aria-hidden
-    >
-      <Waveform size={size * 0.62} weight="bold" />
-    </span>
+    <svg width={size} height={size} viewBox="0 0 48 48" className="shrink-0" aria-hidden>
+      <rect width="48" height="48" rx="14" className="fill-brand" />
+      <rect x="0.5" y="0.5" width="47" height="47" rx="13.5" fill="none" className="stroke-on-fill/12" />
+      <path
+        d="M6.5 24C12.5 14.5 35.5 14.5 41.5 24C35.5 33.5 12.5 33.5 6.5 24Z"
+        fill="none"
+        className="stroke-on-fill"
+        strokeWidth={size < 22 ? 3.4 : 2.6}
+        strokeLinejoin="round"
+      />
+      {bars.map(([x, h]) => (
+        <rect key={x} x={x} y={24 - h / 2} width="2.6" height={h} rx="1.3" className="fill-on-fill" />
+      ))}
+      {size < 22 ? (
+        <rect x="22.2" y="16" width="3.6" height="16" rx="1.8" className="fill-brand-red" />
+      ) : (
+        <rect x="22.7" y="17" width="2.6" height="14" rx="1.3" className="fill-brand-red" />
+      )}
+    </svg>
   );
 }
 
 export function Card({ title, children, className = "" }: { title?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-xl border border-line bg-surface p-4 ${className}`}>
+    <section className={`elev-1 rounded-2xl border border-line bg-surface p-5 ${className}`}>
       {title && <h2 className="mb-3 text-sm font-semibold text-ink">{title}</h2>}
       {children}
     </section>
+  );
+}
+
+/** The top of every staff page: a mono eyebrow saying what kind of page this is, the title, one line on
+ *  what it is for, and the page's actions on the right (one solid button at most). */
+export function PageHeader({ eyebrow, title, children, actions }: {
+  eyebrow: string;
+  title: ReactNode;
+  children?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-col gap-4 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-2">
+        <p className="eyebrow">{eyebrow}</p>
+        <h1 className="font-display text-3xl font-semibold leading-[1.1] tracking-[-0.02em] sm:text-4xl">{title}</h1>
+        {children && <div className="max-w-2xl text-sm leading-relaxed text-ink-soft">{children}</div>}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </header>
+  );
+}
+
+/** Live connection state as a pill: accent with a live dot when connected (never PASS green). */
+export function LivePill({ connected }: { connected: boolean }) {
+  return connected ? (
+    <span className="inline-flex min-h-8 items-center gap-2 rounded-full bg-accent/12 px-3 text-xs font-semibold text-accent">
+      <span className="live-dot" aria-hidden /> Live
+    </span>
+  ) : (
+    <span className="inline-flex min-h-8 items-center rounded-full bg-block/10 px-3 text-xs font-semibold text-block">Reconnecting</span>
   );
 }
 
@@ -142,7 +189,7 @@ export function CustomerPicker({ value, onChange, label = "Customer" }: {
     <label className="flex flex-col gap-1 text-sm">
       <span className="font-medium text-ink-soft">{label}</span>
       <select
-        className="rounded-lg border border-line-strong bg-surface px-3 py-2 text-ink"
+        className="field"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -235,7 +282,7 @@ export function LiveNumber({ value, decimals = 0 }: { value: number; decimals?: 
 
 export function ErrorNote({ error }: { error: string | null }) {
   if (!error) return null;
-  return <p className="rounded-lg bg-block/10 px-3 py-2 text-sm text-block">{error}</p>;
+  return <p className="rounded-xl bg-block/10 px-3.5 py-2.5 text-sm text-block">{error}</p>;
 }
 
 
@@ -322,11 +369,11 @@ export function KeyGate({ onKey, why = "What Callers said and each Customer's ri
             type="password"
             autoFocus
             aria-label="Console key"
-            className="rounded-lg border border-line-strong bg-canvas px-3 py-2"
+            className="field bg-canvas"
             value={key}
             onChange={(e) => setKey(e.target.value)}
           />
-          <button className="press inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 font-semibold text-on-accent">
+          <button className="btn btn-primary btn-lg">
             <Key size={18} /> Unlock
           </button>
         </form>

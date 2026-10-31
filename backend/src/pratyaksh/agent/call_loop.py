@@ -13,6 +13,8 @@ import logging
 from dataclasses import dataclass
 
 from ..domain import Step
+from ..language import language_of
+from ..verification.lines import in_language
 from ..verification.verifier import ONE_MOMENT
 from .ports import CallAudio, CallerLeft, VerifierPort
 
@@ -82,7 +84,8 @@ async def _speak(audio: CallAudio, verifier: VerifierPort, text: str, timing: Ti
     try:
         wav = await asyncio.wait_for(asyncio.shield(voicing), timing.filler_after_s)
     except TimeoutError:
-        await audio.play(await verifier.voice(ONE_MOMENT), ONE_MOMENT)
+        filler = in_language(ONE_MOMENT, language_of(text))
+        await audio.play(await verifier.voice(filler), filler)
         wav = await voicing
     await audio.play(wav, text)
 

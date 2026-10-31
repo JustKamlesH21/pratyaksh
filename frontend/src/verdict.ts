@@ -5,7 +5,7 @@
 import type { CallView, ChallengeKind } from "./types";
 
 /** Mirrors the defaults in policy.yaml, for threshold marks and tick labels only (the Policy decides). */
-export const T = { task: 0.7, whisper: 0.6, humanMs: 2500, machineMs: 6000, spoof: 0.85, micMaxDb: 60 };
+export const T = { task: 0.6, whisper: 0.6, humanMs: 2500, machineMs: 6000, spoof: 0.85, micMaxDb: 60 };
 
 export type Factor =
   | "possession_code"
@@ -104,6 +104,9 @@ export interface Tick {
 }
 
 /** The Signal ticks of a Call, in order, and the latest Spoof Score (advisory, set apart). */
+export const AI_VOICE_LABEL = { likely_ai: "Likely AI", unsure: "Unsure", likely_human: "Likely human" };
+export const AI_VOICE_NOTE = "Advisory: pitch movement on spoken turns. It can flag real voices, so it never decides a Verdict.";
+
 export function signalTicks(call: CallView): { ticks: Tick[]; spoof: number | null } {
   const ticks: Tick[] = [];
   let spoof: number | null = null;

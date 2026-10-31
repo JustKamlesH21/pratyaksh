@@ -49,7 +49,8 @@ class PromptVoice:
 
     def _sentence(self, text: str) -> bytes:
         # _CACHE_VERSION: clips cached before levelling (Oct 27) were quieter; they are not reused.
-        key = hashlib.sha1(f"{self._synth.name}|{_CACHE_VERSION}|{text}".encode()).hexdigest()
+        name = self._synth.name_for(text) if hasattr(self._synth, "name_for") else self._synth.name
+        key = hashlib.sha1(f"{name}|{_CACHE_VERSION}|{text}".encode()).hexdigest()
         path = self._cache / f"{key}.wav"
         if path.exists():
             return path.read_bytes()
@@ -136,13 +137,30 @@ def _wav(samples: np.ndarray, rate: int) -> bytes:
 
 
 class ParlerVoice:
-    def __init__(self, model_id: str, description: str, device: str = "auto"):
-        self.name = f"parler:{model_id}:{hashlib.sha1(description.encode()).hexdigest()[:8]}"
+    """One model, one speaker per description. Hindi (any Devanagari in the sentence) has its own speaker, a
+    native Hindi voice (Oct 31: an English speaker read Hindi artificially); everything else keeps
+    `description`, and its cached sentences, because a sentence's cache key names its speaker."""
+
+    def __init__(self, model_id: str, description: str, device: str = "auto", hindi_description: str | None = None):
+        self.name = self._named(model_id, description)
         self._model_id = model_id
         self._description = description
+        self._hindi_description = hindi_description or description
+        self._hindi_name = self._named(model_id, self._hindi_description)
         self._device = device
         self._loaded = None
         self._load_lock = threading.Lock()  # warm-up and a first /v1/voice request must not both load (OOM)
+
+    @staticmethod
+    def _named(model_id: str, description: str) -> str:
+        return f"parler:{model_id}:{hashlib.sha1(description.encode()).hexdigest()[:8]}"
+
+    @staticmethod
+    def _is_hindi(text: str) -> bool:
+        return any("ऀ" <= ch <= "ॿ" for ch in text)
+
+    def name_for(self, text: str) -> str:
+        return self._hindi_name if self._is_hindi(text) else self.name
 
     def _load(self):
         with self._load_lock:
@@ -165,15 +183,17 @@ class ParlerVoice:
             ).to(device)
             tok = AutoTokenizer.from_pretrained(self._model_id)
             desc_tok = AutoTokenizer.from_pretrained(model.config.text_encoder._name_or_path)
-            desc = desc_tok(self._description, return_tensors="pt").to(device)
-            self._loaded = (model, tok, desc, device)
+            default = desc_tok(self._description, return_tensors="pt").to(device)
+            hindi = desc_tok(self._hindi_description, return_tensors="pt").to(device)
+            self._loaded = (model, tok, default, hindi, device)
         return self._loaded
 
     def warm_up(self) -> None:
         self._load()
 
     def synthesise(self, text: str) -> tuple[np.ndarray, int]:
-        model, tok, desc, device = self._load()
+        model, tok, default, hindi, device = self._load()
+        desc = hindi if self._is_hindi(text) else default
         prompt = tok(text, return_tensors="pt").to(device)
         out = model.generate(
             input_ids=desc.input_ids,

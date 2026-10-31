@@ -145,6 +145,10 @@ def _system(kind: str, d: dict) -> str | None:
         return "The App Approval request expired."
     if kind == "security_alert_sent":
         return "Security Alert sent to the Registered Device. Voice Pause is on."
+    if kind == "next_step_sent":
+        return "Next steps sent to the Registered Device."
+    if kind == "next_step_done":
+        return "The Customer finished the next steps."
     if kind == "security_alert_dismissed":
         return "The Customer dismissed the Security Alert."
     if kind == "handed_to_agent":

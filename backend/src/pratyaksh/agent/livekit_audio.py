@@ -27,6 +27,12 @@ OUT_RATE = 48_000
 FRAME_MS = 10
 PREFIX_S = 0.3  # audio kept before the detected start of speech
 SILENCE_LSB = 4  # a device sending zeros arrives after Opus as ±1 LSB (measured); speech peaks in the thousands
+# A reply is never over sooner than this after it starts. At the venue (Oct 31, AirPods, a loud hall) the VAD's
+# low activation fired within 0.3 s of the microphone opening, then heard 1.2 s of "silence" and ended the turn
+# before the Caller had spoken: 1.8 s clips with 0.3-0.6 s of held-microphone zeros, heard as "ah", "Psalm 13".
+MIN_REPLY_S = 3.0
+READY_TIMEOUT_S = 8.0  # longest the greeting waits for the Caller's phone
+READY_SETTLE_S = 0.6  # then this long, for the phone's audio (Bluetooth too) to finish switching
 
 
 class LiveKitCallAudio:
@@ -37,6 +43,8 @@ class LiveKitCallAudio:
         self._source = rtc.AudioSource(OUT_RATE, 1)
         self._frames: asyncio.Queue[rtc.AudioFrame] = asyncio.Queue(maxsize=3000)
         self._left = asyncio.Event()
+        self._subscribed = asyncio.Event()  # the Caller's phone is receiving the Voice Agent's track
+        self._mic_on = asyncio.Event()  # the Caller app reported its capture settings: the microphone is up
         self._stream: rtc.AudioStream | None = None
         self._reader: asyncio.Task | None = None
         self._listening = False
@@ -45,6 +53,7 @@ class LiveKitCallAudio:
     @classmethod
     async def open(cls, room: rtc.Room, caller: rtc.RemoteParticipant, vad: lk_vad.VAD) -> "LiveKitCallAudio":
         self = cls(room, caller, vad)
+        room.on("local_track_subscribed", lambda *_: self._subscribed.set())
         track = rtc.LocalAudioTrack.create_audio_track("pratyaksh-voice-agent", self._source)
         await room.local_participant.publish_track(
             track, rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE)
@@ -66,11 +75,23 @@ class LiveKitCallAudio:
         def on_attributes(changed: dict[str, str], p: rtc.Participant):
             if p.identity == caller.identity and "audio" in changed:
                 log.info("caller %s audio capture: %.300r", caller.identity, changed["audio"])
+                self._mic_on.set()
 
         if "audio" in caller.attributes:
             on_attributes(caller.attributes, caller)
         room.on("participant_attributes_changed", on_attributes)
         return self
+
+    async def wait_for_caller(self, timeout_s: float = READY_TIMEOUT_S, settle_s: float = READY_SETTLE_S) -> None:
+        """Hold the first line until the Caller's phone can play it. The microphone comes up 1.7-5.7 s after they
+        join (real Calls, Oct 31) and on an iPhone that reconfigures the audio, so a greeting started at once
+        lost its first words. Never waits past timeout_s: a phone that says nothing still gets its greeting."""
+        try:
+            async with asyncio.timeout(timeout_s):
+                await asyncio.gather(self._subscribed.wait(), self._mic_on.wait())
+        except TimeoutError:
+            log.info("caller %s: no ready signal in %.0f s, greeting anyway", self._caller.identity, timeout_s)
+        await asyncio.sleep(settle_s)
 
     def caller_left(self) -> bool:
         return self._left.is_set()
@@ -126,16 +147,25 @@ class LiveKitCallAudio:
         start_idx: int | None = None
         end_idx: int | None = None
         pause_until: float | None = None
+        started: float | None = None
         try:
-            async with asyncio.timeout(timeout_s + max_reply_s + pause_s + 1.0):
+            async with asyncio.timeout(timeout_s + max_reply_s + pause_s + MIN_REPLY_S + 1.0):
                 async for ev in stream:
                     now = time.monotonic()
                     if ev.type == lk_vad.VADEventType.START_OF_SPEECH:
                         if latency_ms is None:
-                            latency_ms = _speech_start_ms(ev, now - t0)
-                            start_idx = _index_before(heard, ev.speech_duration + PREFIX_S)
+                            # The Caller page holds the microphone until this phone has finished playing the
+                            # Voice Agent, later than we finished sending it: their turn starts when it opens.
+                            opened = _first_sound(heard)
+                            latency_ms = max(0, _speech_start_ms(ev, now - t0) - int(_seconds(heard[:opened]) * 1000))
+                            start_idx = max(opened, _index_before(heard, ev.speech_duration + PREFIX_S))
+                            started = now - ev.speech_duration
                         end_idx, pause_until = None, None  # speech resumed
                     elif ev.type == lk_vad.VADEventType.END_OF_SPEECH:
+                        early = MIN_REPLY_S - (now - started) if started is not None else 0.0
+                        if early > 0:  # too soon to be the end of a reply: keep listening, and keep the audio
+                            end_idx, pause_until = None, now + early
+                            continue
                         end_idx = len(heard)
                         if pause_s <= 0:
                             break
@@ -212,6 +242,14 @@ def _peak(frames: list[rtc.AudioFrame]) -> int:
 
 def _seconds(frames: list[rtc.AudioFrame]) -> float:
     return sum(f.samples_per_channel / f.sample_rate for f in frames)
+
+
+def _first_sound(frames: list[rtc.AudioFrame]) -> int:
+    """Index of the first frame with sound in it: everything before is the held microphone's zeros."""
+    for i, f in enumerate(frames):
+        if _peak([f]) > SILENCE_LSB:
+            return i
+    return 0
 
 
 def _index_before(frames: list[rtc.AudioFrame], seconds: float) -> int:

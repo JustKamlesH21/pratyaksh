@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import logging
 import random
+import re
 import time
 import uuid
 from dataclasses import dataclass, field, replace
@@ -25,14 +26,15 @@ from ..domain import (
     Step,
     Verdict,
 )
-from ..phrases import LANGUAGES, all_phrases, random_phrase, spoken
+from ..phrases import LANGUAGES, all_phrases, phrase_pool, random_phrase, spoken
 from ..policy import Policy
-from ..signals import SignalExtractor
+from ..signals import SignalExtractor, ai_voice_summary
 from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
 from .receipts import InvalidReceipt, ReceiptSigner
 from .transcript import as_text, lines
 from .interpreter import _NO_ANSWER_IN, NO_ANSWER, Context, Faq, Interpreter, TurnKind, Understanding
+from .lines import in_language
 from .store import (
     GENESIS, AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow, chain_hash,
 )
@@ -63,7 +65,7 @@ WHEN_READY = "Tell me when you're ready."
 # What the Voice Agent says around an answer, in the language the Caller asked in (answers: knowledge.yaml).
 _IN_LANGUAGE = {
     "hi": {
-        ANYTHING_ELSE: "क्या मैं आपकी और कोई मदद कर सकती हूँ?",
+        ANYTHING_ELSE: "क्या मैं आपकी और कोई मदद कर सकता हूँ?",
         TAKE_YOUR_TIME: "ज़रूर, आराम से।",
         WHEN_READY: "जब तैयार हों, बता दीजिए।",
     },
@@ -112,6 +114,25 @@ APPROVED_IN_APP = "Thank you. You approved this request in your bank app."
 OFFICER_WILL_CONFIRM = "A bank officer will confirm it shortly."
 DECLINED_IN_APP = "You declined this request in your bank app, so it has been stopped. Goodbye."
 APPROVAL_EXPIRED = "The approval request expired. For your safety nothing was changed. Goodbye."
+# What happens after a SIM or password Request is verified: the Voice Agent says it, the Bank App shows the steps.
+VERIFIED = "Thank you, you're verified."
+SIM_APPROVED = "Your SIM change is approved."
+NEXT_STEPS_SENT = "I've sent the next steps to your bank app."
+PASSWORD_RESET_SENT = "I've sent a password reset to your bank app."
+PASSWORD_WITHIN = "Please set your new password there within fifteen minutes."
+_PASSWORD_WORDS = re.compile(r"pass ?word|paas ?word|पासवर्ड|ಪಾಸ್|reset|रीसेट", re.IGNORECASE)
+_NEXT_STEPS = {
+    "sim": {
+        "say": f"{SIM_APPROVED} {NEXT_STEPS_SENT}", "minutes": 60, "title": "Finish your SIM change",
+        "steps": ["Put the new SIM in this phone.", "Open this app and confirm your new number when asked.",
+                  "Tap Done here once your new number shows."],
+    },
+    "password": {
+        "say": f"{PASSWORD_RESET_SENT} {PASSWORD_WITHIN}", "minutes": 15, "title": "Set a new password",
+        "steps": ["Open Security in this app and choose Reset password.",
+                  "Create a new password you have not used before.", "Tap Done here, then sign in with the new password."],
+    },
+}
 THANKS_GOODBYE = "Thank you for calling. Goodbye."
 # Lead-ins said in front of a Challenge, an App Approval request or a Hand-over.
 _CHALLENGE_LEADS = ("Thank you.", "Thank you. I need one more check.")
@@ -141,23 +162,31 @@ def _intro(request: RequestKind, n: int) -> str:
     )
 
 
-def spoken_lines() -> list[str]:
-    """What the Voice Agent can say on a Call, for voicing ahead of time: every Whisper Phrase prompt and
-    every knowledge.yaml answer in each language, so no Challenge and no known Question waits for speech
-    synthesis. Only LLM answers are voiced on the Call (with ONE_MOMENT first if they are slow)."""
-    answers = [a for e in Faq.load().entries for a in e.answers.values()] + list(_NO_ANSWER_IN.values()) + [NO_ANSWER]
-    fixed = [
-        ONE_MOMENT, *answers,
-        GREETING, CLARIFY, HANDOFF, ANYTHING_ELSE, TAKE_YOUR_TIME, WHEN_READY, CODE_PROMPT,
-        *_REASK.values(), *_DONE.values(), *(line for lang in _IN_LANGUAGE.values() for line in lang.values()),
+def fixed_lines() -> list[str]:
+    """Every line the Voice Agent composes, in English; lines.in_language turns each into Hindi or Kannada."""
+    return [
+        ONE_MOMENT, GREETING, CLARIFY, HANDOFF, ANYTHING_ELSE, TAKE_YOUR_TIME, WHEN_READY, CODE_PROMPT,
+        *_REASK.values(), *_DONE.values(),
         NOT_HEARD, OF_COURSE, TROUBLE_HEARING, CODE_MISMATCH, CODE_REISSUED, WHICH_REQUEST, BLOCKED,
+        VERIFIED, *(v["say"] for v in _NEXT_STEPS.values()),
         VERIFIED_DONE, VERIFIED_REVIEW, APPROVED_IN_APP, OFFICER_WILL_CONFIRM, DECLINED_IN_APP, APPROVAL_EXPIRED,
-        THANKS_GOODBYE, "Sure.", "That's done.", *_CHALLENGE_LEADS,
+        THANKS_GOODBYE, "Sure.", "That's done.", "Goodbye.", *_CHALLENGE_LEADS,
         *(f"{lead} {APPROVAL_SENT}" for lead in _APPROVAL_LEADS),
         *(f"{lead} {HANDOFF}" for lead in _HANDOVER_LEADS),  # "…, so I'll connect you…" is one sentence
+        *(_intro(r, n) for r in _REQUEST_NAMES for n in (1, 2, 3)),
+        "Please whisper these words.",
     ]
-    intros = [_intro(r, n) for r in _REQUEST_NAMES for n in (1, 2, 3)]
-    return fixed + intros + [_whisper_prompt(p, lang) for lang in LANGUAGES for p in all_phrases(lang)]
+
+
+def spoken_lines() -> list[str]:
+    """What the Voice Agent can say on a Call, for voicing ahead of time: every fixed line in every language,
+    every Whisper Phrase prompt and every knowledge.yaml answer, so no Challenge and no known Question waits
+    for speech synthesis. Only LLM answers are voiced on the Call (with ONE_MOMENT first if they are slow)."""
+    answers = [a for e in Faq.load().entries for a in e.answers.values()] + list(_NO_ANSWER_IN.values()) + [NO_ANSWER]
+    fixed = [in_language(line, lang) for lang in LANGUAGES for line in fixed_lines()]
+    return answers + fixed + [
+        in_language(_whisper_prompt(p, lang), lang) for lang in LANGUAGES for p in all_phrases(lang)
+    ]
 
 
 def _utcnow() -> datetime:
@@ -189,6 +218,7 @@ class _Heard:
     understanding: Understanding | None = None  # before a Request
     signals: Signals | None = None  # during a Challenge
     off_script: Understanding | None = None  # during a Challenge: a question, "hold on"… not an answer
+    voice: dict | None = None  # AI Voice Check of a spoken turn; advisory, never reaches the Policy
     timings: dict[str, int] = field(default_factory=dict)  # ms per stage, for the Console and stats()
 
 
@@ -206,8 +236,10 @@ class Verifier:
         approval_ttl_s: int = 120,
         signer: ReceiptSigner | None = None,
         receipt_ttl_s: int = 600,
+        hindi_phrase_pool: int = 0,
     ):
         self._db = db
+        self._hindi_phrases = phrase_pool("hi", hindi_phrase_pool) if hindi_phrase_pool else []
         self._policy = policy
         self._signals = signals
         self._interpreter = interpreter or Interpreter()
@@ -311,17 +343,21 @@ class Verifier:
         speech = response.reply_latency_ms is not None
         start = time.perf_counter()
         if turn.state is CallState.AWAITING_REQUEST:
+            voice = self._signals.check_voice(response.audio) if speech else None
             transcript = self._signals.transcribe(response.audio, turn.language) if speech else ""
             heard_at = time.perf_counter()
             understanding = self._interpreter.understand(transcript, turn.context)
-            return _Heard(transcript, understanding=understanding, timings={
+            return _Heard(transcript, understanding=understanding, voice=voice.result() if voice else None, timings={
                 "speech_to_text": _ms(start, heard_at), "understand": _ms(heard_at), "total": _ms(start)})
         if turn.state is CallState.CHALLENGING and turn.challenge and (speech or turn.repeated):
-            # speech-to-text, DSP and spoof model at once
+            # speech-to-text, DSP and spoof model at once. A code is read aloud; a whisper has no pitch to check.
+            spoken_turn = speech and turn.challenge.kind is ChallengeKind.POSSESSION_CODE
+            voice = self._signals.check_voice(response.audio) if spoken_turn else None
             signals = self._signals.extract(turn.challenge, response, turn.language)
             heard_at = time.perf_counter()
             off_script = self._off_script(turn, signals)
-            return _Heard(signals.transcript, signals=signals, off_script=off_script, timings={
+            return _Heard(signals.transcript, signals=signals, off_script=off_script,
+                          voice=voice.result() if voice else None, timings={
                 "signals": _ms(start, heard_at), "understand": _ms(heard_at), "total": _ms(start)})
         return _Heard()  # silence the first time (the Challenge is repeated), or nothing to hear
 
@@ -386,6 +422,9 @@ class Verifier:
                 say = APPROVED_IN_APP
                 if call.agent_review:
                     say += f" {OFFICER_WILL_CONFIRM}"
+                else:
+                    next_steps = self._send_next_steps(s, call)
+                    say += f" {next_steps}" if next_steps else ""
                 step = self._close(s, call, Outcome.APPROVED_IN_APP, say + " Goodbye.")
             else:
                 step = self._close(
@@ -426,6 +465,18 @@ class Verifier:
                 msg.resolved_at = self._now()
                 self._audit(s, s.get(CallRow, msg.call_id), "security_alert_dismissed", {})
             return len(alerts)
+
+    def finish_next_steps(self, customer_id: str, device_token: str) -> int:
+        """The Customer tapped Done on the next steps in the Bank App. Returns how many were cleared."""
+        with self._db.session() as s:
+            self._check_device(s, customer_id, device_token)
+            steps = s.scalars(select(DeviceMessageRow).where(
+                DeviceMessageRow.customer_id == customer_id, DeviceMessageRow.kind == "next_step",
+                DeviceMessageRow.resolved_at.is_(None))).all()
+            for msg in steps:
+                msg.resolved_at = self._now()
+                self._audit(s, self._lock(s, msg.call_id), "next_step_done", {})
+            return len(steps)
 
     def hang_up(self, call_id: str) -> None:
         with self._db.session() as s:
@@ -826,7 +877,8 @@ class Verifier:
                 ))
             # Out of side turns: whatever was said is scored as the Response.
 
-        if challenge.kind is ChallengeKind.POSSESSION_CODE and self._expired_code_read(s, call, signals.spoken_digits):
+        readings = [d for d in (signals.spoken_digits, signals.other_digits) if d]
+        if challenge.kind is ChallengeKind.POSSESSION_CODE and self._expired_code_read(s, call, readings):
             # The right code, read too late: the Caller can see the Registered Device, which is no sign of a Clone.
             again = bool(issued.get("reissued"))
             self._audit_heard(s, call, "code_expired", said, {"transcript": signals.transcript, "reissued": not again})
@@ -838,7 +890,7 @@ class Verifier:
                 call.id, CODE_REISSUED, listen=True, long_reply=True, state=CallState.CHALLENGING,
             ))
         if challenge.kind is ChallengeKind.POSSESSION_CODE:
-            match = self._check_code(s, call, signals.spoken_digits, final=bool(issued.get("retried")))
+            match = self._check_code(s, call, readings, final=bool(issued.get("retried")))
             if match is not True and not issued.get("retried"):
                 # One more try: people mis-read or pause mid-code. The code stays valid.
                 call.challenges = call.challenges[:-1] + [{**issued, "retried": True}]
@@ -877,7 +929,8 @@ class Verifier:
                     s, call, Outcome.PASSED_PENDING_REVIEW,
                     VERIFIED_REVIEW,
                 )
-            return self._close(s, call, Outcome.PASSED, VERIFIED_DONE)
+            next_steps = self._send_next_steps(s, call)
+            return self._close(s, call, Outcome.PASSED, f"{VERIFIED} {next_steps} Goodbye." if next_steps else VERIFIED_DONE)
         if decision.verdict is Verdict.BLOCK:
             return self._block(s, call, decision)
         if decision.next_challenge is not None:
@@ -912,6 +965,8 @@ class Verifier:
             call.reasons = decision.reasons
             self._audit(s, call, "verdict", {"verdict": "BLOCK", "liveness": call.liveness, "reasons": decision.reasons})
         now = self._now()
+        for msg in self._open_messages(s, call):  # a blocked Call leaves no live code or approval on the phone
+            msg.resolved_at = now
         request = RequestKind(call.request) if call.request else None
         s.add(DeviceMessageRow(  # tell the real Customer, on their own phone, that someone tried
             customer_id=call.customer_id, call_id=call.id, kind="security_alert",
@@ -932,7 +987,8 @@ class Verifier:
         if kind is ChallengeKind.WHISPER_PHRASE:
             customer = s.get(CustomerRow, call.customer_id)
             language = customer.language if customer else "en"
-            phrase = random_phrase(self._rng, language)
+            pool = self._hindi_phrases if language == "hi" else []
+            phrase = self._rng.choice(pool) if pool else random_phrase(self._rng, language)
             prompt = _whisper_prompt(phrase, language)
             record = {"kind": kind.value, "prompt": prompt, "phrase": phrase, "issued_at": now.isoformat()}
         else:
@@ -945,6 +1001,22 @@ class Verifier:
             call.id, f"{lead_in} {prompt}", listen=True, long_reply=kind is ChallengeKind.POSSESSION_CODE,
             state=CallState.CHALLENGING,
         ))
+
+    def _send_next_steps(self, s: Session, call: CallRow) -> str | None:
+        """A verified SIM or password Request: the steps on the Registered Device, and what to say about them."""
+        if call.request != RequestKind.SIM_SWAP.value:
+            return None
+        said = s.scalars(select(AuditEventRow.data).where(
+            AuditEventRow.call_id == call.id, AuditEventRow.kind == "caller_said")).all()
+        kind = "password" if any(_PASSWORD_WORDS.search(d.get("transcript", "")) for d in said) else "sim"
+        steps, now = _NEXT_STEPS[kind], self._now()
+        s.add(DeviceMessageRow(
+            customer_id=call.customer_id, call_id=call.id, kind="next_step",
+            body={"title": steps["title"], "steps": steps["steps"], "reference": call.id[:8].upper()},
+            created_at=now, expires_at=now + timedelta(minutes=steps["minutes"]),
+        ))
+        self._audit(s, call, "next_step_sent", {"kind": kind})
+        return steps["say"]
 
     def _send_code(self, s: Session, call: CallRow) -> None:
         """A fresh Possession Code on the Registered Device; any earlier one of this Call stops working."""
@@ -979,19 +1051,27 @@ class Verifier:
         say = f"{lead_in} {APPROVAL_SENT}"
         return self._set_step(s, call, Step(call.id, say, wait=True, state=CallState.AWAITING_APP_APPROVAL))
 
-    def _expired_code_read(self, s: Session, call: CallRow, spoken: str | None) -> bool:
+    def _code_candidates(self, readings: list[str]) -> set[str]:
+        """Every six digits in a row in what was heard ("my code is 4 8 1 9 2 7"), in either reading of it. A
+        reading with too many digits counts for nothing: a long run of digits would try dozens of codes."""
+        return {
+            r[i : i + 6] for r in readings if len(r) <= self._policy.max_code_digits
+            for i in range(max(1, len(r) - 5))
+        }
+
+    def _expired_code_read(self, s: Session, call: CallRow, readings: list[str]) -> bool:
         """Did the Caller read out this Call's Possession Code correctly, but after it expired?"""
         row = s.scalars(
             select(PossessionCodeRow)
             .where(PossessionCodeRow.call_id == call.id, PossessionCodeRow.used_at.is_(None))
             .order_by(PossessionCodeRow.id.desc())
         ).first()
-        if row is None or row.expires_at > self._now() or not spoken or len(spoken) > self._policy.max_code_digits:
+        if row is None or row.expires_at > self._now():
             return False
-        return any(_hash_code(call.id, spoken[i : i + 6]) == row.code_hash for i in range(max(1, len(spoken) - 5)))
+        return any(_hash_code(call.id, c) == row.code_hash for c in self._code_candidates(readings))
 
-    def _check_code(self, s: Session, call: CallRow, spoken: str | None, final: bool) -> bool | None:
-        """Compare the spoken digits with the issued Possession Code.
+    def _check_code(self, s: Session, call: CallRow, readings: list[str], final: bool) -> bool | None:
+        """Compare what was heard with the issued Possession Code.
 
         The code is consumed on a match, or on the final attempt; a first miss keeps it valid.
         """
@@ -1003,14 +1083,11 @@ class Verifier:
         if row is None:
             return False
         now = self._now()
-        if not spoken:
-            match: bool | None = None
-        elif len(spoken) > self._policy.max_code_digits:
-            match = False  # reading out a long run of digits would try dozens of codes at once
-        else:
-            # Accept the code anywhere in what was said ("my code is 4 8 1 9 2 7").
-            candidates = {spoken[i : i + 6] for i in range(max(1, len(spoken) - 5))}
-            match = row.expires_at > now and any(_hash_code(call.id, c) == row.code_hash for c in candidates)
+        match: bool | None = None
+        if readings:
+            match = row.expires_at > now and any(
+                _hash_code(call.id, c) == row.code_hash for c in self._code_candidates(readings)
+            )
         if match or final:
             row.used_at = now
             for msg in self._open_messages(s, call, kind="possession_code"):
@@ -1046,15 +1123,17 @@ class Verifier:
     def _set_step(self, s: Session, call: CallRow, step: Step) -> Step:
         """What the Voice Agent says next. It goes on the Audit Trail too, so the transcript is complete.
         A Step that listens for a Challenge names it, and the words of a Whisper Phrase, so the Caller
-        app can show them without reading the caption."""
+        app can show them without reading the caption. The Voice Agent speaks the Customer's language."""
+        customer = s.get(CustomerRow, call.customer_id)
+        language = customer.language if customer else "en"
         if step.listen and step.state is CallState.CHALLENGING and call.challenges:
             issued = call.challenges[-1]
             kind = ChallengeKind(issued["kind"])
             words = ""
             if kind is ChallengeKind.WHISPER_PHRASE and issued.get("phrase"):
-                customer = s.get(CustomerRow, call.customer_id)
-                words = spoken(issued["phrase"], customer.language if customer else "en")
+                words = spoken(issued["phrase"], language)
             step = replace(step, challenge=kind, words=words)
+        step = replace(step, say=in_language(step.say, language))
         call.pending_step = step.to_dict()
         call.updated_at = self._now()
         self._audit(s, call, "agent_said", {"say": step.say})
@@ -1068,7 +1147,7 @@ class Verifier:
         """Codes and approval prompts of this Call still showing. Security Alerts stay until the Customer
         dismisses them, whatever happens to the Call."""
         q = select(DeviceMessageRow).where(DeviceMessageRow.call_id == call.id, DeviceMessageRow.resolved_at.is_(None))
-        q = q.where(DeviceMessageRow.kind == kind) if kind else q.where(DeviceMessageRow.kind != "security_alert")
+        q = q.where(DeviceMessageRow.kind == kind) if kind else q.where(DeviceMessageRow.kind.notin_(("security_alert", "next_step")))
         return list(s.scalars(q).all())
 
     def _minutes_since_block(self, s: Session, customer_id: str) -> float | None:
@@ -1086,6 +1165,8 @@ class Verifier:
 
     def _audit_heard(self, s: Session, call: CallRow, kind: str, said: _Heard, data: dict) -> None:
         """The one Audit Trail event for a heard Response, with how long hearing it took."""
+        if said.voice:
+            data = {**data, "voice": said.voice}
         self._audit(s, call, kind, {**data, "timings_ms": said.timings} if said.timings else data)
 
     def _audit(self, s: Session, call: CallRow, kind: str, data: dict) -> None:
@@ -1154,6 +1235,12 @@ class Verifier:
             "created_at": call.created_at.isoformat(),
             "updated_at": call.updated_at.isoformat(),
         }
+        # From what the Caller said before any Challenge. Code readouts are logged but not counted: digits are short
+        # and choppy, and on real Calls (Oct 31) they read 0.0115-0.0293 where every Request stayed at or under 0.0116.
+        heard = s.scalars(
+            select(AuditEventRow.data).where(AuditEventRow.call_id == call.id, AuditEventRow.kind == "caller_said")
+        ).all()
+        view["ai_voice"] = ai_voice_summary([d["voice"] for d in heard if d.get("voice")])
         if with_events:
             rows = s.scalars(
                 select(AuditEventRow).where(AuditEventRow.call_id == call.id).order_by(AuditEventRow.seq)
@@ -1194,8 +1281,9 @@ def _said_in(heard, text: str) -> str:
 
 
 def _strip_lead(say: str) -> str:
-    """Drop apology prefixes so repeated prompts don't stack ("Sorry… Sorry…")."""
-    for lead in (f"{TROUBLE_HEARING} ", f"{NOT_HEARD} ", f"{OF_COURSE} "):
-        while say.startswith(lead):
-            say = say[len(lead):]
+    """Drop apology prefixes so repeated prompts don't stack ("Sorry… Sorry…"), in whichever language."""
+    for line in (TROUBLE_HEARING, NOT_HEARD, OF_COURSE):
+        for lead in {f"{in_language(line, lang)} " for lang in LANGUAGES}:
+            while say.startswith(lead):
+                say = say[len(lead):]
     return say

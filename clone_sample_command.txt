@@ -1,0 +1,1 @@
+E:\AVISHKAR\attacker-venv\Scripts\python.exe E:\AVISHKAR\pratyaksh\attacker\demo_clone.py --manifest E:\AVISHKAR\tmp\clone-bank\kamlesh-hi\manifest.csv --device "CABLE Input" --i-have-consent

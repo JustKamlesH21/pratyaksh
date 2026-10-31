@@ -66,6 +66,11 @@ export const api = {
       headers: { "X-Device-Token": deviceToken },
       body: JSON.stringify({ customer_id: customerId, approve }),
     }),
+  finishNextSteps: (customerId: string, deviceToken: string) =>
+    http<{ cleared: number }>(`/v1/customers/${customerId}/next-steps/done`, {
+      method: "POST",
+      headers: { "X-Device-Token": deviceToken },
+    }),
   dismissAlerts: (customerId: string, deviceToken: string) =>
     http<{ dismissed: number }>(`/v1/customers/${customerId}/alerts/dismiss`, {
       method: "POST",

@@ -26,7 +26,7 @@ def policy():
 def test_plans_match_risk_tiers(policy):
     assert policy.plan(RequestKind.BALANCE_ENQUIRY).challenges == ()
     assert policy.plan(RequestKind.ADD_PAYEE).challenges == (W, P)
-    assert len(policy.plan(RequestKind.SIM_SWAP).challenges) == 3
+    assert policy.plan(RequestKind.SIM_SWAP).challenges == (W, W, P)
     assert policy.plan(RequestKind.HIGH_VALUE_TRANSFER).agent_review is True
 
 
@@ -144,6 +144,19 @@ def test_unfinished_whisper_phrase_gets_one_retry_then_blocks(policy):
     assert policy.decide([not_whispered, code(), not_whispered], step_ups_used=1).verdict is Verdict.BLOCK
 
 
+def test_the_right_code_at_a_passing_liveness_goes_to_app_approval_not_block(policy):
+    # Oct 31, venue: Ananya read the right code at Liveness 0.81; two garbled whispers BLOCKed her.
+    garbled = human_whisper(task_match=0.5, whisper_score=1.0, reply_latency_ms=2000)
+    d = policy.decide([garbled, code(), garbled], step_ups_used=1)
+    assert d.liveness >= 0.75
+    assert d.verdict is Verdict.STEP_UP and d.offer_app_approval
+
+
+def test_two_failed_whispers_without_the_right_code_still_block(policy):
+    garbled = human_whisper(task_match=0.5, whisper_score=1.0, reply_latency_ms=2000)
+    assert policy.decide([garbled, garbled, human_whisper(task_match=0.4)], step_ups_used=1).verdict is Verdict.BLOCK
+
+
 def test_wrong_digit_in_the_phrase_cannot_pass(policy):
     from pratyaksh.signals import phrase_match
 
@@ -182,7 +195,7 @@ def test_a_step_up_for_an_inconclusive_call_is_not_a_retry_for_a_later_miss():
     shaky = human_whisper(task_match=1.0, whisper_score=1.0, spoof_score=0.7)
     first = policy.decide([shaky, code(latency=1500, spoof=0.7)], step_ups_used=0)
     assert first.verdict is Verdict.STEP_UP and first.next_challenge is W
-    missed = human_whisper(task_match=0.65, whisper_score=1.0, spoof_score=0.0)
+    missed = human_whisper(task_match=0.55, whisper_score=1.0, spoof_score=0.0)
     second = policy.decide([shaky, code(latency=1500, spoof=0.7), missed], step_ups_used=1)
     assert second.liveness >= 0.75 and second.verdict is Verdict.STEP_UP and second.offer_app_approval
     assert "no retry is left" in second.reasons[0]
@@ -201,3 +214,9 @@ def test_a_policy_without_a_code_match_weight_is_rejected():
     del raw["weights"]["code_match"]
     with pytest.raises(PolicyError, match="code_match"):
         Policy(raw)
+
+
+def test_a_task_match_of_0_6_counts_but_a_wrong_digit_never_does(policy):
+    # Oct 31, venue: a whispered phrase heard at 0.64 sent Meera to App Approval. The digit is what stops a replay.
+    assert policy.decide([human_whisper(task_match=0.62), code()]).verdict is Verdict.PASS
+    assert policy.decide([human_whisper(task_match=0.5), code()]).verdict is Verdict.STEP_UP

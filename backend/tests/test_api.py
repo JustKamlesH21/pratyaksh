@@ -13,7 +13,7 @@ from pratyaksh.api.container import build
 from pratyaksh.config import Settings
 from pratyaksh.signals import ScriptedSpeechModels
 
-C = "cust-rahul"
+C = "cust-meera"
 NO_KEY = {"X-Console-Key": ""}
 
 
@@ -88,8 +88,8 @@ def test_app_approval_and_review_over_http(api):
     assert api.get(f"/v1/calls/{call_id}/step").json()["wait"] is True
     r = api.post(f"/v1/calls/{call_id}/app-approval", json={"customer_id": C, "approve": True})
     assert r.status_code == 403  # the Clone's laptop has no device token
-    r = api.post(f"/v1/calls/{call_id}/app-approval", json={"customer_id": "cust-meera", "approve": True},
-                 headers=device(api, "cust-meera"))
+    r = api.post(f"/v1/calls/{call_id}/app-approval", json={"customer_id": "cust-ananya", "approve": True},
+                 headers=device(api, "cust-ananya"))
     assert r.status_code == 409
     step = api.post(f"/v1/calls/{call_id}/app-approval", json={"customer_id": C, "approve": True},
                     headers=device(api, C)).json()

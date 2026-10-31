@@ -1,6 +1,6 @@
 import { type CSSProperties, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Bank, EyeSlash, Password, ShieldCheck, Siren } from "@phosphor-icons/react";
+import { Bank, EyeSlash, ListChecks, Password, ShieldCheck, Siren } from "@phosphor-icons/react";
 import { api } from "../api";
 import { ErrorNote } from "../components";
 import type { DeviceMessage, Inbox } from "../types";
@@ -13,9 +13,9 @@ export default function BankAppPage() {
   const customer = params.get("customer") ?? "";
   const device = params.get("device") ?? "";
   return (
-    <div className="mx-auto flex max-w-sm flex-col gap-4">
+    <div className="mx-auto flex max-w-md flex-col">
       {(!customer || !device) && (
-        <div className="rounded-xl border border-line bg-surface p-5 text-sm">
+        <div className="m-5 mt-[max(1.25rem,env(safe-area-inset-top))] rounded-2xl border border-line bg-surface p-5 text-sm">
           <p className="font-bold">This phone is not paired.</p>
           <p className="mt-2 text-ink-soft">
             Open the pairing link for the Customer, printed by <code>pratyaksh-seed</code> and in the verifier log on the
@@ -84,19 +84,49 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
       onAlertsDismissed?.();
     });
 
+  const finishNextSteps = () =>
+    once(async () => {
+      await api.finishNextSteps(customer, device);
+      setInbox((i) => (i ? { ...i, messages: i.messages.filter((x) => x.kind !== "next_step") } : i));
+    });
+
+  const who = inbox?.customer.name ?? "";
+  const initials = who.split(" ").map((w) => w[0]).slice(0, 2).join("");
   return (
-    // A device frame stays dark in both themes, like a real phone.
+    // In the Demo hub a device frame, dark in both themes like a real phone. On the Customer's own phone the
+    // app is the whole screen (a drawn bezel inside a real iPhone only wasted width), safe areas kept clear.
     <div
-      className={`overflow-hidden rounded-[2.2rem] border-[10px] border-bezel bg-surface ring-1 ring-line ${
-        embedded ? "flex h-[26rem] flex-col" : ""
-      }`}
+      className={
+        embedded
+          ? "flex h-[26rem] flex-col overflow-hidden rounded-[2.2rem] border-[10px] border-bezel bg-surface ring-1 ring-line"
+          : "flex min-h-[100dvh] flex-col bg-canvas"
+      }
     >
-      <div className="bg-accent px-5 pb-5 pt-6 text-on-accent">
-        <p className="flex items-center gap-1.5 text-xs font-medium opacity-80"><Bank size={15} /> Your bank</p>
-        <p className="text-lg font-bold">{inbox?.customer.name ?? "…"}</p>
-        <p className="text-sm opacity-80">{inbox?.customer.phone_masked}</p>
-      </div>
-      <div className={`flex flex-col gap-4 p-5 ${embedded ? "min-h-0 flex-1 overflow-y-auto" : "min-h-80"}`}>
+      {embedded ? (
+        <div className="bg-brand px-5 pb-5 pt-6 text-on-fill">
+          <p className="flex items-center gap-1.5 text-xs font-medium opacity-80"><Bank size={15} /> Your bank</p>
+          <p className="text-lg font-bold">{inbox?.customer.name ?? "…"}</p>
+          <p className="text-sm opacity-80">{inbox?.customer.phone_masked}</p>
+        </div>
+      ) : (
+        // The bank's navy band, as a bank's own app opens: who you are, on the bank's colour.
+        <header className="flex items-center gap-3 rounded-b-[1.75rem] bg-brand px-5 pb-6 pt-[max(1.25rem,env(safe-area-inset-top))] text-on-fill">
+          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-on-fill/15 font-semibold" aria-hidden>
+            {initials || "…"}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[1.0625rem] font-semibold">{who || "…"}</p>
+            <p className="font-mono text-[0.8125rem] opacity-80">{inbox?.customer.phone_masked}</p>
+          </div>
+          <Bank size={24} className="shrink-0 opacity-80" aria-label="Your bank" />
+        </header>
+      )}
+      <div
+        className={`flex flex-col gap-4 ${
+          embedded ? "min-h-0 flex-1 overflow-y-auto p-5" : "flex-1 px-5 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+        }`}
+      >
+        {!embedded && <h1 className="font-display text-2xl font-semibold tracking-tight">Requests</h1>}
         <ErrorNote error={error} />
         {!inbox && !error && (
           <div className="flex flex-col gap-3" aria-busy="true">
@@ -109,7 +139,7 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
         )}
         {inbox?.messages.map((m) =>
           m.kind === "security_alert" ? (
-            <div key={m.id} className="alert-in rounded-xl border-2 border-block bg-surface p-4">
+            <div key={m.id} className="alert-in rounded-2xl border-2 border-block bg-surface p-5">
               <p className="flex items-center gap-2 font-bold text-block"><Siren size={20} weight="fill" aria-hidden /> Blocked call attempt</p>
               <p className="mt-1 text-sm text-ink">
                 Someone called the bank as you
@@ -119,14 +149,27 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
               </p>
               <p className="mt-1 text-xs text-ink-soft">Voice requests on your account are paused until you dismiss this.</p>
               <p className="mt-1 text-xs text-ink-soft">If a caller says this check is "not working", hang up.</p>
-              <button className="press mt-3 w-full rounded-lg bg-surface py-3 font-bold text-ink ring-1 ring-block/40 disabled:opacity-50" disabled={busy} onClick={dismissAlerts}>
+              <button className="btn btn-danger btn-lg mt-3 w-full text-ink" disabled={busy} onClick={dismissAlerts}>
                 Dismiss
+              </button>
+            </div>
+          ) : m.kind === "next_step" ? (
+            <div key={m.id} className="motion-enter rounded-2xl border-2 border-accent bg-surface p-5">
+              <p className="flex items-center gap-2 font-bold"><ListChecks size={20} className="text-accent" aria-hidden /> {m.body.title}</p>
+              <ol className="mt-3 flex list-decimal flex-col gap-1.5 pl-5 text-sm text-ink">
+                {m.body.steps?.map((step) => <li key={step}>{step}</li>)}
+              </ol>
+              <p className="mt-3 text-xs text-ink-soft">
+                Reference <span className="font-mono">{m.body.reference}</span>. Valid for {Math.ceil(m.seconds_left / 60)} min. If you did not ask for this, call the number on your card.
+              </p>
+              <button className="btn btn-primary btn-lg mt-3 w-full" disabled={busy} onClick={finishNextSteps}>
+                Done
               </button>
             </div>
           ) : m.kind === "possession_code" ? (
             <PossessionCode key={m.id} message={m} masked={maskCodes} name={inbox?.customer.name ?? ""} />
           ) : (
-            <div key={m.id} className="motion-enter rounded-xl border-2 border-accent bg-accent/10 p-4">
+            <div key={m.id} className="motion-enter rounded-2xl border-2 border-accent bg-accent/10 p-5">
               <p className="flex items-center gap-2 font-bold"><ShieldCheck size={20} className="text-accent" /> Approve this request?</p>
               <p className="mt-1 text-sm text-ink">
                 Someone on a call with the bank asked to <b>{m.body.request_text}</b>.
@@ -134,10 +177,10 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
               <TimeLeft message={m} />
               <p className="mt-2 text-xs text-ink-soft">Expires in {m.seconds_left}s</p>
               <div className="mt-4 grid grid-cols-2 gap-2">
-                <button className="press rounded-lg bg-surface py-3 font-bold text-block ring-1 ring-block/40 disabled:opacity-50" disabled={busy} onClick={() => answer(m, false)}>
+                <button className="btn btn-danger btn-lg" disabled={busy} onClick={() => answer(m, false)}>
                   Decline
                 </button>
-                <button className="press rounded-lg bg-accent py-3 font-bold text-on-accent disabled:opacity-50" disabled={busy} onClick={() => answer(m, true)}>
+                <button className="btn btn-primary btn-lg" disabled={busy} onClick={() => answer(m, true)}>
                   Approve
                 </button>
               </div>
@@ -157,7 +200,7 @@ export function PossessionCode({ message: m, masked, name }: { message: DeviceMe
   const groups = [code.slice(0, 3), code.slice(3)].filter(Boolean);
   const request = m.body.request ? REQUEST_LABEL[m.body.request] : null;
   return (
-    <div className="motion-enter rounded-xl bg-sunken p-4 text-center">
+    <div className="motion-enter rounded-2xl bg-sunken p-5 text-center">
       <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft">
         <Password size={17} aria-hidden /> Code for your call with the bank
       </p>

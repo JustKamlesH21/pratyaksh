@@ -156,7 +156,19 @@ class Policy:
                     Verdict.STEP_UP, mean, ["A Whisper Phrase was not completed; asking one more."] + reasons,
                     scores, next_challenge=ChallengeKind.WHISPER_PHRASE,
                 )
-            if failed >= 2:
+            # The right Possession Code, a Liveness Score that would PASS and a real whisper whose words were
+            # lost: a noisy line, not a Clone (Oct 31, venue: two genuine Callers BLOCKed at 0.81). App Approval
+            # asks the real phone. A voiced Clone with a stolen code never whispers and is still BLOCKed.
+            noisy_line = (
+                mean >= self._pass_at
+                and any(ev.signals.code_match is True for ev in evidence)
+                and any(
+                    (ev.signals.whisper_score or 0.0) >= self._whisper_min
+                    and (ev.signals.task_match or 0.0) < self._task_min
+                    for ev in evidence
+                )
+            )
+            if failed >= 2 and not noisy_line:
                 return Decision(
                     Verdict.BLOCK, mean, [f"{failed} Whisper Phrases not completed, even after a retry."] + reasons,
                     scores,

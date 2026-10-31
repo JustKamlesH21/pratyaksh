@@ -115,6 +115,7 @@ class Signals:
     reply_latency_ms: int | None = None
     spoof_score: float | None = None  # 0..1, probability the audio is synthetic
     spoken_digits: str | None = None  # Possession Code only
+    other_digits: str | None = None  # Possession Code only: a second reading of the same audio, when it differs
     code_match: bool | None = None  # Possession Code only
     # Whisper Phrase only (Live Microphone): dB between the reply's loud and quiet moments. A live microphone
     # always hears its room, so this stays low; audio played in digitally has exact silence around the words.
