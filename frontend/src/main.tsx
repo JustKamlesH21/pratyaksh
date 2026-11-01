@@ -2,7 +2,7 @@ import { StrictMode, Suspense, lazy, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import {
-  ChartBar, DeviceMobile, IconContext, Monitor, Moon, Phone, Robot, ShieldCheck, SquaresFour, Sun,
+  ChartBar, DeviceMobile, IconContext, List, Monitor, Moon, Phone, Robot, SealCheck, ShieldCheck, SquaresFour, Sun, X,
 } from "@phosphor-icons/react";
 import { Logo, stageOf } from "./components";
 import "./index.css";
@@ -15,9 +15,11 @@ const BankAppPage = lazy(() => import("./pages/BankAppPage"));
 const EvalPage = lazy(() => import("./pages/EvalPage"));
 const DemoPage = lazy(() => import("./pages/DemoPage"));
 const DeepfakePage = lazy(() => import("./pages/DeepfakePage"));
+const ConsentPage = lazy(() => import("./pages/ConsentPage"));
 
 const tabs = [
   { to: "/demo", label: "Demo", icon: SquaresFour },
+  { to: "/consent", label: "Consent", icon: SealCheck },
   { to: "/deepfake", label: "Deepfake", icon: Robot },
   { to: "/console", label: "Console", icon: ShieldCheck },
   { to: "/call", label: "Caller", icon: Phone },
@@ -76,6 +78,57 @@ function PageSkeleton() {
   );
 }
 
+/** Under 640px the seven tabs do not fit beside the wordmark (they pushed every page to 450px wide), so a
+ *  phone gets a menu with the same tabs, named. */
+function PhoneMenu() {
+  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+  const Glyph = open ? X : List;
+  return (
+    <div className="ml-auto sm:hidden">
+      <button
+        className="press grid size-11 place-items-center rounded-full text-ink ring-1 ring-line"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-controls="phone-menu"
+        aria-label={open ? "Close menu" : "Open menu"}
+      >
+        <Glyph size={20} weight="bold" aria-hidden />
+      </button>
+      {open && (
+        <nav id="phone-menu" aria-label="Pages" className="motion-enter elev-2 absolute inset-x-0 top-full border-b border-line bg-surface p-3">
+          <ul className="grid grid-cols-2 gap-1">
+            {tabs.map(({ to, label, icon: Icon }) => (
+              <li key={to}>
+                <NavLink
+                  to={to}
+                  className={({ isActive }) =>
+                    `press flex min-h-12 items-center gap-2.5 rounded-xl px-3 text-sm font-medium ${
+                      isActive ? "bg-accent/15 text-ink" : "text-ink-soft"
+                    }`
+                  }
+                >
+                  <Icon size={20} aria-hidden />
+                  {label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+    </div>
+  );
+}
+
 function Shell() {
   const [theme, cycleTheme] = useTheme();
   const ThemeIcon = THEME_ICON[theme];
@@ -83,7 +136,7 @@ function Shell() {
   const landing = location.pathname === "/";
   // Stage mode (/demo?stage=1, /console?stage=1): the projector shows only the page, at 125% (112.5% with
   // stage=small). The nav goes; the theme still follows the laptop's toggle through storage.
-  const stage = ["/demo", "/console"].includes(location.pathname) ? stageOf(location.search) : null;
+  const stage = ["/demo", "/console", "/consent"].includes(location.pathname) ? stageOf(location.search) : null;
   // The Caller app and the Bank App are phone screens: they own the whole viewport (safe areas included),
   // with no site header, which on an iPhone in Safari pushed Hang up under the toolbar (Oct 30).
   const phone = ["/call", "/bank"].includes(location.pathname);
@@ -105,12 +158,14 @@ function Shell() {
             <span className="font-display text-base font-semibold tracking-tight sm:text-lg">Pratyaksh</span>
           </Link>
           {/* A segmented track: the current page is an accent-tinted pill with a filled icon. */}
-          <nav className="ml-auto flex gap-0.5 rounded-full bg-sunken p-1 ring-1 ring-line">
+          <PhoneMenu />
+          <nav className="ml-auto hidden gap-0.5 rounded-full bg-sunken p-1 ring-1 ring-line sm:flex">
             {tabs.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
                 aria-label={label}
+                title={label}
                 className={({ isActive }) =>
                   `press flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-sm font-medium md:px-3 ${
                     isActive ? "bg-accent/15 text-ink" : "text-ink-soft hover:text-ink"
@@ -120,14 +175,14 @@ function Shell() {
                 {({ isActive }) => (
                   <>
                     <Icon size={17} weight={isActive ? "fill" : "duotone"} className={isActive ? "text-accent" : ""} aria-hidden />
-                    <span className="hidden md:inline">{label}</span>
+                    <span className="hidden lg:inline">{label}</span>
                   </>
                 )}
               </NavLink>
             ))}
           </nav>
           <button
-            className="press grid size-10 place-items-center rounded-full text-ink-soft ring-1 ring-line hover:text-ink"
+            className="press grid size-11 shrink-0 place-items-center rounded-full text-ink-soft ring-1 ring-line hover:text-ink sm:size-10"
             onClick={cycleTheme}
             aria-label={`Colour theme: ${theme}. Change`}
             title={`Theme: ${theme}`}
@@ -141,6 +196,7 @@ function Shell() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/demo" element={<DemoPage />} />
+            <Route path="/consent" element={<ConsentPage />} />
             <Route path="/deepfake" element={<DeepfakePage />} />
             <Route path="/console" element={<ConsolePage />} />
             <Route path="/call" element={<CallerPage />} />

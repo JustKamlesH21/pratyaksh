@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from ..config import Settings
 from ..domain import Audio, Outcome, Response
 from ..signals import warm_up_dsp
-from ..verification import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
+from ..verification import CallNotFound, ConsentNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .container import FIXED_PROMPTS, Container, build, llm_configured
 
 log = logging.getLogger(__name__)
@@ -53,6 +53,33 @@ class ReceiptCheck(BaseModel):
 class TokenRequest(BaseModel):
     customer_id: str
     identity: str | None = None  # defaults to the customer id
+
+
+class ConsentAsk(BaseModel):
+    customer_id: str
+    requester: str = Field(max_length=200)
+    purpose: str
+    minutes: int
+    max_uses: int
+
+
+class ConsentAnswer(BaseModel):
+    customer_id: str
+
+
+class VoiceUse(BaseModel):
+    customer_id: str
+    requester: str = Field(max_length=200)
+    purpose: str
+    clip: str
+    consent_pass: str | None = Field(default=None, max_length=8192)
+
+
+class PassCheck(BaseModel):
+    consent_pass: str = Field(max_length=8192)
+    requester: str = Field(max_length=200)
+    purpose: str
+    clip: str = Field(default="", max_length=200)
 
 
 def create_app(settings: Settings | None = None, container: Container | None = None) -> FastAPI:
@@ -83,6 +110,10 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @app.exception_handler(CallNotFound)
     async def _nf(_: Request, e: CallNotFound):
         return JSONResponse({"detail": f"call not found: {e}"}, status_code=404)
+
+    @app.exception_handler(ConsentNotFound)
+    async def _cnf(_: Request, e: ConsentNotFound):
+        return JSONResponse({"detail": "voice consent not found"}, status_code=404)
 
     @app.exception_handler(UnknownCustomer)
     async def _uc(_: Request, e: UnknownCustomer):
@@ -183,24 +214,7 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         reply_latency_ms: int | None = Form(default=None, ge=0),
     ):
         cont = c(request)
-        limit = int(cont.settings.max_upload_mb * 1024 * 1024)
-        data = await audio.read(limit + 1)
-        if len(data) > limit:
-            raise HTTPException(413, f"audio is larger than {cont.settings.max_upload_mb:g} MB")
-        # Check the header before decoding: a WAV claiming a tiny sample rate would be resampled into
-        # gigabytes. Decoding then runs off the event loop, so other requests are not held up.
-        try:
-            seconds, rate = Audio.wav_info(data) if data else (0.0, 16000)
-        except Exception as e:
-            raise HTTPException(422, f"audio must be WAV: {e}") from e
-        if not 8000 <= rate <= 48000:
-            raise HTTPException(422, f"audio sample rate must be 8-48 kHz, not {rate} Hz")
-        if seconds > cont.settings.max_response_s:
-            raise HTTPException(413, f"audio is longer than {cont.settings.max_response_s:g} s")
-        try:
-            clip = await asyncio.to_thread(Audio.from_wav, data) if data else Audio.silence()
-        except Exception as e:
-            raise HTTPException(422, f"audio must be WAV: {e}") from e
+        data, clip = await _read_wav(cont, audio)
         if cont.settings.retain_audio:
             _keep(cont.settings.audio_dir, call_id, data)
         step = await asyncio.to_thread(cont.verifier.respond, call_id, Response(clip, reply_latency_ms))
@@ -241,6 +255,30 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @app.post("/v1/calls/{call_id}/app-approval")
     def app_approval(call_id: str, body: AppApproval, request: Request, x_device_token: str = Header(default="")):
         return c(request).verifier.app_approval(call_id, body.customer_id, x_device_token, body.approve).to_dict()
+
+    @app.get("/v1/customers/{customer_id}/voice")
+    def my_voice(customer_id: str, request: Request, x_device_token: str = Header(default="")):
+        return c(request).consents.mine(customer_id, x_device_token)
+
+    @app.post("/v1/voice-consents/{consent_id}/statement")
+    async def give_consent(
+        consent_id: str,
+        request: Request,
+        customer_id: str = Form(...),
+        audio: UploadFile = File(..., description="WAV of the owner reading the statement"),
+        x_device_token: str = Header(default=""),
+    ):
+        cont = c(request)
+        data, clip = await _read_wav(cont, audio)  # kept only as a hash (ADR-0003, ADR-0007)
+        return await asyncio.to_thread(cont.consents.give, consent_id, customer_id, x_device_token, clip, data)
+
+    @app.post("/v1/voice-consents/{consent_id}/decline")
+    def decline_consent(consent_id: str, body: ConsentAnswer, request: Request, x_device_token: str = Header(default="")):
+        return c(request).consents.decline(consent_id, body.customer_id, x_device_token)
+
+    @app.post("/v1/voice-consents/{consent_id}/revoke")
+    def revoke_consent(consent_id: str, body: ConsentAnswer, request: Request, x_device_token: str = Header(default="")):
+        return c(request).consents.revoke(consent_id, body.customer_id, x_device_token)
 
     # -- Console --------------------------------------------------------------------
 
@@ -296,6 +334,37 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     @app.post("/v1/calls/{call_id}/review", dependencies=console)
     def review(call_id: str, body: Review, request: Request):
         return c(request).verifier.review(call_id, body.approve, body.reviewer)
+
+    # -- Voice Consent: the requester's side ------------------------------------------------
+
+    @app.post("/v1/voice-consents", dependencies=console)
+    def ask_consent(body: ConsentAsk, request: Request):
+        return c(request).consents.ask(body.customer_id, body.requester, body.purpose, body.minutes, body.max_uses)
+
+    @app.get("/v1/voice-consents", dependencies=console)
+    def consent_overview(request: Request):
+        cont = c(request)
+        return {**cont.consents.overview(), "clips": cont.clips.catalogue()}
+
+    @app.post("/v1/voice-consents/use", dependencies=console)
+    def use_voice(body: VoiceUse, request: Request):
+        """Release one consented clip, a person pressing play each time. Nothing is ever synthesised here."""
+        cont = c(request)
+        if not cont.clips.has(body.clip):  # before use(): an unknown clip must not spend a use
+            raise HTTPException(404, "no such clip")
+        decision = cont.consents.use(body.customer_id, body.requester, body.purpose, body.clip, body.consent_pass)
+        if not decision["allowed"]:
+            raise HTTPException(403, decision["reason"])
+        return HTTPResponse(cont.clips.read(body.clip), media_type="audio/wav")
+
+    @app.post("/v1/voice-consents/authorize")
+    def authorize_voice(body: PassCheck, request: Request):
+        """For a tool that holds a pass: the pass is its credential, and no audio comes back."""
+        return c(request).consents.authorize(body.consent_pass, body.requester, body.purpose, body.clip)
+
+    @app.get("/v1/voice-consents/key")
+    def consent_key(request: Request):
+        return {"keys": [c(request).consents.public_key()]}
 
     # -- Demo hub (the operator's laptop) --------------------------------------------------
     # One page for every demo Customer: their Bank App, Call state and Voice Pause. It hands out
@@ -399,6 +468,29 @@ def _same(expected: str, given: str) -> bool:
     return hmac.compare_digest(expected.encode(), given.encode())
 
 
+async def _read_wav(cont: Container, audio: UploadFile) -> tuple[bytes, Audio]:
+    """An uploaded recording, checked: its bytes and the decoded Audio."""
+    limit = int(cont.settings.max_upload_mb * 1024 * 1024)
+    data = await audio.read(limit + 1)
+    if len(data) > limit:
+        raise HTTPException(413, f"audio is larger than {cont.settings.max_upload_mb:g} MB")
+    # Check the header before decoding: a WAV claiming a tiny sample rate would be resampled into
+    # gigabytes. Decoding then runs off the event loop, so other requests are not held up.
+    try:
+        seconds, rate = Audio.wav_info(data) if data else (0.0, 16000)
+    except Exception as e:
+        raise HTTPException(422, f"audio must be WAV: {e}") from e
+    if not 8000 <= rate <= 48000:
+        raise HTTPException(422, f"audio sample rate must be 8-48 kHz, not {rate} Hz")
+    if seconds > cont.settings.max_response_s:
+        raise HTTPException(413, f"audio is longer than {cont.settings.max_response_s:g} s")
+    try:
+        clip = await asyncio.to_thread(Audio.from_wav, data) if data else Audio.silence()
+    except Exception as e:
+        raise HTTPException(422, f"audio must be WAV: {e}") from e
+    return data, clip
+
+
 _JSON_CAP = 64 * 1024  # the largest JSON body any route takes (a receipt to verify) is about 1 KB
 
 
@@ -415,7 +507,8 @@ class _BodyGuard:
         if scope["type"] != "http" or scope["method"] in ("GET", "HEAD", "OPTIONS"):
             return await self.app(scope, receive, send)
         upload = scope["path"].endswith("/responses")
-        cap = self.upload_cap if upload else _JSON_CAP
+        statement = scope["path"].endswith("/statement")  # from the owner's phone, which has no agent key
+        cap = self.upload_cap if upload or statement else _JSON_CAP
         headers = dict(scope["headers"])
         given = headers.get(b"x-agent-key", b"")
         if upload and self.agent_key and not hmac.compare_digest(self.agent_key.encode(), given):

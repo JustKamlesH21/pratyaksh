@@ -24,6 +24,7 @@ Seam: SpeechModels (speech-to-text + spoof probability), steered by a Transcript
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections import deque
 from dataclasses import dataclass
@@ -50,6 +51,7 @@ class TranscriptionHint:
 
     language: str | None = None
     hotwords: str | None = None
+    max_tokens: int | None = None  # a code readout is short: noise must not run on as long invented text
 
 
 class SpeechModels(Protocol):
@@ -67,6 +69,23 @@ class SignalExtractor:
     def transcribe(self, audio: Audio, language: str | None = None) -> str:
         """A Request, heard in `language` (the Customer's profile language); None lets the model detect it."""
         return self._transcribe(audio, TranscriptionHint(language=language))
+
+    def statement_match(self, audio: Audio, statement: str) -> tuple[str, float]:
+        """A Voice Consent statement read aloud in English ("... Number 7 3"): what was heard, and how much of it was
+        said. A wrong or missing number scores at most 0.5. Heard with no hint: with the statement as hotwords, an old
+        recording was steered onto a new number (Oct 31, Parler, 1 of 6 accepted, 0 of 6 with no hint; noise alone and
+        an unrelated sentence: 0 of 6 either way). A number that was missed is listened to again on its own, the last
+        seconds: all ten digit words steer that towards digits without steering it towards this number."""
+        heard = self._transcribe(audio, TranscriptionHint(language="en"))
+        words, _, number = statement.rpartition(" Number ")
+        digits = number.replace(" ", "")
+        said = _ends_with_digits(heard, digits)
+        if not said:
+            tail = Audio(audio.samples[-int(_NUMBER_TAIL_S * audio.sample_rate):], audio.sample_rate)
+            again = TranscriptionHint(language="en", hotwords=_ENGLISH_DIGIT_WORDS, max_tokens=_CODE_MAX_TOKENS)
+            said = _ends_with_digits(self._transcribe(tail, again), digits)
+        score = phrase_match(words, heard)
+        return heard, score if said else min(score, 0.5)
 
     def check_voice(self, audio: Audio) -> Future:
         """The AI Voice Check of spoken audio, started beside speech-to-text so it adds no wait."""
@@ -93,7 +112,8 @@ class SignalExtractor:
             hint = TranscriptionHint(language="en", hotwords=speakable(challenge.phrase, language or "en"))
         else:
             lang = language or ""
-            hint = TranscriptionHint(language=_CODE_LANGUAGE.get(lang, "en"), hotwords=_DIGIT_HOTWORDS.get(lang))
+            hint = TranscriptionHint(language=_CODE_LANGUAGE.get(lang, "en"), hotwords=_DIGIT_HOTWORDS.get(lang),
+                                     max_tokens=_CODE_MAX_TOKENS)
         transcript = self._transcribe(audio, hint)
         spoof = self._models.spoof_probability(audio)
 
@@ -113,7 +133,7 @@ class SignalExtractor:
         # / 15, in hall chatter 7 / 11 / 12). Rahul read 740065 and Hindi alone heard 7400-065, then 540065.
         other = ""
         if hint.language != "en":
-            other = spoken_digits(self._transcribe(audio, TranscriptionHint(language="en")))
+            other = spoken_digits(self._transcribe(audio, TranscriptionHint(language="en", max_tokens=_CODE_MAX_TOKENS)))
         return Signals(
             transcript=transcript,
             reply_latency_ms=response.reply_latency_ms,
@@ -129,6 +149,7 @@ class SignalExtractor:
 # says instead of the code ("मैं OTP क्यों दूँ? आप स्कैम भी हो सकते हो") comes out as Hindi the Interpreter
 # understands, where English gave "I can't do OTP, you can do an upscam." (Oct 29).
 _CODE_LANGUAGE = {"kn": "kn", "hi": "hi"}
+_CODE_MAX_TOKENS = 60
 _DIGIT_HOTWORDS = {"hi": "शून्य एक दो तीन चार पाँच छह सात आठ नौ"}
 
 
@@ -157,6 +178,19 @@ def phrase_match(expected: str, transcript: str) -> float:
     if not digit_ok:
         score = min(score, 0.5)
     return round(score, 3)
+
+
+_NUMBER_TAIL_S = 4.0  # "Number five six" and the moment after Finished, not the sentence before it
+_ENGLISH_DIGIT_WORDS = "zero one two three four five six seven eight nine"
+
+
+def _ends_with_digits(heard: str, digits: str) -> bool:
+    """Do the last words heard say these digits? Real spellings of 7 3: "seven three", "7-3", "No.73"."""
+    said = []
+    for word in fold_with_digits(heard).split()[-(len(digits) + 3):]:
+        near = near_digit(word)
+        said += re.findall(r"\d", word) or ([near] if near else [])
+    return "".join(said).endswith(digits)
 
 
 # AI Voice Check: advisory, shown to staff, never part of a Verdict. A human voice's pitch moves a little from
@@ -417,7 +451,7 @@ class LocalSpeechModels:
         model = self._load_whisper()
         segments, _info = model.transcribe(
             audio.samples, beam_size=1, vad_filter=False, condition_on_previous_text=False,
-            language=hint.language, hotwords=hint.hotwords,
+            language=hint.language, hotwords=hint.hotwords, max_new_tokens=hint.max_tokens,
         )
         return " ".join(s.text.strip() for s in segments)
 

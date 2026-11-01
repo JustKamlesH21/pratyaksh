@@ -47,11 +47,11 @@ colors:
 typography:
   display: { fontFamily: "Bricolage Grotesque", fontWeight: 600, letterSpacing: "-0.02em", fontVariation: "opsz auto" }
   display-numeral: { fontFamily: "Bricolage Grotesque", fontWeight: 500, letterSpacing: "-0.035em" }
-  h1-page: { fontFamily: "Bricolage Grotesque", fontSize: "36px", fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.02em" }
+  h1-page: { fontFamily: "Bricolage Grotesque", fontSize: "30px", fontWeight: 600, lineHeight: 1.1, letterSpacing: "-0.02em" }
   h2-section: { fontFamily: "Bricolage Grotesque", fontSize: "48px", fontWeight: 600, lineHeight: 1.08, letterSpacing: "-0.02em" }
   body: { fontFamily: "Geist", fontSize: "16px", fontWeight: 400, lineHeight: 1.6 }
   ui: { fontFamily: "Geist", fontSize: "14px", fontWeight: 600, lineHeight: 1 }
-  eyebrow: { fontFamily: "Geist Mono", fontSize: "12px", fontWeight: 500, letterSpacing: "0.08em", textTransform: uppercase }
+  label: { fontFamily: "Geist", fontSize: "14px", fontWeight: 500 }
   mono: { fontFamily: "Geist Mono", fontFeature: "tnum" }
   verdict-stage: { fontFamily: "Bricolage Grotesque", fontSize: "clamp(6rem, 8vw, 9rem)", fontWeight: 700, lineHeight: 0.95 }
 rounded:
@@ -96,11 +96,23 @@ The demo is remembered for one beat. The Clone ticks green for the whisper, then
 | From | Element | Where it shows |
 |---|---|---|
 | Kotak Mahindra Bank's app and brand (navy, red and white) | Deep **bank navy** as the accent, and a navy **brand band** on the bank's own surfaces | Bank App header, phone frames, every action |
-| [Mercury DESIGN.md](https://getdesign.md/mercury/design-md) | Depth by colour step rather than shadow; **eyebrow labels**; **stat blocks** (big light numeral, small caption); only one solid primary per group; secondaries as quiet pills | Cards, section indexes, landing and Eval numbers, button groups |
+| [Mercury DESIGN.md](https://getdesign.md/mercury/design-md) | Depth by colour step rather than shadow; **stat blocks** (big light numeral, small caption); only one solid primary per group; secondaries as quiet pills | Cards, landing and Eval numbers, button groups |
 | [Stripe DESIGN.md](https://getdesign.md/stripe/design-md) | Two **tinted shadow** levels (never pure black); **all buttons are pills**; tabular figures on every number; input focus border in the accent | `.elev-1` / `.elev-2`, `.btn`, `.field` |
 | [Fintech trust patterns](https://phenomenonstudio.com/article/fintech-ux-design-patterns-that-build-trust-and-credibility/), [banking UI 2026](https://lollypop.design/blog/2026/june/banking-app-ui-design/) | Show the reason for every decision; consistent layout across screens; plain security cues instead of fear | Reasons on every Verdict, PageHeader on every staff page |
 
-**Kept from Kotak, changed on purpose:** Kotak uses red for its actions. Here red means BLOCK, so actions are navy, and Kotak's red lives on as `brand-red`: a thin line in the logo, the eyebrows and the timeline, never something you press or read as a result. A red Approve button beside a red BLOCK would blur the one beat the demo depends on. We use no Kotak name, logo or wordmark (see Copy rules); the palette is an inspiration, not an imitation.
+### What we took from Hallmark's themes (Nov 1)
+
+Details only, from Hallmark v2.0.0's Dusk and Console themes. The navy, the faces, the logo and the shapes here did not change.
+
+| From | Element | Where it shows |
+|---|---|---|
+| Dusk | Labels in the body face, a step smaller, sentence case; never mono, never tracked capitals | Replaces the eyebrow everywhere |
+| Dusk | A lit top edge on what floats | `--edge-lit` on filled pills, a stronger highlight in dark `--elev-1` and `--elev-2` |
+| Dusk | Figures in one ruled tally, not a grid of tiles | Eval's four headline figures |
+| Console | Mono is what an instrument wrote: readings, ids, hashes, times; never a label, a head or a control | Every screen |
+| Console | Panels cut from one surface; a record on a spine | The Eval tally; the Console's Audit Trail tab |
+
+**Kept from Kotak, changed on purpose:** Kotak uses red for its actions. Here red means BLOCK, so actions are navy, and Kotak's red lives on as `brand-red`: a thin line in the logo and the timeline, never something you press or read as a result. A red Approve button beside a red BLOCK would blur the one beat the demo depends on. We use no Kotak name, logo or wordmark (see Copy rules); the palette is an inspiration, not an imitation.
 
 ## Colors
 
@@ -113,7 +125,7 @@ Tokens are defined once in `frontend/src/index.css` (`@theme static` for light, 
 | `ink` / `ink-soft` | #ebeff2 / #a1aab4 | #14191e / #535c66 | Text / secondary text |
 | `accent` | `oklch(0.8 0.095 252)` #91c2fa | `oklch(0.42 0.13 258)` #174a92 | Bank navy: actions, focus, selection, the bank's voice. Dark uses a light navy because deep navy disappears on a dark canvas |
 | `brand` | #173a76 (both) | #173a76 | The bank's own band, under `on-fill` text: Bank App header, phone frames, the landing page's navy sections, the logo tile. Deep navy in both themes, like a real bank app |
-| `brand-red` | `oklch(0.66 0.21 28)` #f84c41 (both) | same | Kotak-style brand red, **for marks only**: the logo's centre line, the rule in every eyebrow, the How it works timeline, the stroke under "voice". 3.1:1 on canvas and 3.2:1 on navy: enough for a mark, not for text. Never text, never a button, never a state |
+| `brand-red` | `oklch(0.66 0.21 28)` #f84c41 (both) | same | Kotak-style brand red, **for marks only**: the logo's centre line, the How it works timeline, the stroke under "voice". 3.1:1 on canvas and 3.2:1 on navy: enough for a mark, not for text. Never text, never a button, never a state |
 | `pass` / `stepup` / `block` | #51d39c / #edb755 / #f87f73 | #14744d / #8b570f / #bc2e27 | Verdict text, icons, thin marks, tinted chips |
 | `*-fill` | #14764a / #90561a / #b3332e | #01663e / #824c11 / #a72724 | Solid Verdict surfaces (Ribbon, end screen) under `on-fill` |
 | `bezel` | #171a1d | same | The phone frame, dark in both themes |
@@ -146,12 +158,12 @@ The tightest margins are the light tinted Verdict chips (4.77) and light `line-s
 |---|---|---|
 | Bricolage Grotesque (`font-display`) | Headlines, the Verdict word, the Whisper Phrase, big numerals | 24 px and up only. Headings 600 to 700, tracking -0.02 to -0.03em. **Display numerals** (landing stats, Eval stats) at 500 with -0.035em: lighter and calmer, after Mercury's stat blocks. The Verdict word stays 700. |
 | Geist (`font-sans`) | All UI text | 15 to 16 px body; the Console mostly 13 to 15 px. Buttons 14 px / 600. |
-| Geist Mono (`font-mono`) | Scores, codes, timers, IDs, hashes, **eyebrows** | Tabular figures everywhere (set on `body`), so live numbers do not jitter. |
+| Geist Mono (`font-mono`) | What an instrument wrote: scores, codes, timers, IDs, hashes. **Never a label, a head or a control** | Tabular figures everywhere (set on `body`), so live numbers do not jitter and short figures can stay in Geist. |
 | Noto Sans Devanagari / Kannada | Hindi and Kannada, by fallback | Regular families, bundled offline. |
 
-**Eyebrow** (`.eyebrow`): 12 px Geist Mono, 500, uppercase, +0.08em, `ink-soft`, with an optional `<b>` index in the accent and a 24 px rule (`01`, a short rule, `THE THREAT`). It sits above every landing section heading and every staff page title. It is Latin only: never put Hindi or Kannada in an eyebrow.
+**No eyebrows.** A section or page opens on its heading. A label is Geist, a step smaller, sentence case, `ink-soft` (`text-sm font-medium text-ink-soft`), and it follows the thing it names or sits inside a table or a card. It is never uppercase or tracked, which also keeps it safe for Hindi and Kannada.
 
-Scale: Tailwind's `text-xs` 12, `sm` 14, `base` 16, `lg` 18, `2xl` 24, `3xl` 30, `4xl` 36, `5xl` 48, `7xl` 72, plus `text-phrase` (`clamp(2rem, 9vw, 2.5rem)`), `--text-ribbon` (`clamp(6rem, 8vw, 9rem)`) and `--text-ribbon-compact` (`clamp(2.75rem, 5vw, 4rem)`).
+Nothing on screen is under 12 px. Scale: Tailwind's `text-xs` 12, `sm` 14, `base` 16, `lg` 18, `2xl` 24, `3xl` 30, `4xl` 36, `5xl` 48, `7xl` 72, plus `text-phrase` (`clamp(2rem, 9vw, 2.5rem)`), `--text-ribbon` (`clamp(6rem, 8vw, 9rem)`) and `--text-ribbon-compact` (`clamp(2.75rem, 5vw, 4rem)`).
 
 ### Indic rules
 
@@ -166,10 +178,11 @@ Scale: Tailwind's `text-xs` 12, `sm` 14, `base` 16, `lg` 18, `2xl` 24, `3xl` 30,
 ## Layout
 
 - Tailwind's 4 px spacing scale. Page gutter 16 px, `max-w-7xl` content, full width in stage mode.
-- **Staff pages** (Demo, Deepfake, Console, Eval) open with `PageHeader`: eyebrow (what kind of page), title, one line on what it is for, actions on the right with at most one solid button. A hairline separates it from the content.
-- **Landing** sections are numbered 01 to 06 with eyebrows so the page reads as one argument: threat, how it works, the honest limit, safeguards, evidence, adoption. Sections breathe 80 to 112 px apart.
+- **Staff pages** (Demo, Deepfake, Console, Eval) open with `PageHeader`: title (30 px), one line on what it is for, actions on the right with at most one solid button. A hairline separates it from the content. It stays short, so the data leads.
+- **Landing** sections open on their headings, which read in order as one argument: threat, how a Call is checked, the honest limit, safeguards, evidence, adoption. Sections breathe 80 to 112 px apart. Below 64rem the four How it works steps are a row to swipe, the next one cut by the edge.
 - **Phone screens** (`/call`, `/bank`) own the whole viewport, with no site header: `100dvh`, safe areas padded, the main action in a bottom dock in the thumb zone.
-- The app header is 64 px. Navigation is a **segmented pill track** (`bg-sunken`, ring hairline). The current page is an `accent/15` pill with a filled icon; the others are `ink-soft`.
+- The app header is 64 px. Navigation is a **segmented pill track** (`bg-sunken`, ring hairline). The current page is an `accent/15` pill with a filled icon; the others are `ink-soft`. Under 640 px the tabs do not fit, so `PhoneMenu` (`main.tsx`) opens the same tabs, named, below the header.
+- `html` and `body` carry `overflow-x: clip`. Nothing scrolls sideways at any width from 320 px.
 
 ## Elevation & Depth
 
@@ -178,8 +191,10 @@ Depth is **tonal first**: canvas, surface and sunken are one colour step apart, 
 | Level | Light | Dark | Use |
 |---|---|---|---|
 | 0 | flat | flat | Page sections, wells |
-| 1 (`.elev-1`) | `0 1px 2px` + `0 1px 3px`, hue-250 ink at 6 to 8% | 1 px top highlight, white at 4% | Cards, the idle Verdict Ribbon, Eval stats |
+| 1 (`.elev-1`) | `0 1px 2px` + `0 1px 3px`, hue-250 ink at 6 to 8% | 1 px top highlight, white at 6% | Cards, the idle Verdict Ribbon, Eval stats |
 | 2 (`.elev-2`) | `0 2px 6px -2px` + `0 24px 48px -20px`, ink at 8 to 22% | top highlight + deep tinted drop | Floating things: the decided Ribbon, the landing hero's Verdict card, toasts |
+
+Filled pills (`.btn-primary`, `.btn-on-brand`) carry `--edge-lit`, a 1 px light top edge at 22%.
 
 `.elev-*` and Tailwind's `ring-*` both set `box-shadow`, so the later one wins. Pair elevation with `border`, not `ring`. z-index is used only for the sticky header (`z-30`) and the Reset note (`z-10`).
 
@@ -201,20 +216,19 @@ One rule, used everywhere:
 |---|---|---|
 | `.btn` + `.btn-primary` / `-quiet` / `-ghost` / `-strong` / `-danger`, sizes `-sm` (32) / default (40) / `-lg` (48) | `index.css` components layer | Pills. Hover crossfades colour only (150 ms); press scales to 0.98. `.btn-primary` hover mixes the accent toward `ink`, so `on-accent` text only gains contrast. **One `.btn-primary` per group.** `.btn-strong` is for operator actions that are not the bank's voice (Reset, Lift Voice Pause). `.btn-danger` is Decline and Dismiss. |
 | `.field` | `index.css` | 44 px, 12 px radius, `line-strong` border; focus gives an accent outline and border. |
-| `.eyebrow` | `index.css` | See Typography. |
-| `PageHeader`, `LivePill`, `Card` | `components.tsx` | Staff page top; the connection pill (accent with a live dot, `block` when reconnecting); card = surface, hairline, 16 px, `.elev-1`, 20 px padding. |
+| `PageHeader`, `LivePill`, `Card`, `KeyGate` | `components.tsx` | Staff page top; `KeyGate` is the Console key form, says who has the key and offers a test Call to anyone without one; the connection pill (accent with a live dot, `block` when reconnecting); card = surface, hairline, 16 px, `.elev-1`, 20 px padding. |
 | `Logo` ("Aksha") | `components.tsx` | प्रत्यक्ष is "before the eye": an eye whose pupil is a voice waveform, on a navy tile, with the centre line in `brand-red`. Five bars from 40 px, three in the header, one at favicon size. Concepts A, B and C are on the Claude Design canvas. |
-| Hero replay (`HeroReel`) | `LandingHero.tsx` | A scripted replay of a blocked Clone Call, labelled as one. The waveform follows who speaks (Caller ink, Voice Agent accent, whisper at a third); captions arrive word by word; three Signals land; BLOCK sweeps a red line across the card; Rahul's real phone beside it goes idle, then code, then Security Alert. Shows "meets" and "not read", never numbers it did not measure. |
-| Navy sections | `LandingPage.tsx` | "The honest limit" and the final call to action sit on `bg-brand` with `on-fill` text, a red rule, a large faint logo watermark, `.btn-on-brand` (white pill) and `.btn-outline-on-brand`. |
+| Hero replay (`HeroReel`) | `LandingHero.tsx` | A scripted replay of a blocked Clone Call, labelled as one. The waveform follows who speaks (Caller ink, Voice Agent accent, whisper at a third); captions arrive word by word; three Signals land; BLOCK sweeps a red line across the card; Rahul's real phone beside it goes idle, then code, then Security Alert. Shows "meets" and "not read", never numbers it did not measure. A pause button in its header; a pointer or keyboard focus on it also holds it. |
+| Navy sections | `LandingPage.tsx` | The whisper and code claim ("The honest limit" is its panel) and the final call to action sit on `bg-brand` with `on-fill` text, a red rule, a large faint logo watermark, `.btn-on-brand` (white pill) and `.btn-outline-on-brand`. |
 | AI voice check | `ConsolePage.tsx`, `DemoPage.tsx` Ribbon | Live on every Call once a spoken turn is measured: Likely human, Unsure or Likely AI with a score, from pitch movement on the Request and the code readout (not whispers). Advisory: dashed outline, neutral colours, never pass or block, never part of a Verdict. |
 | Brand band | `BankAppPage.tsx`, `LandingParts.tsx` | `bg-brand text-on-fill`: the Bank App header (rounded bottom on a phone, flat in a frame). It says "this is your bank" in both themes. |
 | `VerdictBadge` | `components.tsx` | Tinted pill, icon + word (PASS, STEP-UP, BLOCK). Pops in once. |
 | `Meter` | `components.tsx` | One Signal against its threshold. A missed threshold is `block`; a met one stays neutral. `advisory`: neutral bar, no threshold, tagged "advisory". `value={null}` draws a hatched "not measured" track. |
-| Verdict Ribbon | `DemoPage.tsx` | Idle "Waiting for a Call" (`.elev-1`). Live: Request, current Challenge, Signal ticks in order. Verdict: solid fill sweeps in (`.elev-2`), PASS / STEP-UP / BLOCKED at ribbon size, one sentence, "Decided by", Liveness. `aria-live="polite"`. |
-| Conclusion block | `ConsolePage.tsx` | Verdict word, one sentence, Decided by, authentication factors, "Aligned to RBI Authentication Directions 2025". BLOCK rows in the Calls list get a 2 px `block` left edge. |
+| Verdict Ribbon | `DemoPage.tsx` | Idle "Waiting for a Call" (`.elev-1`). Live: Request, current Challenge, Signal ticks in order. Verdict: solid fill sweeps in (`.elev-2`), PASS / STEP-UP / BLOCKED at ribbon size, one sentence, "Decided by", Liveness. Advisory pills follow the ticks in the same row. `aria-live="polite"`. |
+| Conclusion block | `ConsolePage.tsx` | Verdict word (with the Outcome beside it only when it adds something, such as "Passed, in review"), one sentence, Decided by, authentication factors, "Aligned to RBI Authentication Directions 2025". BLOCK rows in the Calls list get a 2 px `block` left edge. |
 | Console tabs | `ConsolePage.tsx` | The same segmented pill track as the nav. |
-| Bank App | `BankAppPage.tsx` | Possession Code card (digits in Geist Mono 2.25rem, 3 + 3, the anti-relay line); masked on the projector; Security Alert with a full-width Dismiss (`.btn-danger`); Approve `.btn-primary`, Decline `.btn-danger`. |
-| Call screen | `CallerPage.tsx` | Full-screen in-call layout: header, turn orb, Challenge card, scrolling captions, bottom dock (mic sheet, 72 px Hang up, mic meter). |
+| Bank App | `BankAppPage.tsx` | Possession Code card (accent border like every message; digits in Geist Mono, 2.75rem on the phone and 2rem in a mirror, 3 + 3; the anti-relay line at 14 px); masked on the projector; a mirrored phone's band is one line ("Your bank" and the name); the idle state says what will appear; Security Alert with a full-width Dismiss (`.btn-danger`); Approve `.btn-primary`, Decline `.btn-danger`. |
+| Call screen | `CallerPage.tsx` | Full-screen in-call layout: header, turn orb, Challenge card, scrolling captions, bottom dock (mic sheet, 72 px Hang up, mic meter). The turn row is a fixed height so the Challenge never moves, and it goes away once the bank decides. |
 | Voice Pause row | `DemoPage.tsx` | Closed lock in `block` with scrim fade and shackle drop when on; open and neutral when off. |
 
 ## Motion
@@ -253,7 +267,8 @@ Easing: `arrive` cubic-bezier(0.05, 0.7, 0.1, 1), `leave` (0.3, 0, 0.8, 0.15), `
 `/demo?stage=1` on the projector and `/console?stage=1` for the Console beat (`?stage=small` for a 1280x800 projector at 112.5%).
 
 - `html[data-stage]` sets `font-size: 125%`; the nav and page headers are hidden and the page runs full width.
-- Hub: the Verdict Ribbon fills the top third; the Customer on the latest Call keeps a ring in its tone and the others fade to 55%; Possession Codes on mirrored Bank Apps are masked.
+- Hub: one screen, never a scroll, at 1280x800 and 1920x1080. Before a Call, the Ribbon over the three phones. From the first Call, the Ribbon beside that Customer's phone at full height, so BLOCK and the Security Alert are on screen together; the other two step down to a strip at 55%. Possession Codes on mirrored Bank Apps are masked.
+- Under 96rem wide the Signal pills drop their thresholds, so the longest Reason still fits; the Console always shows them.
 - Console: opens the newest decided Call by itself, Conclusion block on top.
 - Dark is the default; switch to light if the hall is bright (light shows the navy at its most "bank").
 
@@ -271,7 +286,7 @@ Easing: `arrive` cubic-bezier(0.05, 0.7, 0.1, 1), `leave` (0.3, 0, 0.8, 0.15), `
 | Add a token to `index.css`, then use the utility | Hard-code a hex, `zinc-*`, `white` or `black` in a page |
 | Use `.btn` variants for every button, one primary per group | Hand-roll `rounded-lg bg-accent px-3 ...` buttons, or put two solid buttons side by side |
 | Lift cards by fill and hairline; use `.elev-2` only for things that float | Add strong or black drop shadows, or combine `.elev-*` with `ring-*` |
-| Open staff pages with `PageHeader`, landing sections with an eyebrow | Put Hindi or Kannada in an eyebrow |
+| Open staff pages with `PageHeader`, landing sections with their heading | Put a label above a heading, or use uppercase or tracked type at 15 px or under |
 | Keep red for BLOCK, errors and Hang up | Make an action red because a brand does |
 | Pair every state colour with an icon shape and a word | Use green, amber or red for turns, live states or the Spoof Score |
 | Re-run `node frontend/scripts/contrast.mjs` after a colour change | Lighten `ink-soft` or the light Verdict colours by eye |

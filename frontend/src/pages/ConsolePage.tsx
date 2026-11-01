@@ -47,9 +47,8 @@ export default function ConsolePage() {
   return (
     <div className="flex flex-col gap-6">
       {!stage && (
-        <PageHeader eyebrow="Console · bank staff" title="Live Calls">
-          Every Call with the Signals that landed, the Verdict and the Reason the Policy gave, its Transcript and the
-          Audit Trail behind it.
+        <PageHeader title="Live Calls">
+          For bank staff: every Call with its Signals, Verdict, Reason, Transcript and Audit Trail.
         </PageHeader>
       )}
       <StatusBar />
@@ -77,7 +76,7 @@ export default function ConsolePage() {
                   role="tab"
                   aria-selected={filter === f}
                   onClick={() => setFilter(f)}
-                  className={`press rounded-full px-2.5 py-1 text-xs font-medium ${
+                  className={`press rounded-full px-2 py-1 text-xs font-medium ${
                     filter === f ? "bg-accent text-on-accent" : "bg-sunken text-ink-soft hover:text-ink"
                   }`}
                 >
@@ -130,7 +129,10 @@ export default function ConsolePage() {
         {call ? (
           <CallDetail key={call.id} call={call} onUpdate={(c) => setCalls((p) => ({ ...p, [c.id]: c }))} onLocked={() => setLocked(true)} />
         ) : (
-          <div />
+          <div className="hidden min-h-64 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-line p-8 text-center text-sm text-ink-soft lg:flex">
+            <Waveform size={28} aria-hidden />
+            A Call’s Verdict, Signals, Transcript and Audit Trail appear here.
+          </div>
         )}
       </div>
     </div>
@@ -185,8 +187,8 @@ function StatusBar() {
             <span className="text-block"><b>{stats.blocked}</b> blocked</span>
             <span className="inline-flex items-center gap-1"><Clock size={15} className="text-ink-soft" /> Added Time <b>{stats.avg_added_seconds === null ? "-" : `${stats.avg_added_seconds.toFixed(1)} s`}</b></span>
             <span className="inline-flex items-center gap-1" title="Time to hear a Response: speech models and understanding">
-              <Timer size={15} className="text-ink-soft" /> Hearing <b>{stats.hearing_ms.p50 ?? "-"}</b>
-              <span className="text-ink-soft">/ p95 {stats.hearing_ms.p95 ?? "-"} ms</span>
+              <Timer size={15} className="text-ink-soft" /> Hearing <b>{stats.hearing_ms.p50 === null ? "-" : `${stats.hearing_ms.p50} ms`}</b>
+              <span className="text-ink-soft">p95 {stats.hearing_ms.p95 ?? "-"} ms</span>
             </span>
             {wave && !wave.active && wave.blocked > 0 && (
               <span className="inline-flex items-center gap-1 text-ink-soft">
@@ -218,7 +220,7 @@ function AuditBadge({ audit }: { audit?: AuditCheck }) {
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       <b className="inline-flex items-center gap-1.5 text-pass"><LinkSimple size={16} weight="bold" /> Audit Trail intact</b>
       <span className="text-ink-soft">{audit.events} events, hash-chained</span>
-      <span className="font-mono text-xs text-ink-soft">head {audit.head?.slice(0, 12)}…</span>
+      <span className="text-xs text-ink-soft">head <code>{audit.head?.slice(0, 12)}…</code></span>
     </p>
   ) : (
     <p className="motion-pop inline-flex items-center gap-1.5 text-sm font-bold text-block">
@@ -241,7 +243,7 @@ function RiskPanel({ customerId, refresh }: { customerId: string; refresh: strin
   const style = { high: "bg-block/10 text-block ring-block/30", elevated: "bg-stepup/10 text-stepup ring-stepup/30", normal: "bg-pass/10 text-pass ring-pass/30" }[risk.risk];
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl bg-sunken px-3.5 py-3 text-sm">
-      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wide ring-1 ${style}`}>{risk.risk} risk</span>
+      <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${style}`}>{risk.risk[0].toUpperCase() + risk.risk.slice(1)} risk</span>
       <span className="text-ink-soft">{risk.customer.phone_masked}</span>
       <span><b>{risk.calls_7d}</b> Calls in 7 days{risk.blocked_24h > 0 && <>, <b className="text-block">{risk.blocked_24h} blocked</b> today</>}</span>
       {risk.open_security_alerts > 0 && (
@@ -375,27 +377,34 @@ function CallDetail({ call, onUpdate, onLocked }: { call: CallView; onUpdate: (c
             <p className="font-display text-2xl font-semibold tabular-nums">{call.liveness?.toFixed(2) ?? "-"}</p>
           </div>
           <div title={AI_VOICE_NOTE}>
-            <p className="text-xs font-medium text-ink-soft">AI voice check · advisory</p>
+            <p className="text-xs font-medium text-ink-soft">AI voice check, advisory</p>
             <p className="font-display text-2xl font-semibold">
               {call.ai_voice ? AI_VOICE_LABEL[call.ai_voice.label] : "-"}
               {call.ai_voice && <span className="ml-2 font-mono text-sm font-normal text-ink-soft">{call.ai_voice.score.toFixed(2)}</span>}
             </p>
           </div>
-          <div className="ml-auto flex flex-col items-end gap-1">
-            <VerdictBadge verdict={call.verdict} large />
-            <OutcomeLabel outcome={call.outcome} />
-          </div>
+          {/* Once decided, the Conclusion below says it; this corner only speaks for a Call still in progress. */}
+          {!call.verdict && (
+            <div className="ml-auto flex flex-col items-end gap-1">
+              <VerdictBadge verdict={call.verdict} large />
+              <OutcomeLabel outcome={call.outcome} />
+            </div>
+          )}
         </div>
         <div className="mt-4 flex flex-col gap-3">
           <Conclusion call={call} />
           <RiskPanel customerId={call.customer.id} refresh={call.updated_at} />
-          {call.reasons.length > 0 && (
-            <ul className="motion-enter list-disc space-y-1 pl-5 text-sm">
-              {call.reasons.map((r, i) => (
-                <li key={i} className={i === 0 ? "font-semibold" : ""}>{r}</li>
-              ))}
-            </ul>
-          )}
+          {/* A BLOCK or STEP-UP's first Reason is already the Conclusion's sentence: list what it did not say. */}
+          {(() => {
+            const rest = call.verdict === "PASS" ? call.reasons : call.reasons.slice(1);
+            return rest.length > 0 && (
+              <ul className="motion-enter list-disc space-y-1 pl-5 text-sm">
+                {rest.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
+            );
+          })()}
           {call.review_status === "pending" && (
             <div className="motion-enter flex flex-wrap items-center gap-3 rounded-xl border border-stepup/30 bg-stepup/10 p-3">
               <User size={20} className="text-stepup" />
@@ -481,9 +490,10 @@ function CallDetail({ call, onUpdate, onLocked }: { call: CallView; onUpdate: (c
       )}
       {tab === "audit" && (
         <Card>
-          <ol className="flex flex-col gap-2 font-mono text-xs">
+          {/* The chain drawn as what it is: one spine, each event hung from the one before. */}
+          <ol className="flex flex-col gap-3 border-l border-line-strong font-mono text-xs">
             {(full?.events ?? []).map((e) => (
-              <li key={e.seq} className="grid grid-cols-[2.5rem_6rem_10rem_1fr] gap-2 border-b border-line pb-2 last:border-b-0">
+              <li key={e.seq} className="grid gap-x-3 gap-y-0.5 pl-4 md:grid-cols-[2.5rem_6rem_10rem_minmax(0,1fr)]">
                 <span className="text-ink-soft">#{e.seq}</span>
                 <span className="text-ink-soft">{new Date(e.at + "Z").toLocaleTimeString()}</span>
                 <span className="font-semibold">{e.kind}</span>
@@ -598,7 +608,7 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
       </span>
       <div className="flex min-w-0 flex-col items-end">
         <p className="mb-1 text-xs text-ink-soft">
-          {l.timings_ms?.total != null && <span className="font-mono">heard in {l.timings_ms.total} ms · </span>}
+          {l.timings_ms?.total != null && <span>heard in {l.timings_ms.total} ms · </span>}
           Caller · <span className="font-mono">{time}</span>
         </p>
         <p className="rounded-2xl rounded-tr-sm bg-accent/12 px-3.5 py-2 leading-relaxed ring-1 ring-accent/20" lang={l.language === "en" ? undefined : scriptLang(l.text)}>
@@ -608,7 +618,7 @@ function Line({ line: l, i }: { line: TranscriptLine; i: number }) {
         {chips.length > 0 && (
           <p className="mt-1.5 flex flex-wrap justify-end gap-1">
             {chips.map(([text, cls]) => (
-              <span key={text} lang={scriptLang(text)} className={`rounded-full bg-sunken px-2 py-0.5 font-mono text-[0.68rem] ${cls || "text-ink-soft"}`}>{text}</span>
+              <span key={text} lang={scriptLang(text)} className={`rounded-full bg-sunken px-2 py-0.5 font-mono text-xs ${cls || "text-ink-soft"}`}>{text}</span>
             ))}
           </p>
         )}
@@ -634,8 +644,12 @@ function Conclusion({ call }: { call: CallView }) {
   ];
   return (
     <div className={`motion-enter flex flex-col gap-2 border-l-2 pl-4 ${edge}`}>
-      <p className={`flex items-center gap-2 font-display text-3xl font-bold tracking-tight ${tone}`}>
-        <Glyph size={30} weight="fill" aria-hidden /> {word}
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className={`inline-flex items-center gap-2 font-display text-3xl font-bold tracking-tight ${tone}`}>
+          <Glyph size={30} weight="fill" aria-hidden /> {word}
+        </span>
+        {/* only when it adds to the word: "Passed, in review", not "Blocked" under BLOCKED */}
+        {call.outcome !== "blocked" && call.outcome !== "passed" && <OutcomeLabel outcome={call.outcome} />}
       </p>
       <p className="text-lg font-medium leading-snug">{headline(call, call.customer.name.split(" ")[0])}</p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">

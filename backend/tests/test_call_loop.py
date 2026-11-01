@@ -172,3 +172,8 @@ def test_the_caller_app_is_shown_the_open_challenge_and_the_outcome(tmp_path):
     ]
     whisper_shown = caller.events.index(("show", shown[1]))
     assert caller.events[whisper_shown + 1] == ("play", caller.heard[1])  # just before it is spoken
+
+
+def test_a_whisper_and_a_code_cannot_record_for_long_in_a_loud_hall():
+    timing = Timing()
+    assert timing.whisper_max_reply_s <= 7 and timing.code_max_reply_s <= 8 and timing.max_reply_s >= 12

@@ -6,6 +6,10 @@ class CallNotFound(VerificationError):
     pass
 
 
+class ConsentNotFound(VerificationError):
+    pass
+
+
 class UnknownCustomer(VerificationError):
     pass
 

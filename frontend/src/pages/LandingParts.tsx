@@ -33,7 +33,7 @@ export function useInView<T extends Element>(rootMargin = "0px 0px -15% 0px"): [
   return [ref, seen];
 }
 
-/** The Bank App's phone frame and header, as on /bank. */
+/** The Bank App’s phone frame and header, as on /bank. */
 export function DeviceFrame({ name, phone, children, className = "" }: {
   name: string;
   phone: string;
@@ -71,7 +71,7 @@ export function SecurityAlertPreview({ request, className = "" }: { request: str
 /** The Possession Code card from the Bank App inbox. Digits arrive one by one when revealed. */
 export function PossessionCodePreview({ code, request, compact = false }: { code: string; request: string; compact?: boolean }) {
   return (
-    <div className="rounded-xl bg-sunken p-4 text-center">
+    <div className="rounded-xl border-2 border-accent bg-accent/10 p-4 text-center">
       <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft"><Password size={17} /> Code for your call with the bank</p>
       <p className="mt-0.5 text-sm font-semibold">{request}</p>
       <p
@@ -83,7 +83,7 @@ export function PossessionCodePreview({ code, request, compact = false }: { code
         ))}
       </p>
       <p className="text-xs font-medium">
-        Read it aloud only if <i>you</i> are on this call right now. If someone asks you for this code, it's a scam.
+        Read it aloud only if <i>you</i> are on this call right now. If someone asks you for this code, it’s a scam.
       </p>
     </div>
   );
@@ -117,7 +117,7 @@ export function CallerLine({ who = "Caller", text, chips = [], lang }: { who?: s
         {chips.length > 0 && (
           <p className="mt-1.5 flex flex-wrap justify-end gap-1">
             {chips.map(([t, cls]) => (
-              <span key={t} lang={scriptLang(t)} className={`rounded-full bg-sunken px-2 py-0.5 font-mono text-[0.68rem] ${cls || "text-ink-soft"}`}>{t}</span>
+              <span key={t} lang={scriptLang(t)} className={`rounded-full bg-sunken px-2 py-0.5 font-mono text-xs ${cls || "text-ink-soft"}`}>{t}</span>
             ))}
           </p>
         )}

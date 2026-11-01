@@ -36,7 +36,8 @@ from .transcript import as_text, lines
 from .interpreter import _NO_ANSWER_IN, NO_ANSWER, Context, Faq, Interpreter, TurnKind, Understanding
 from .lines import in_language
 from .store import (
-    GENESIS, AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow, chain_hash,
+    GENESIS, AuditEventRow, CallRow, CustomerRow, Database, DeviceMessageRow, PossessionCodeRow, append_event,
+    walk_chain,
 )
 
 log = logging.getLogger(__name__)
@@ -1170,31 +1171,11 @@ class Verifier:
         self._audit(s, call, kind, {**data, "timings_ms": said.timings} if said.timings else data)
 
     def _audit(self, s: Session, call: CallRow, kind: str, data: dict) -> None:
-        last = s.execute(  # a locking read: it sees events committed after this transaction's snapshot
-            select(AuditEventRow.seq, AuditEventRow.hash)
-            .where(AuditEventRow.call_id == call.id).order_by(AuditEventRow.seq.desc()).limit(1)
-            .with_for_update()
-        ).first()
-        seq, prev = (last.seq + 1, last.hash) if last else (1, GENESIS)
-        data, at = _jsonable(data), self._now()
-        s.add(AuditEventRow(
-            call_id=call.id, seq=seq, kind=kind, data=data, created_at=at,
-            prev_hash=prev, hash=chain_hash(prev, call.id, seq, kind, data, at),
-        ))
-        s.flush()
+        append_event(s, call.id, kind, _jsonable(data), self._now())
 
     @staticmethod
     def _walk_chain(s: Session, call_id: str) -> tuple[list[str], int, int | None]:
-        """Hashes of the intact events in order, how many events there are, and the first bad one."""
-        rows = s.scalars(select(AuditEventRow).where(AuditEventRow.call_id == call_id).order_by(AuditEventRow.seq)).all()
-        hashes: list[str] = []
-        prev = GENESIS
-        for n, e in enumerate(rows, start=1):
-            if e.seq != n or e.prev_hash != prev or e.hash != chain_hash(prev, e.call_id, e.seq, e.kind, e.data, e.created_at):
-                return hashes, len(rows), n
-            hashes.append(e.hash)
-            prev = e.hash
-        return hashes, len(rows), None
+        return walk_chain(s, call_id)
 
     def _check_chain(self, s: Session, call_id: str) -> dict:
         hashes, events, broken_at = self._walk_chain(s, call_id)

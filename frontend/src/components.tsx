@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle, CurrencyInr, GearSix, type Icon, Key, LockKey, Prohibit, SimCard, UserPlus, Wallet, Warning,
 } from "@phosphor-icons/react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { api, consoleKey, eventsUrl } from "./api";
 import type { CallView, Customer, Outcome, RequestKind, Verdict } from "./types";
 
@@ -52,20 +52,18 @@ export function Card({ title, children, className = "" }: { title?: ReactNode; c
   );
 }
 
-/** The top of every staff page: a mono eyebrow saying what kind of page this is, the title, one line on
- *  what it is for, and the page's actions on the right (one solid button at most). */
-export function PageHeader({ eyebrow, title, children, actions }: {
-  eyebrow: string;
+/** The top of every staff page: the title, one line on what it is for, and the page's actions on the right
+ *  (one solid button at most). Kept short: these are screens people work in, and the data should lead. */
+export function PageHeader({ title, children, actions }: {
   title: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
 }) {
   return (
-    <header className="flex flex-col gap-4 border-b border-line pb-6 sm:flex-row sm:items-end sm:justify-between">
-      <div className="flex flex-col gap-2">
-        <p className="eyebrow">{eyebrow}</p>
-        <h1 className="font-display text-3xl font-semibold leading-[1.1] tracking-[-0.02em] sm:text-4xl">{title}</h1>
-        {children && <div className="max-w-2xl text-sm leading-relaxed text-ink-soft">{children}</div>}
+    <header className="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-1">
+        <h1 className="font-display text-2xl font-semibold leading-[1.1] tracking-[-0.02em] sm:text-3xl">{title}</h1>
+        {children && <div className="max-w-3xl text-sm leading-relaxed text-ink-soft">{children}</div>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
@@ -361,7 +359,7 @@ export function KeyGate({ onKey, why = "What Callers said and each Customer's ri
           <div>
             <h1 className="font-display text-2xl font-semibold tracking-tight">Console key</h1>
             <p className="mt-1 text-sm text-ink-soft">
-              {why} Enter the verifier's <code>CONSOLE_KEY</code>.
+              {why} Ask the Pratyaksh team for the key (the verifier’s <code>CONSOLE_KEY</code>).
             </p>
           </div>
           {tried && <p className="text-sm font-medium text-block">That key was not accepted.</p>}
@@ -374,8 +372,11 @@ export function KeyGate({ onKey, why = "What Callers said and each Customer's ri
             onChange={(e) => setKey(e.target.value)}
           />
           <button className="btn btn-primary btn-lg">
-            <Key size={18} /> Unlock
+            <Key size={18} /> Use this key
           </button>
+          <p className="text-center text-sm text-ink-soft">
+            No key? <Link to="/call" className="font-medium text-accent underline-offset-4 hover:underline">Place a test call</Link>
+          </p>
         </form>
       </Card>
     </div>

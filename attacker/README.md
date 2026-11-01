@@ -14,8 +14,12 @@ is the voice model.
 - For development and testing, **do not clone a real person at all** — use a synthetic Parler
   voice sample from `E:\AVISHKAR\tmp\voice-samples` (e.g. `Divya_en.wav`). No consent is
   needed to clone a voice that was never a person's.
-- Every tool refuses to run without `--i-have-consent`. Passing it is your attestation that
-  the written consent above exists (or that the reference is a synthetic sample).
+- `demo_clone.py` needs a Consent Pass for security testing (`--consent-pass`, copied from the
+  Consent tab) and checks it with the verifier before every line, so the owner can stop it from
+  their phone. See ADR-0007.
+- `make_clone_bank.py` and `clone_speak.py` run with the services stopped (they need the GPU), so
+  no verifier can check them. They refuse to run without `--i-have-consent`, which is your
+  attestation that the written consent above exists (or that the reference is a synthetic sample).
 - Label every saved clip as synthetic. Never use these tools outside the demo/Eval Run, and
   never commit audio (the repo `.gitignore` already excludes WAVs). Write clips under
   `E:\AVISHKAR\tmp\clone-bank`, and delete them by the consent's deletion date.

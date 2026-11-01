@@ -10,7 +10,9 @@ from dataclasses import dataclass, field
 from ..config import Settings
 from ..policy import Policy
 from ..signals import LocalSpeechModels, ScriptedSpeechModels, SignalExtractor, SpeechModels
-from ..verification import Database, EventHub, Interpreter, OllamaChat, ReceiptSigner, Verifier
+from ..verification import (
+    ConsentedClips, Database, EventHub, Interpreter, OllamaChat, ReceiptSigner, Verifier, VoiceConsents,
+)
 from ..verification.verifier import CLARIFY, GREETING, spoken_lines
 from ..voice import ParlerVoice, PromptVoice, ToneVoice
 
@@ -25,6 +27,8 @@ class Container:
     speech: SpeechModels
     verifier: Verifier
     voice: PromptVoice
+    consents: VoiceConsents
+    clips: ConsentedClips
     missing_triggers: list[str] = field(default_factory=list)  # Audit Trail triggers the database lacks
     warm: bool = False  # models and the whisper DSP have been loaded once
     warm_error: str | None = None  # why warm-up failed, for /v1/status
@@ -54,10 +58,11 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
 
     llm = OllamaChat(settings.ollama_host, settings.ollama_model, settings.ollama_api_key) if llm_configured(settings) else None
     events = EventHub()
+    signals = SignalExtractor(speech)
     verifier = Verifier(
         db,
         policy,
-        SignalExtractor(speech),
+        signals,
         Interpreter(llm),
         events,
         code_ttl_s=settings.code_ttl_seconds,
@@ -67,7 +72,9 @@ def build(settings: Settings, speech: SpeechModels | None = None) -> Container:
         hindi_phrase_pool=settings.hindi_phrase_pool,
     )
     voice = PromptVoice(_synth(settings), settings.tts_cache_dir, fallback=ToneVoice())
-    return Container(settings, db, events, speech, verifier, voice, missing_triggers)
+    consents = VoiceConsents(db, signals, ReceiptSigner.load_or_create(settings.consent_key_path))
+    clips = ConsentedClips(settings.clone_manifest, settings.clone_reference)
+    return Container(settings, db, events, speech, verifier, voice, consents, clips, missing_triggers)
 
 
 def _synth(settings: Settings):

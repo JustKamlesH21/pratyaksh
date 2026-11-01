@@ -45,7 +45,9 @@ signals:
     # is not unique to a virtual cable: the Caller page holds (mutes) the microphone while the Voice Agent
     # speaks, and a quick reply can carry that silent slice. Measured and logged; enforce only once the
     # held/zero samples are excluded and real Calls show the gap again.
-    mode: "off"          # enforce | advisory | off (quoted: YAML reads a bare off as false)
+    # Advisory since Oct 31: the held microphone's zeros are now trimmed from the clip, and real whispers since
+    # measured 11.4-36.9 dB (5 whispers). Enforce only after an Eval Run on real Calls.
+    mode: "advisory"     # enforce | advisory | off (quoted: YAML reads a bare off as false)
     max_range_db: 60
   code_match:
     max_digits: 8        # a readout with more digits never matches: a long run of digits would try many codes

@@ -132,6 +132,26 @@ _Avoid_: log, history
 A signed statement of a closed Call's result (Verdict, Outcome, whether the Request may be carried out, and the Audit Trail's latest hash) that the bank's core systems check, then redeem once, before acting on the Request.
 _Avoid_: token, certificate
 
+### Voice Consent
+
+**Voice Consent**:
+A person's agreement that one Requester may use their voice for one purpose, for a limited time and a limited number of uses. Given on the Registered Device by reading a statement aloud, and revocable at any moment.
+_Avoid_: permission, licence
+
+**Requester**:
+The organisation or tool asking to use someone's voice. Distinct from a Caller, who is on a Call.
+
+**Consent Pass**:
+The signed record of a Voice Consent that a Requester presents for each Voice Use. It proves what was agreed; it does not prove the consent still stands, so the verifier is asked every time.
+_Avoid_: token, licence key
+
+**Voice Use**:
+One attempt to use a person's voice under a Consent Pass, or without one. Allowed or refused, it is recorded.
+
+**Voice Ledger**:
+The insert-only, hash-chained record of everything asked of one person's voice: requests, consents, Voice Uses and refusals. Built like an Audit Trail, but kept per person rather than per Call.
+_Avoid_: consent log
+
 ### Attack and measurement
 
 **Clone**:

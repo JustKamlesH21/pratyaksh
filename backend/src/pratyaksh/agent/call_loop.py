@@ -27,6 +27,10 @@ class Timing:
     code_listen_timeout_s: float = 15.0
     code_pause_s: float = 1.5
     max_reply_s: float = 12.0
+    # In a loud hall the VAD hears speech that never ends, so a code readout ran to the full limit and was
+    # transcribed twice: over 25 s of waiting (Oct 31). A whisper or a code never needs this long.
+    whisper_max_reply_s: float = 7.0
+    code_max_reply_s: float = 8.0
     poll_s: float = 1.0
     max_wait_s: float = 300.0
     filler_after_s: float = 1.0  # a reply not voiced by then gets ONE_MOMENT first, not silence
@@ -52,9 +56,10 @@ async def run_call(
                 return step
             if step.listen:
                 if step.long_reply:
-                    response = await audio.listen(timing.code_listen_timeout_s, timing.max_reply_s, timing.code_pause_s)
+                    response = await audio.listen(timing.code_listen_timeout_s, timing.code_max_reply_s, timing.code_pause_s)
                 else:
-                    response = await audio.listen(timing.listen_timeout_s, timing.max_reply_s)
+                    longest = timing.whisper_max_reply_s if step.challenge else timing.max_reply_s
+                    response = await audio.listen(timing.listen_timeout_s, longest)
                 step = await verifier.respond(call_id, response)
                 if step.heard:
                     await audio.show({"type": "heard", "text": step.heard})
