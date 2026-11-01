@@ -94,7 +94,7 @@ function Conversation({ lines, live }: { lines: TranscriptLine[]; live: boolean 
             }`}
           >
             {!system && (
-              <span className="mb-0.5 block text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
+              <span className="mb-0.5 block text-xs font-semibold text-ink-soft">
                 {agent ? "Voice Agent" : "The Clone (synthetic)"}
               </span>
             )}
@@ -150,7 +150,6 @@ export default function DeepfakePage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Deepfake attack"
         title="Same voice, different Verdict"
         actions={
           <>
@@ -204,7 +203,7 @@ export default function DeepfakePage() {
 
         <section aria-label={`${first}'s real phone`} className="elev-1 flex flex-col gap-3 rounded-2xl border border-line bg-surface p-5">
           <h2 className="flex items-center gap-2 font-semibold"><DeviceMobile size={18} aria-hidden /> {first}'s real phone</h2>
-          {victim ? <BankApp customer={victim.id} device={victim.device_token} embedded /> : <p className="text-sm text-ink-soft">Loading…</p>}
+          {victim ? <BankApp customer={victim.id} device={victim.device_token} embedded height="h-[32rem]" /> : <p className="text-sm text-ink-soft">Loading…</p>}
         </section>
       </div>
 
@@ -213,8 +212,9 @@ export default function DeepfakePage() {
         <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-ink-soft">
           <li>Open the Caller tab, choose {first}, set the microphone to <b>CABLE Output (VB-Audio Virtual Cable)</b>, press <b>Call</b>.</li>
           <li>
-            In one terminal run <code>attacker\demo_clone.py</code> (with <code>--i-have-consent</code>), then play the lines as the Voice Agent
-            asks: <b>1</b> the Request, a typed phrase for the whisper, <b>2</b> at the code prompt.
+            In one terminal run <code>attacker\demo_clone.py</code> with <code>--consent-pass</code> (copy it from the Consent tab; ask for
+            security testing), then play the lines as the Voice Agent asks: <b>1</b> the Request, a typed phrase for the whisper, and <b>2</b> at each code
+            prompt. The Voice Agent helps twice; the third time counts as the answer.
           </li>
           <li>Watch this page: the code lands on the real phone, the Clone cannot read it, and the Call is blocked.</li>
           <li>Press Call again: it is refused while the Voice Pause lasts. Lift it on the Demo tab before the next run.</li>

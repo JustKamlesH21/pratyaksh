@@ -22,7 +22,8 @@ to fit the moment, small talk, "repeat", "hold on", "a person please"), Challeng
 Possession Codes and the Device Inbox, Policy decisions, the Audit Trail and live events.
 """
 
-from .errors import CallNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
+from .consent import ConsentedClips, VoiceConsents
+from .errors import CallNotFound, ConsentNotFound, DeviceNotPaired, NotAllowed, UnknownCustomer
 from .events import EventHub
 from .interpreter import Faq, Interpreter, OllamaChat
 from .receipts import ReceiptSigner
@@ -31,6 +32,8 @@ from .verifier import Verifier
 
 __all__ = [
     "CallNotFound",
+    "ConsentNotFound",
+    "ConsentedClips",
     "DeviceNotPaired",
     "Database",
     "EventHub",
@@ -41,4 +44,5 @@ __all__ = [
     "ReceiptSigner",
     "UnknownCustomer",
     "Verifier",
+    "VoiceConsents",
 ]

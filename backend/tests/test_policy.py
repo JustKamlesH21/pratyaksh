@@ -72,8 +72,7 @@ def test_the_shipped_policy_does_not_enforce_the_live_microphone_check(policy):
     # the microphone while the Voice Agent speaks, and a quick reply carried that silent slice).
     genuine = human_whisper(task_match=1.0, whisper_score=1.0, dynamic_range_db=145.8)
     d = policy.decide([genuine, code()])
-    assert d.verdict is Verdict.PASS
-    assert not any("microphone" in r for r in d.reasons)
+    assert d.verdict is Verdict.PASS  # advisory since Oct 31: it may report, it never decides
 
 
 def test_a_whisper_with_no_microphone_background_noise_does_not_count():

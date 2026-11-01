@@ -8,6 +8,8 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E%3Crect width=%2248%22 height=%2248%22 rx=%2214%22 fill=%22%23173a76%22/%3E%3Cpath d=%22M6.5 24C12.5 14.5 35.5 14.5 41.5 24C35.5 33.5 12.5 33.5 6.5 24Z%22 fill=%22none%22 stroke=%22%23fbfcfd%22 stroke-width=%223.4%22 stroke-linejoin=%22round%22/%3E%3Crect x=%2222.2%22 y=%2216%22 width=%223.6%22 height=%2216%22 rx=%221.8%22 fill=%22%23f84c41%22/%3E%3C/svg%3E" />
     <meta name="description" content="Pratyaksh checks that a bank caller is a live person, not an AI voice clone, before a risky Request goes through." />
     <script>
+      // Reveals hide their content only under .js, so nothing can stay blank if a script fails.
+      document.documentElement.classList.add("js");
       // Dark by default; the header toggle can choose light or the system setting. Applied before the
       // first paint so there is no flash. Storage may be blocked.
       var t = "dark";
@@ -15,7 +17,7 @@
         t = localStorage.getItem("theme") || "dark";
       } catch (e) {}
       if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
-      // Reduced motion chosen on /design (a judge can see it without changing OS settings).
+      // Reduced motion from storage (checking it without changing OS settings).
       try {
         if (localStorage.getItem("motion") === "reduce") document.documentElement.dataset.motion = "reduce";
       } catch (e) {}

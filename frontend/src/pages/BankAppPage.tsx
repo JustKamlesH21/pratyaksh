@@ -5,6 +5,7 @@ import { api } from "../api";
 import { ErrorNote } from "../components";
 import type { DeviceMessage, Inbox } from "../types";
 import { REQUEST_LABEL } from "../types";
+import { MyVoice } from "./MyVoice";
 
 /** The Customer's Registered Device. Open the pairing link on a phone:
  *  /bank?customer=cust-ananya&device=<token>  (printed by `pratyaksh-seed`, in the API log and on /demo). */
@@ -29,13 +30,15 @@ export default function BankAppPage() {
 }
 
 /** The Bank App on one paired Registered Device: Possession Codes, App Approval prompts and Security
- *  Alerts, polled every second. `embedded` gives the phone a fixed height (the Demo hub shows three).
+ *  Alerts, polled every second. `embedded` draws it in a phone frame of `height` (the Demo hub shows three).
  *  `maskCodes` hides Possession Code digits (the projected hub mirror: an attacker in the room must not be
  *  able to read the code off the big screen; only the real phone shows it). */
-export function BankApp({ customer, device, embedded = false, maskCodes = false, onAlertsDismissed }: {
+export function BankApp({ customer, device, embedded = false, tall = false, height = "h-[26rem]", maskCodes = false, onAlertsDismissed }: {
   customer: string;
   device: string;
   embedded?: boolean;
+  tall?: boolean; // embedded, with room for My voice as the page's main subject
+  height?: string; // embedded: a Tailwind height class; it must leave room for a whole Security Alert
   maskCodes?: boolean;
   onAlertsDismissed?: () => void;
 }) {
@@ -98,15 +101,15 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
     <div
       className={
         embedded
-          ? "flex h-[26rem] flex-col overflow-hidden rounded-[2.2rem] border-[10px] border-bezel bg-surface ring-1 ring-line"
+          ? `flex ${tall ? "h-[42rem]" : height} flex-col overflow-hidden rounded-[2.2rem] border-[10px] border-bezel bg-surface ring-1 ring-line`
           : "flex min-h-[100dvh] flex-col bg-canvas"
       }
     >
       {embedded ? (
-        <div className="bg-brand px-5 pb-5 pt-6 text-on-fill">
-          <p className="flex items-center gap-1.5 text-xs font-medium opacity-80"><Bank size={15} /> Your bank</p>
-          <p className="text-lg font-bold">{inbox?.customer.name ?? "…"}</p>
-          <p className="text-sm opacity-80">{inbox?.customer.phone_masked}</p>
+        // One line: the page around a mirrored phone already names the Customer, and the alert needs the room.
+        <div className="flex items-center justify-between gap-2 bg-brand px-5 pb-2.5 pt-4 text-on-fill">
+          <p className="flex items-center gap-1.5 text-xs font-medium opacity-80"><Bank size={15} aria-hidden /> Your bank</p>
+          <p className="truncate text-sm font-semibold">{inbox?.customer.name ?? "…"}</p>
         </div>
       ) : (
         // The bank's navy band, as a bank's own app opens: who you are, on the bank's colour.
@@ -123,10 +126,10 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
       )}
       <div
         className={`flex flex-col gap-4 ${
-          embedded ? "min-h-0 flex-1 overflow-y-auto p-5" : "flex-1 px-5 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+          embedded ? "min-h-0 flex-1 overflow-y-auto p-4" : "flex-1 px-5 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
         }`}
       >
-        {!embedded && <h1 className="font-display text-2xl font-semibold tracking-tight">Requests</h1>}
+        {!embedded && <h1 className="font-display text-2xl font-semibold tracking-tight">Messages from your bank</h1>}
         <ErrorNote error={error} />
         {!inbox && !error && (
           <div className="flex flex-col gap-3" aria-busy="true">
@@ -134,8 +137,12 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
             <div className="skeleton h-16" />
           </div>
         )}
-        {inbox && inbox.messages.length === 0 && (
-          <p className="mt-10 text-center text-ink-soft">No requests right now.</p>
+        {inbox && inbox.messages.length === 0 && !tall && (
+          <div className="flex flex-col items-center gap-2 py-8 text-center">
+            <ShieldCheck size={32} className="text-accent" aria-hidden />
+            <p className="font-medium">No messages right now.</p>
+            <p className="max-w-[28ch] text-sm text-ink-soft">During a call with the bank, your code or alert appears here.</p>
+          </div>
         )}
         {inbox?.messages.map((m) =>
           m.kind === "security_alert" ? (
@@ -167,7 +174,7 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
               </button>
             </div>
           ) : m.kind === "possession_code" ? (
-            <PossessionCode key={m.id} message={m} masked={maskCodes} name={inbox?.customer.name ?? ""} />
+            <PossessionCode key={m.id} message={m} masked={maskCodes} name={inbox?.customer.name ?? ""} large={!embedded} />
           ) : (
             <div key={m.id} className="motion-enter rounded-2xl border-2 border-accent bg-accent/10 p-5">
               <p className="flex items-center gap-2 font-bold"><ShieldCheck size={20} className="text-accent" /> Approve this request?</p>
@@ -187,6 +194,7 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
             </div>
           ),
         )}
+        <MyVoice customer={customer} device={device} />
       </div>
     </div>
   );
@@ -195,12 +203,17 @@ export function BankApp({ customer, device, embedded = false, maskCodes = false,
 /** The Possession Code card: which Request it authorises, the digits grouped 3 + 3, and the anti-relay
  *  line (read it only if you are on the call; anyone who asks you for it is a scammer). Masked on the
  *  projector: the digits are not even in the page. */
-export function PossessionCode({ message: m, masked, name }: { message: DeviceMessage; masked: boolean; name: string }) {
+export function PossessionCode({ message: m, masked, name, large = false }: {
+  message: DeviceMessage;
+  masked: boolean;
+  name: string;
+  large?: boolean; // on the Customer's own phone: read aloud from arm's length
+}) {
   const code = m.body.code ?? "";
   const groups = [code.slice(0, 3), code.slice(3)].filter(Boolean);
   const request = m.body.request ? REQUEST_LABEL[m.body.request] : null;
   return (
-    <div className="motion-enter rounded-2xl bg-sunken p-5 text-center">
+    <div className="motion-enter rounded-2xl border-2 border-accent bg-accent/10 p-5 text-center">
       <p className="flex items-center justify-center gap-1.5 text-sm text-ink-soft">
         <Password size={17} aria-hidden /> Code for your call with the bank
       </p>
@@ -216,7 +229,7 @@ export function PossessionCode({ message: m, masked, name }: { message: DeviceMe
         </>
       ) : (
         <>
-          <p className="my-2 font-mono text-[2.25rem] font-semibold tracking-[0.12em] text-ink" aria-label={code.split("").join(" ")}>
+          <p className={`my-2 whitespace-nowrap font-mono font-semibold text-ink ${large ? "text-[2.75rem] tracking-[0.08em]" : "text-[2rem] tracking-[0.06em]"}`} aria-label={code.split("").join(" ")}>
             {groups.map((g, k) => (
               <span key={k} className={k ? "ml-[0.45em]" : ""} aria-hidden>
                 {g.split("").map((d, i) => (
@@ -225,13 +238,13 @@ export function PossessionCode({ message: m, masked, name }: { message: DeviceMe
               </span>
             ))}
           </p>
-          <p className="text-xs font-medium text-ink">
+          <p className="text-sm font-medium text-ink">
             Read it aloud only if <i>you</i> are on this call right now. If someone asks you for this code, it's a scam.
           </p>
         </>
       )}
       <TimeLeft message={m} />
-      <p className="mt-2 font-mono text-xs text-ink-soft">Expires in {m.seconds_left}s</p>
+      <p className="mt-2 text-xs text-ink-soft">Expires in {m.seconds_left}s</p>
     </div>
   );
 }

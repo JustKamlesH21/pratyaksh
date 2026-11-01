@@ -122,6 +122,34 @@ def _canonical(v):
     return v
 
 
+def append_event(s: Session, chain_id: str, kind: str, data: dict, at: datetime) -> None:
+    """Add one event to a hash chain: a Call's Audit Trail, or a Customer's Voice Ledger."""
+    last = s.execute(  # a locking read: it sees events committed after this transaction's snapshot
+        select(AuditEventRow.seq, AuditEventRow.hash)
+        .where(AuditEventRow.call_id == chain_id).order_by(AuditEventRow.seq.desc()).limit(1)
+        .with_for_update()
+    ).first()
+    seq, prev = (last.seq + 1, last.hash) if last else (1, GENESIS)
+    s.add(AuditEventRow(
+        call_id=chain_id, seq=seq, kind=kind, data=data, created_at=at,
+        prev_hash=prev, hash=chain_hash(prev, chain_id, seq, kind, data, at),
+    ))
+    s.flush()
+
+
+def walk_chain(s: Session, chain_id: str) -> tuple[list[str], int, int | None]:
+    """Hashes of the intact events in order, how many events there are, and the first bad one."""
+    rows = s.scalars(select(AuditEventRow).where(AuditEventRow.call_id == chain_id).order_by(AuditEventRow.seq)).all()
+    hashes: list[str] = []
+    prev = GENESIS
+    for n, e in enumerate(rows, start=1):
+        if e.seq != n or e.prev_hash != prev or e.hash != chain_hash(prev, e.call_id, e.seq, e.kind, e.data, e.created_at):
+            return hashes, len(rows), n
+        hashes.append(e.hash)
+        prev = e.hash
+    return hashes, len(rows), None
+
+
 class PossessionCodeRow(Base):
     __tablename__ = "possession_codes"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -144,6 +172,29 @@ class DeviceMessageRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class VoiceConsentRow(Base):
+    """One request to use a Customer's voice, and the consent they gave or refused. No audio: only its hash."""
+
+    __tablename__ = "voice_consents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
+    requester: Mapped[str] = mapped_column(String(60))
+    purpose: Mapped[str] = mapped_column(String(32))
+    statement: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16))  # pending | active | declined | revoked
+    minutes: Mapped[int] = mapped_column(Integer)
+    max_uses: Mapped[int] = mapped_column(Integer)
+    uses: Mapped[int] = mapped_column(Integer, default=0)
+    statement_match: Mapped[float | None] = mapped_column(Double, nullable=True)
+    statement_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    consent_pass: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    ask_expires_at: Mapped[datetime] = mapped_column(DateTime)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class EvalRunRow(Base):

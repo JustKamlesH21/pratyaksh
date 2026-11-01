@@ -1,10 +1,10 @@
-/* The landing hero's moving picture: a replay of a blocked Clone Call, as the product shows it. A cloned
+/* The landing hero’s moving picture: a replay of a blocked Clone Call, as the product shows it. A cloned
    voice asks for a new payee, passes the Task Match and the whispered phrase, cannot read the Possession
-   Code that sits only on Rahul's real phone, and is BLOCKed; the phone then shows the Security Alert.
+   Code that sits only on Rahul’s real phone, and is BLOCKed; the phone then shows the Security Alert.
    It is labelled a replay (scripted from our own test Calls, no numbers it did not measure), loops while
    on screen, pauses off screen, and under reduced motion shows its last frame and stays there. */
 import { type CSSProperties, useEffect, useRef, useState } from "react";
-import { Check, DeviceMobile, Play, ShieldCheck, X } from "@phosphor-icons/react";
+import { Check, DeviceMobile, Pause, Play, ShieldCheck, X } from "@phosphor-icons/react";
 import { Logo, VerdictBadge, prefersReducedMotion, scriptLang } from "../components";
 import { DeviceFrame, PossessionCodePreview, SecurityAlertPreview } from "./LandingParts";
 
@@ -62,9 +62,12 @@ export function HeroReel() {
   const [beat, setBeat] = useState(reduced ? LAST : 0);
   const [round, setRound] = useState(0); // remounts the captions on each replay
   const [ref, onScreen] = useOnScreen<HTMLElement>();
+  const [held, setHeld] = useState(false); // the pause button
+  const [hover, setHover] = useState(false); // a pointer or keyboard focus on the replay also holds it
+  const running = !reduced && onScreen && !held && !hover;
 
   useEffect(() => {
-    if (reduced || !onScreen) return;
+    if (!running) return;
     const id = setTimeout(() => {
       if (beat === LAST) {
         setBeat(0);
@@ -72,7 +75,7 @@ export function HeroReel() {
       } else setBeat(beat + 1);
     }, BEATS[beat].ms);
     return () => clearTimeout(id);
-  }, [beat, onScreen, reduced]);
+  }, [beat, running]);
 
   const b = BEATS[beat];
   const at = BEATS.slice(0, beat).reduce((s, x) => s + x.ms, 0) / 1000;
@@ -83,6 +86,10 @@ export function HeroReel() {
       ref={ref}
       className="mx-auto flex w-full max-w-xl flex-col items-center gap-5 xl:max-w-none xl:flex-row xl:items-end"
       aria-label="Replay: a cloned voice calls as Rahul Verma and is blocked"
+      onPointerEnter={(e) => e.pointerType === "mouse" && setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
     >
       <div
         data-verdict={b.verdict ? "BLOCK" : undefined}
@@ -100,12 +107,22 @@ export function HeroReel() {
           <span className="font-mono text-sm text-ink-soft" aria-hidden>
             0:{String(Math.floor(at)).padStart(2, "0")}
           </span>
+          {!reduced && (
+            <button
+              type="button"
+              className="press grid size-9 shrink-0 place-items-center rounded-full bg-sunken text-ink-soft ring-1 ring-line hover:text-ink"
+              onClick={() => setHeld((h) => !h)}
+              aria-label={held ? "Play the replay" : "Pause the replay"}
+            >
+              {held ? <Play size={15} weight="fill" aria-hidden /> : <Pause size={15} weight="fill" aria-hidden />}
+            </button>
+          )}
         </div>
 
         {/* the voice on the line */}
         <div className="px-5 pt-6">
           <div
-            className={`hero-wave is-${b.voice} ${b.voice === "agent" ? "text-accent" : b.voice === "ring" || b.voice === "quiet" ? "text-line-strong" : "text-ink"}`}
+            className={`hero-wave is-${b.voice} ${running || reduced ? "" : "is-held"} ${b.voice === "agent" ? "text-accent" : b.voice === "ring" || b.voice === "quiet" ? "text-line-strong" : "text-ink"}`}
             aria-hidden
           >
             {BARS.map((a, i) => (
@@ -152,7 +169,7 @@ export function HeroReel() {
                 key={name}
                 className={`rounded-xl px-3 py-2.5 ${landed ? (ok ? "bg-sunken" : "bg-block/12 ring-1 ring-block/40") : "bg-sunken/60"}`}
               >
-                <p className="truncate text-[0.7rem] font-medium text-ink-soft">{name}</p>
+                <p className="truncate text-xs font-medium text-ink-soft">{name}</p>
                 <p className={`mt-0.5 flex h-5 items-center gap-1 font-mono text-xs font-semibold ${landed ? (ok ? "text-ink" : "text-block") : "text-ink-soft"}`}>
                   {landed ? (
                     <span key={`${round}-${k}`} className="tick inline-flex items-center gap-1">
@@ -170,12 +187,12 @@ export function HeroReel() {
 
         {live && b.code && (
           <p className="motion-enter flex items-center gap-2 border-t border-line px-5 py-3 text-xs text-ink-soft">
-            <DeviceMobile size={15} className="text-accent" aria-hidden /> Possession Code sent to Rahul's real phone. The Clone never sees it.
+            <DeviceMobile size={15} className="text-accent" aria-hidden /> Possession Code sent to Rahul’s real phone. The Clone never sees it.
           </p>
         )}
       </div>
 
-      {/* Rahul's real phone, in his pocket the whole time: idle, then the code, then the Security Alert */}
+      {/* Rahul’s real phone, in his pocket the whole time: idle, then the code, then the Security Alert */}
       <div className="hero-phone is-in w-[15rem] shrink-0 xl:-mb-10">
         <DeviceFrame name="Rahul Verma" phone="+91 99xxxx2087">
           {b.verdict ? (
@@ -187,7 +204,7 @@ export function HeroReel() {
           ) : (
             <div className="flex min-h-[13.5rem] flex-col items-center justify-center gap-3 text-center">
               <ShieldCheck size={30} className="text-accent" aria-hidden />
-              <p className="text-sm text-ink-soft">No requests right now.</p>
+              <p className="text-sm text-ink-soft">No messages right now.</p>
             </div>
           )}
         </DeviceFrame>

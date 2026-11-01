@@ -1,9 +1,9 @@
-/* The landing page: for judges and bank decision-makers. Dark by default, one accent (cerulean), Verdict
+/* The landing page: for judges and bank decision-makers. Dark by default, one accent (bank navy), Verdict
    colours only for Verdicts. Every product picture is a real component preview (LandingParts.tsx), every
    figure is either live from this verifier, measured by us, read from policy.yaml, or cited with its source.
    Motion is CSS only (index.css, "Landing page" block), driven by IntersectionObserver, and off under
    prefers-reduced-motion. Radii: landing cards rounded-2xl; buttons (.btn), chips and badges are pills.
-   Each section opens with a mono eyebrow index (01 to 06) so the page reads as one argument. */
+   Each section opens straight on its claim: the headings read in order as one argument. */
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -25,9 +25,8 @@ const H2 = "font-display text-3xl font-semibold leading-[1.08] tracking-[-0.02em
 
 function PrimaryCta() {
   return (
-    <Link to="/demo" className="group btn btn-primary btn-lg">
+    <Link to="/demo" className="btn btn-primary btn-lg">
       Open the demo
-      <ArrowRight size={18} weight="bold" className="nudge group-hover:translate-x-0.5" />
     </Link>
   );
 }
@@ -40,17 +39,6 @@ function ConsoleCta() {
   );
 }
 
-/** The mono index above each section heading ("01 The threat"): where the reader is in the story. */
-function Eyebrow({ n, children }: { n: string; children: ReactNode }) {
-  return (
-    <p className="eyebrow mb-5">
-      <b>{n}</b>
-      <span className="h-0.5 w-6 rounded-full bg-brand-red" aria-hidden />
-      {children}
-    </p>
-  );
-}
-
 /* ------------------------------------------------------------------ hero */
 
 function Hero() {
@@ -60,14 +48,9 @@ function Hero() {
       <div className="lp-field pointer-events-none absolute inset-0" aria-hidden />
       <div className="relative mx-auto grid min-h-[min(calc(100dvh-4rem),56rem)] max-w-7xl items-center gap-12 px-4 py-12 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:py-10">
         <div className="flex flex-col items-start gap-7">
-          <p className="motion-enter eyebrow">
-            <b>Pratyaksh</b>
-            <span className="h-0.5 w-6 rounded-full bg-brand-red" aria-hidden />
-            Call verification for banks
-          </p>
           <h1 className="motion-enter font-display text-[2.75rem] font-semibold leading-[1.04] tracking-[-0.025em] sm:text-6xl">
             Verify the person,
-            <span className="block text-ink-soft">
+            <span className="block">
               not the{" "}
               <span className="relative inline-block pb-1">
                 voice.
@@ -77,19 +60,15 @@ function Hero() {
               </span>
             </span>
           </h1>
-          <p className="motion-enter max-w-[44ch] text-lg leading-relaxed text-ink-soft" style={{ "--i": 2 } as CSSProperties}>
-            On risky bank calls, the Caller whispers a random phrase and reads a code shown only on their Registered
-            Device.
+          <p className="motion-enter max-w-[34ch] text-xl leading-snug text-ink-soft" style={{ "--i": 2 } as CSSProperties}>
+            A cloned voice can fool your ear. It can’t hold your phone.
           </p>
-          <p className="motion-enter max-w-[40ch] border-l-2 border-brand-red pl-4 font-display text-xl font-semibold leading-snug tracking-[-0.01em]" style={{ "--i": 3 } as CSSProperties}>
-            A cloned voice can fool your ear. It can't hold your phone.
-          </p>
-          <div className="motion-enter flex flex-wrap gap-3" style={{ "--i": 4 } as CSSProperties}>
+          <div className="motion-enter flex flex-wrap gap-3" style={{ "--i": 3 } as CSSProperties}>
             <PrimaryCta />
             <ConsoleCta />
           </div>
-          <p className="motion-enter flex flex-wrap items-center gap-2 text-sm text-ink-soft" style={{ "--i": 5 } as CSSProperties}>
-            Listens in
+          <p className="motion-enter flex flex-wrap items-center gap-2 text-sm text-ink-soft" style={{ "--i": 4 } as CSSProperties}>
+            <span className="w-full sm:w-auto">Call verification for banks, in</span>
             {[["English", undefined], ["हिन्दी", "hi"], ["ಕನ್ನಡ", "kn"]].map(([w, l]) => (
               <span key={w} lang={l} className="rounded-full bg-sunken px-3 py-1 font-medium text-ink ring-1 ring-line">{w}</span>
             ))}
@@ -110,7 +89,6 @@ function Threat() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-20 md:py-28">
       <Reveal>
-        <Eyebrow n="01">The threat</Eyebrow>
         <h2 className={`${H2} max-w-[20ch]`}>Cloned voices already fool people, and bank voice ID.</h2>
       </Reveal>
       <div className="mt-12 grid gap-12 md:grid-cols-[1.35fr_1fr] md:gap-16">
@@ -178,7 +156,7 @@ const FLOW: FlowStep[] = [
     icon: Waveform,
     at: "0:08",
     who: "Caller whispers",
-    body: "A random everyday phrase in the Customer's language, whispered back. It shows a live person is answering, right now.",
+    body: "A random everyday phrase in the Customer’s language, whispered back. It shows a live person is answering, right now.",
     preview: () => <WhisperPreview />,
   },
   {
@@ -267,7 +245,7 @@ function VerdictPreview({ seen }: { seen: boolean }) {
           {seen && <VerdictBadge verdict="PASS" large />}
         </div>
         <p className="mt-2 text-sm leading-relaxed">
-          Liveness at or above the Policy's 0.75. A signed Verification Receipt lets core banking act, once.
+          Liveness at or above the Policy’s 0.75. A signed Verification Receipt lets core banking act, once.
         </p>
       </div>
       <div className="lp-line rounded-xl border border-line bg-canvas/60 p-4" style={{ "--i": 2 } as CSSProperties}>
@@ -297,10 +275,10 @@ function FlowStepCard({ step, k, active, setRef }: {
   const [ref, seen] = useInView<HTMLDivElement>();
   const Glyph = step.icon;
   return (
-    <li ref={setRef} data-step={k} className="scroll-mt-24">
+    <li ref={setRef} data-step={k} className="flex w-[86%] shrink-0 snap-start scroll-mt-24 lg:w-auto">
       <div
         ref={ref}
-        className={`reveal ${seen ? "is-visible" : ""} grid gap-8 rounded-2xl border bg-surface p-6 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:p-8 ${
+        className={`reveal ${seen ? "is-visible" : ""} grid w-full content-start gap-8 rounded-2xl border bg-surface p-6 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:p-8 ${
           active ? "elev-2 border-accent/40" : "elev-1 border-line"
         }`}
       >
@@ -309,14 +287,14 @@ function FlowStepCard({ step, k, active, setRef }: {
             <span className={`lp-numeral ${active ? "is-on" : ""} font-display text-7xl font-semibold leading-none tracking-[-0.04em]`} aria-hidden>
               0{k + 1}
             </span>
-            <span className="mb-1.5 inline-flex items-center gap-2 rounded-full bg-sunken px-3 py-1 font-mono text-xs text-ink-soft ring-1 ring-line">
-              <span className="size-1.5 rounded-full bg-brand-red" aria-hidden /> {step.at}
-            </span>
+            <span className="mb-1.5 rounded-full bg-sunken px-3 py-1 font-mono text-xs text-ink-soft ring-1 ring-line">{step.at}</span>
           </div>
-          <p className="eyebrow">
-            <Glyph size={15} className="text-accent" aria-hidden /> {step.who}
-          </p>
-          <h3 className="font-display text-3xl font-semibold tracking-[-0.02em]">{step.name}</h3>
+          <div>
+            <h3 className="font-display text-3xl font-semibold tracking-[-0.02em]">{step.name}</h3>
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-ink-soft">
+              <Glyph size={16} className="text-accent" aria-hidden /> {step.who}
+            </p>
+          </div>
           <p className="leading-relaxed text-ink-soft">{step.body}</p>
         </div>
         <div>{step.preview(seen)}</div>
@@ -326,27 +304,28 @@ function FlowStepCard({ step, k, active, setRef }: {
 }
 
 /** The four steps of a Call. The step nearest the middle of the screen is "active": the index on the
- *  left follows it and its rail fills, so the reader always knows where they are in the Call. */
+ *  left follows it and its rail fills, so the reader always knows where they are in the Call. Below 64rem
+ *  the steps are a row to swipe (four stacked steps ran to four phone screens), so the middle is sideways. */
 function CallFlow() {
   const [active, setActive] = useState(0);
   const items = useRef<(HTMLLIElement | null)[]>([]);
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return;
+    const wide = matchMedia("(min-width: 64rem)").matches;
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) if (e.isIntersecting) setActive(Number((e.target as HTMLElement).dataset.step));
       },
-      { rootMargin: "-45% 0px -50% 0px" },
+      { rootMargin: wide ? "-45% 0px -50% 0px" : "0px -45% 0px -45%" },
     );
     items.current.forEach((el) => el && io.observe(el));
     return () => io.disconnect();
   }, []);
   return (
     <section className="border-y border-line bg-surface/40">
-      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 md:py-28 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-16">
+      <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] gap-12 px-4 py-20 md:py-28 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] lg:gap-16">
         <div className="lg:sticky lg:top-24 lg:self-start">
           <Reveal>
-            <Eyebrow n="02">How it works</Eyebrow>
             <h2 className={H2}>How a Call is checked</h2>
             <p className="mt-4 max-w-[40ch] leading-relaxed text-ink-soft">
               Balance enquiries go straight through. Adding a payee, a SIM swap or a big transfer gets live
@@ -354,7 +333,7 @@ function CallFlow() {
             </p>
           </Reveal>
           <ol className="relative mt-10 hidden flex-col gap-5 lg:flex" aria-hidden>
-            {/* the Call's timeline: a red thread that fills as you read, like a recording's progress */}
+            {/* the Call’s timeline: a red thread that fills as you read, like a recording’s progress */}
             <span className="absolute bottom-2 left-[5px] top-2 w-0.5 rounded-full bg-line" />
             <span
               className="lp-rail-fill absolute bottom-2 left-[5px] top-2 w-0.5 rounded-full bg-brand-red"
@@ -369,7 +348,11 @@ function CallFlow() {
             ))}
           </ol>
         </div>
-        <ol className="flex flex-col gap-6">
+        <ol
+          tabIndex={0}
+          aria-label="The four steps of a Call"
+          className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-4 overflow-x-auto overscroll-x-contain px-4 pb-2 lg:mx-0 lg:snap-none lg:flex-col lg:gap-6 lg:overflow-visible lg:px-0 lg:pb-0"
+        >
           {FLOW.map((s, k) => (
             <FlowStepCard key={s.name} step={s} k={k} active={k === active} setRef={(el) => {
                 items.current[k] = el;
@@ -385,18 +368,13 @@ function CallFlow() {
 
 function WhatEachProves() {
   return (
-    // The bank's navy band: the one claim the whole design rests on, said plainly, with the red under it.
+    // The bank’s navy band: the one claim the whole design rests on, said plainly, with the red under it.
     <section className="relative overflow-hidden bg-brand text-on-fill">
       <div className="pointer-events-none absolute -right-24 top-1/2 -translate-y-1/2 opacity-[0.07]" aria-hidden>
         <Logo size={560} />
       </div>
       <div className="relative mx-auto max-w-7xl px-4 py-20 md:py-28">
         <Reveal>
-          <p className="eyebrow mb-5 text-on-fill/75">
-            <b className="text-on-fill">03</b>
-            <span className="h-0.5 w-6 rounded-full bg-brand-red" aria-hidden />
-            The honest limit
-          </p>
           <h2 className="max-w-[22ch] font-display text-3xl font-semibold leading-[1.12] tracking-[-0.02em] md:text-6xl">
             The whisper proves a live person.{" "}
             <span>
@@ -414,10 +392,11 @@ function WhatEachProves() {
           <Reveal i={2} className="flex flex-col gap-3">
             <span className="grid size-11 place-items-center rounded-full bg-on-fill/12"><DeviceMobile size={22} /></span>
             <p className="font-semibold">Possession Code</p>
-            <p className="text-sm leading-relaxed text-on-fill/80">That someone holds the Customer's Registered Device. A cloned voice cannot.</p>
+            <p className="text-sm leading-relaxed text-on-fill/80">That someone holds the Customer’s Registered Device. A cloned voice cannot.</p>
           </Reveal>
           <Reveal i={3} className="rounded-2xl bg-on-fill/8 p-6 ring-1 ring-on-fill/15">
-            <p className="text-sm leading-relaxed text-on-fill/85">
+            <h3 className="font-semibold">The honest limit</h3>
+            <p className="mt-2 text-sm leading-relaxed text-on-fill/85">
               We attacked our own Whisper Score: text-to-speech run through a whisper filter passed it 30 times out of
               30. So no single Signal decides. Every risky Request also needs the Possession Code, and the spoof model
               only advises.
@@ -464,7 +443,7 @@ const DEFENCES: { icon: Icon; title: string; body: string; cls: string; visual?:
             <span key={n} className="grid size-9 place-items-center rounded-full bg-surface text-xs font-semibold ring-2 ring-block">{n}</span>
           ))}
         </span>
-        <span className="font-mono text-xs text-ink-soft">3 of 3 Customers · 15 min → Agent Review</span>
+        <span className="text-xs text-ink-soft">3 of 3 Customers in 15 min, then Agent Review</span>
       </div>
     ),
   },
@@ -502,8 +481,7 @@ function Defences() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-20 md:py-28">
       <Reveal className="mb-10">
-        <Eyebrow n="04">Safeguards</Eyebrow>
-        <h2 className={H2}>Around every Verdict</h2>
+        <h2 className={H2}>Safeguards around every Verdict</h2>
       </Reveal>
       <div className="grid gap-4 md:grid-cols-4">
         {DEFENCES.map(({ icon: Glyph, title, body, cls, visual }, k) => (
@@ -513,7 +491,7 @@ function Defences() {
             <h3 className={k === 0 ? "font-display text-2xl font-semibold tracking-tight" : "font-semibold"}>{title}</h3>
             <p className={`leading-relaxed text-ink-soft ${k === 0 ? "max-w-[44ch]" : "text-sm"}`}>{body}</p>
             {k === 0 && (
-              <div className="mt-auto flex flex-wrap items-center gap-2 pt-6 font-mono text-xs">
+              <div className="mt-auto flex flex-wrap items-center gap-2 pt-6 text-xs font-medium">
                 {["Caller", "Interpreter", "Policy", "Verdict"].map((s, n) => (
                   <span key={s} className="flex items-center gap-2">
                     <span className={`rounded-full px-2.5 py-1 ring-1 ${s === "Policy" ? "bg-accent/12 text-accent ring-accent/30" : "bg-surface ring-line"}`}>{s}</span>
@@ -605,7 +583,7 @@ function LiveNumbers({ onState }: { onState: (s: LiveState) => void }) {
 }
 
 const MEASURED: [string, string][] = [
-  ["0.53 to 0.74 s", "to hear a Caller's Response, on smoke Calls with every prompt pre-voiced"],
+  ["0.53 to 0.74 s", "to hear a Caller’s Response, on smoke Calls with every prompt pre-voiced"],
   ["75 to 95 s", "from a cold start to Ready, with every model loaded offline"],
   ["7 to 19 ms", "to serve a pre-voiced Voice Agent line"],
 ];
@@ -616,7 +594,6 @@ function Live() {
     <section className="border-t border-line">
       <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 md:py-28 lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-14">
         <div>
-          <Eyebrow n="05">Evidence</Eyebrow>
           <Reveal className="mb-8 flex flex-wrap items-center gap-x-4 gap-y-2">
             <h2 className={H2}>Live from this verifier</h2>
             {state === "live" && (
@@ -662,8 +639,8 @@ const RULES: { title: string; body: string; source: [string, string] }[] = [
 ];
 
 const DEPLOY: [string, string][] = [
-  ["On the bank's own servers", "Designed to run on-premises or in the bank's own cloud. Response audio is scored in memory and discarded."],
-  ["Works offline", "Speech models, the Voice Agent's voice and the web app load locally. Without internet, understanding falls back to keyword rules."],
+  ["On the bank’s own servers", "Designed to run on-premises or in the bank’s own cloud. Response audio is scored in memory and discarded."],
+  ["Works offline", "Speech models, the Voice Agent’s voice and the web app load locally. Without internet, understanding falls back to keyword rules."],
   ["Joins the existing phone line", "Today Calls arrive over WebRTC through a self-hosted LiveKit server. A bank would add a SIP trunk from its telephony; Verification does not change."],
   ["Core banking stays in charge", "It acts only on a valid, unredeemed Verification Receipt, which any bank system can check with a standard JWT library."],
 ];
@@ -673,7 +650,6 @@ function Adoption() {
     <section className="border-t border-line bg-surface/40">
       <div className="mx-auto max-w-7xl px-4 py-20 md:py-28">
         <Reveal>
-          <Eyebrow n="06">Adoption</Eyebrow>
           <h2 className={`${H2} max-w-[22ch]`}>Why a bank can adopt it</h2>
         </Reveal>
         <div className="mt-14 grid gap-14 md:grid-cols-2 md:gap-16">
@@ -727,8 +703,8 @@ function FinalCta() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3 md:justify-end">
-            <Link to="/demo" className="group btn btn-on-brand btn-lg">
-              Open the demo <ArrowRight size={18} weight="bold" className="nudge group-hover:translate-x-0.5" />
+            <Link to="/demo" className="btn btn-on-brand btn-lg">
+              Open the demo
             </Link>
             <Link to="/console" className="btn btn-outline-on-brand btn-lg">Open the Console</Link>
           </div>
@@ -761,7 +737,7 @@ export default function LandingPage() {
           <div className="flex flex-col gap-4">
             <Logo size={36} />
             <p className="max-w-[36ch] font-display text-2xl font-medium leading-snug tracking-[-0.015em]">
-              <b lang="hi" className="font-semibold">प्रत्यक्ष</b>: perceived directly, with one's own senses.
+              <b lang="hi" className="font-semibold">प्रत्यक्ष</b>: perceived directly, with one’s own senses.
             </p>
           </div>
           <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm" aria-label="Pratyaksh pages">
@@ -771,7 +747,7 @@ export default function LandingPage() {
           </nav>
         </div>
         <div className="border-t border-line">
-          <p className="eyebrow mx-auto flex max-w-7xl px-4 py-5">Team Omnitrons · FET Aavishkar 2026</p>
+          <p className="mx-auto max-w-7xl px-4 py-5 text-sm text-ink-soft">Team Omnitrons, FET Aavishkar 2026</p>
         </div>
       </footer>
     </div>

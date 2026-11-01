@@ -1,14 +1,17 @@
 """One-terminal Clone player for the live demo (replaces juggling two play_clip windows).
 
-FOR THE DEMO / EVAL RUN ONLY, with the written consent of the person being cloned.
+FOR THE DEMO / EVAL RUN ONLY, with the consent of the person being cloned.
 
 A human still drives every line — this just puts the fixed lines on number keys and does the
 Whisper Phrase lookup in the same window, so there is one terminal, not two. It never joins the
 Call or presses anything itself; the operator opens the Caller page, presses Call, and plays each
 Clone line here as the Voice Agent asks for it.
 
+Every line needs a Consent Pass for security testing, checked with the verifier each time, so
+the owner can stop this tool from their phone mid-Call. Copy the pass from the Consent tab.
+
     python demo_clone.py --manifest E:\\AVISHKAR\\tmp\\clone-bank\\kamlesh-hi\\manifest.csv \\
-        --device "CABLE Input"
+        --device "CABLE Input" --consent-pass <the pass>
 
 At the prompt:
     me           play the consented person's REAL voice (the reference recording) on the laptop speakers
@@ -25,7 +28,9 @@ during the Call too, enable "Listen to this device" on CABLE Output in Windows S
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -49,16 +54,28 @@ def _digits_as_words(text: str) -> str:
     return " ".join(HI_DIGITS[int(w)] if w.isdigit() and len(w) == 1 else w for w in text.split())
 
 
+def _allowed(verifier: str, consent_pass: str, requester: str, clip: str) -> tuple[bool, str]:
+    """May this line play? Asked once per line, and refused if the verifier cannot be reached."""
+    body = {"consent_pass": consent_pass, "requester": requester, "purpose": "security_test", "clip": clip}
+    req = urllib.request.Request(f"{verifier.rstrip('/')}/v1/voice-consents/authorize", json.dumps(body).encode(),
+                                 {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as r:
+            decision = json.load(r)
+    except OSError as exc:
+        return False, f"the verifier could not be reached ({exc})"
+    return bool(decision.get("allowed")), str(decision.get("reason", ""))
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--manifest", required=True, help="clip bank manifest.csv (make_clone_bank.py)")
     p.add_argument("--device", default="CABLE Input", help='output device for the Call (default "CABLE Input")')
     p.add_argument("--reference", default=REFERENCE, help="the consented real-voice recording `me` plays")
-    p.add_argument("--i-have-consent", action="store_true",
-                   help="attest that the cloned person consented in writing (or the reference is synthetic)")
+    p.add_argument("--consent-pass", required=True, help="the Consent Pass, from the Consent tab")
+    p.add_argument("--requester", default="Omnitrons Lab", help="who the pass was given to")
+    p.add_argument("--verifier", default="http://127.0.0.1:8000", help="the verifier that checks the pass")
     args = p.parse_args()
-    if not args.i_have_consent:
-        sys.exit("Refusing to run without --i-have-consent (see attacker/README.md).")
     # Hindi lines are printed; a Windows console's default code page cannot encode Devanagari.
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stdin.reconfigure(encoding="utf-8", errors="replace")
@@ -80,6 +97,10 @@ def main() -> None:
     def play(path: str, device) -> None:
         if not Path(path).is_file():
             print(f"  !! clip file missing: {path}")
+            return
+        ok, reason = _allowed(args.verifier, args.consent_pass, args.requester, Path(path).name)
+        if not ok:
+            print(f"  !! REFUSED: {reason}", flush=True)
             return
         data, rate = sf.read(path, dtype="float32")
         sd.play(data, rate, device=device)

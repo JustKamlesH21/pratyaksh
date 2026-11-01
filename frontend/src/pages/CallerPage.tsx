@@ -2,7 +2,7 @@ import { AudioPresets, Room, RoomEvent, Track, type AudioCaptureOptions, type Re
 import { type CSSProperties, Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
-  Bank, ChatText, CheckCircle, CircleNotch, DeviceMobile, Headset, type Icon, Microphone, MicrophoneSlash, PhoneCall,
+  Bank, ChatText, CheckCircle, CircleNotch, DeviceMobile, Headset, type Icon, Microphone, PhoneCall,
   PhoneDisconnect, ShieldCheck, ShieldSlash, SlidersHorizontal, SpeakerSimpleLow, User, Warning, XCircle,
 } from "@phosphor-icons/react";
 import { api } from "../api";
@@ -187,7 +187,7 @@ type Phase = "waiting" | "bank" | "listening" | "checking" | "your-turn";
 
 const PHASE_TEXT: Record<Phase, string> = {
   waiting: "Connecting to your bank…",
-  bank: "Bank is speaking, please wait",
+  bank: "Bank is speaking", // one line, so the Challenge below it never jumps when the turn changes
   listening: "Listening…",
   checking: "Checking…",
   "your-turn": "Your turn",
@@ -237,7 +237,7 @@ function ending(outcome: Outcome | null): { badge: string | null; title: string;
     };
   if (outcome && BLOCKED.includes(outcome))
     return {
-      badge: "BLOCKED",
+      badge: null, // the title already says it
       title: "Call blocked",
       text:
         outcome === "declined_in_app"
@@ -308,9 +308,7 @@ function CallStatus({ outcome }: { outcome: Outcome | null }) {
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-ink-soft">
-      <Bank size={13} aria-hidden /> Your bank · verifying you
-    </span>
+    <span className="whitespace-nowrap text-xs font-medium text-ink-soft">Verifying you</span>
   );
 }
 
@@ -584,7 +582,7 @@ export default function CallerPage() {
         </p>
       )}
       {unnamed && (
-        <button className="self-start text-xs font-semibold text-accent underline" onClick={() => void listMics(true)}>
+        <button className="min-h-11 self-start text-xs font-semibold text-accent underline" onClick={() => void listMics(true)}>
           Show microphone names
         </button>
       )}
@@ -595,9 +593,9 @@ export default function CallerPage() {
     <p className="flex items-start gap-1.5 text-xs text-ink-soft" title="What the browser applied to the microphone">
       <Microphone size={14} className="mt-0.5 shrink-0" aria-hidden />
       <span>
-        {capture.device} · noise suppression {onOff(capture.noiseSuppression)} · auto gain{" "}
-        {onOff(capture.autoGainControl)} · echo cancellation {onOff(capture.echoCancellation)}
-        {capture.sampleRate ? ` · ${capture.sampleRate / 1000} kHz` : ""}
+        {capture.device}: noise suppression {onOff(capture.noiseSuppression)}, auto gain{" "}
+        {onOff(capture.autoGainControl)}, echo cancellation {onOff(capture.echoCancellation)}
+        {capture.sampleRate ? `, ${capture.sampleRate / 1000} kHz` : ""}
       </span>
     </p>
   );
@@ -653,14 +651,17 @@ export default function CallerPage() {
           >
             <PhoneCall size={24} weight="fill" aria-hidden /> {status === "connecting" ? "Connecting…" : "Call"}
           </button>
-          <details className="text-center text-sm text-ink-soft">
-            <summary className="cursor-pointer font-semibold">Red-team mode</summary>
-            <p className="mt-2 text-left text-xs">
-              On the attacker laptop, choose the victim as "Calling as", pick{" "}
-              <b>CABLE Output (VB-Audio Virtual Cable)</b> as the Microphone. <code>attacker/demo_clone.py</code> plays
-              the Clone into that cable, so the Voice Agent hears the Clone, not you.
-            </p>
-          </details>
+          {/* For the operator on the Caller tab; a link from the Demo hub is a Customer's call and never shows it. */}
+          {!params.get("customer") && (
+            <details className="text-center text-sm text-ink-soft">
+              <summary className="cursor-pointer py-3 font-semibold">Red-team mode</summary>
+              <p className="mt-2 text-left text-xs">
+                On the attacker laptop, choose the victim as "Calling as", pick{" "}
+                <b>CABLE Output (VB-Audio Virtual Cable)</b> as the Microphone. <code>attacker/demo_clone.py</code> plays
+                the Clone into that cable, so the Voice Agent hears the Clone, not you.
+              </p>
+            </details>
+          )}
         </div>
       </div>
     );
@@ -711,8 +712,8 @@ export default function CallerPage() {
           <h1 className="font-display text-[2.125rem] font-semibold leading-[1.05] tracking-tight">{end.title}</h1>
           <p className="max-w-[32ch] text-base text-ink-soft">{end.text}</p>
           {startedAt && (
-            <p className="font-mono text-sm text-ink-soft">
-              {name ? `${name}, ` : ""}call lasted {clock((endedAt ?? Date.now()) - startedAt)}
+            <p className="text-sm text-ink-soft">
+              {name ? `${name}, ` : ""}call lasted <span className="font-mono">{clock((endedAt ?? Date.now()) - startedAt)}</span>
             </p>
           )}
         </div>
@@ -746,16 +747,6 @@ export default function CallerPage() {
   // The dock's meter follows the microphone whenever it is open, so a silent mic shows before the Caller speaks.
   const micBars = [0.55, 0.85, 1, 0.75, 0.5].map((k) => (micHeld ? 0 : Math.min(1, meter * k * 1.4)));
   const end = outcome ? ending(outcome) : null;
-  const turnHint =
-    phase === "bank"
-      ? "Your microphone is paused"
-      : phase === "your-turn" || phase === "listening"
-        ? challenge?.kind === "whisper_phrase"
-          ? "Whisper the words below"
-          : challenge?.kind === "possession_code"
-            ? "Read the code out loud"
-            : null
-        : null;
 
   // The whole screen, fixed to the visible viewport: in Safari the toolbars come and go, and Hang up must
   // never slide under them. Only the conversation scrolls.
@@ -766,7 +757,7 @@ export default function CallerPage() {
       <header className="flex items-center gap-3 px-1 pb-3">
         <Logo size={40} />
         <div className="min-w-0 flex-1">
-          <p className="font-semibold leading-tight">Your bank</p>
+          <p className="whitespace-nowrap font-semibold leading-tight">Your bank</p>
           <p className="truncate text-[0.8125rem] text-ink-soft">{name ? `Calling as ${name}` : "Connected"}</p>
         </div>
         <div className="flex flex-col items-end gap-0.5">
@@ -775,33 +766,34 @@ export default function CallerPage() {
         </div>
       </header>
 
-      {/* whose turn it is: one row, so the Challenge and the conversation keep the room */}
-      <div className="flex items-center gap-3.5 px-1.5 py-3">
-        <div className="relative grid size-13 shrink-0 place-items-center">
-          <span className={`speaking-ring absolute inset-0 rounded-full ${PHASE_TONE[phase].ring}`} aria-hidden />
-          <span className={`relative grid size-13 place-items-center rounded-full ring-1 ${PHASE_TONE[phase].orb}`}>
-            {phase === "bank" ? (
-              <VoiceBars active className="is-compact" />
-            ) : phase === "checking" || phase === "waiting" ? (
-              <CircleNotch size={24} weight="bold" className="spinner" aria-hidden />
-            ) : phase === "your-turn" ? (
-              <Microphone size={24} weight="fill" aria-hidden />
-            ) : (
-              <VoiceBars active={youTalking} levels={bars} className="is-compact" />
-            )}
-          </span>
+      {/* whose turn it is: one row of fixed height, so the Challenge and the conversation keep the room and
+          never move as the turn changes. Gone once the bank decides: nobody's turn on a closed Call. */}
+      {!end && (
+        <div className="flex items-center gap-3.5 px-1.5 py-3">
+          <div className="relative grid size-13 shrink-0 place-items-center">
+            <span className={`speaking-ring absolute inset-0 rounded-full ${PHASE_TONE[phase].ring}`} aria-hidden />
+            <span className={`relative grid size-13 place-items-center rounded-full ring-1 ${PHASE_TONE[phase].orb}`}>
+              {phase === "bank" ? (
+                <VoiceBars active className="is-compact" />
+              ) : phase === "checking" || phase === "waiting" ? (
+                <CircleNotch size={24} weight="bold" className="spinner" aria-hidden />
+              ) : phase === "your-turn" ? (
+                <Microphone size={24} weight="fill" aria-hidden />
+              ) : (
+                <VoiceBars active={youTalking} levels={bars} className="is-compact" />
+              )}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <p className={`font-display text-2xl font-semibold leading-tight tracking-tight ${PHASE_TONE[phase].text}`} aria-live="polite">
+              {PHASE_TEXT[phase]}
+            </p>
+            <p className="min-h-5 text-sm text-ink-soft">
+              {phase === "bank" ? "Your microphone is paused" : phase === "your-turn" || phase === "listening" ? "Your microphone is on" : ""}
+            </p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <p
-            className={`inline-flex items-center gap-2 font-display text-2xl font-semibold leading-tight tracking-tight ${PHASE_TONE[phase].text}`}
-            aria-live="polite"
-          >
-            {phase === "bank" && <MicrophoneSlash size={22} aria-hidden />}
-            {PHASE_TEXT[phase]}
-          </p>
-          {turnHint && <p className="text-sm text-ink-soft">{turnHint}</p>}
-        </div>
-      </div>
+      )}
 
       {/* the open Challenge, or the Outcome as soon as the bank decides */}
       {end ? (
@@ -814,23 +806,23 @@ export default function CallerPage() {
         </div>
       ) : challenge?.kind === "whisper_phrase" ? (
         <div className="motion-pop flex flex-col gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-4" aria-live="polite">
-          <p className="text-sm font-semibold text-accent">Whisper these words</p>
-          {/* The words appear on the Caller's turn: shown earlier, people read along while the microphone is held
-              and the start of the whisper is lost (Oct 31, replies heard 32-44 ms after it opened). */}
-          {bankSpeaking ? (
-            <p className="font-display text-2xl font-semibold leading-tight text-ink-soft">Listen first. The words appear on your turn.</p>
-          ) : (
-            <p key={challenge.words} className="font-display text-phrase font-semibold leading-tight text-ink break-words" lang={scriptLang(challenge.words)}>
-              {challenge.words.split(/\s+/).map((w, i, all) => (
-                <span key={i}>
-                  <span className="word" style={{ "--i": i } as CSSProperties}>{w}</span>
-                  {i < all.length - 1 ? " " : ""}
-                </span>
-              ))}
-            </p>
-          )}
+          <p className="text-sm font-semibold text-accent">{bankSpeaking ? "Your words" : "Whisper these words now"}</p>
+          {/* Always on screen: hiding the words until the Caller's turn left them missing whenever the page still
+              thought the bank was speaking (Oct 31, a loud hall). Dimmed until the microphone opens instead. */}
+          <p
+            key={challenge.words}
+            className={`font-display text-phrase font-semibold leading-tight break-words transition-opacity ${bankSpeaking ? "text-ink-soft opacity-60" : "text-ink"}`}
+            lang={scriptLang(challenge.words)}
+          >
+            {challenge.words.split(/\s+/).map((w, i, all) => (
+              <span key={i}>
+                <span className="word" style={{ "--i": i } as CSSProperties}>{w}</span>
+                {i < all.length - 1 ? " " : ""}
+              </span>
+            ))}
+          </p>
           <p className="inline-flex items-center gap-2 self-start rounded-full bg-surface px-3 py-1.5 text-sm font-semibold text-ink ring-1 ring-line">
-            <SpeakerSimpleLow size={16} weight="bold" aria-hidden /> Speak softly, close to the phone
+            <SpeakerSimpleLow size={16} weight="bold" aria-hidden /> {bankSpeaking ? "Wait for the bank to finish" : "Speak softly, close to the phone"}
           </p>
         </div>
       ) : challenge?.kind === "possession_code" ? (

@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     receipt_key_path: str = "./data/keys/receipt-ed25519.pem"
     receipt_ttl_seconds: int = 600  # how long core banking may act on a receipt
 
+    # Voice Consent (ADR-0007): Consent Passes have their own key, so a pass can never pass as a receipt.
+    consent_key_path: str = "./data/keys/consent-ed25519.pem"
+    # The consented recordings the Consent page may release: attacker/make_clone_bank.py's manifest (its spoken
+    # lines) and the owner's real voice. Empty: the page plays nothing, the rest of Voice Consent still works.
+    clone_manifest: str = ""
+    clone_reference: str = ""
+
     # Privacy (ADR-0003): keep Response audio only when collecting Eval Run data with consent.
     retain_audio: bool = False
     audio_dir: str = "./data/recordings"

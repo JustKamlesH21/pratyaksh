@@ -164,6 +164,54 @@ export interface Inbox {
   messages: DeviceMessage[];
 }
 
+export interface VoiceConsent {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  requester: string;
+  purpose: string;
+  purpose_label: string;
+  /** What the owner reads aloud, with its fresh number in words. */
+  statement: string;
+  status: "pending" | "active" | "used_up" | "declined" | "revoked" | "lapsed" | "expired";
+  minutes: number;
+  max_uses: number;
+  uses: number;
+  /** Until the request lapses (pending) or the consent ends (active). */
+  seconds_left: number;
+  created_at: string;
+  expires_at: string | null;
+  statement_match: number | null;
+  /** Only on the Consent page, and only while the consent is in force. */
+  consent_pass?: string | null;
+}
+
+export interface LedgerEvent {
+  seq: number;
+  kind:
+    | "consent_requested" | "consent_statement_failed" | "consent_granted" | "consent_declined" | "consent_revoked"
+    | "voice_use_allowed" | "voice_use_refused";
+  at: string;
+  hash: string;
+  requester?: string;
+  purpose?: string;
+  reason?: string;
+  customer_name?: string;
+}
+
+export interface MyVoice {
+  consents: VoiceConsent[];
+  refused: LedgerEvent[];
+}
+
+export interface ConsentOverview {
+  consents: VoiceConsent[];
+  ledger: LedgerEvent[];
+  ledger_intact: boolean;
+  purposes: { id: string; label: string }[];
+  clips: { id: string; kind: "real" | "clone"; label: string }[];
+}
+
 /** k of n, with a Wilson 95% confidence interval (null when n is 0). */
 export interface EvalRate {
   k: number;

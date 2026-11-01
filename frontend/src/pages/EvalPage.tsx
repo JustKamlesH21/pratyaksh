@@ -7,9 +7,22 @@ import { REQUEST_LABEL } from "../types";
 
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "-" : `${Math.round(v * 100)}%`);
 
-/** "9/10 · 95% CI 60% to 98%", or "-" when nothing was measured. */
+/** "9/10, 95% CI 60% to 98%", or "-" when nothing was measured. */
 const counted = (r: EvalRate | undefined) =>
-  !r || !r.n ? "-" : `${r.k}/${r.n}${r.ci95 ? ` · 95% CI ${pct(r.ci95[0])} to ${pct(r.ci95[1])}` : ""}`;
+  !r || !r.n ? "-" : `${r.k}/${r.n}${r.ci95 ? `, 95% CI ${pct(r.ci95[0])} to ${pct(r.ci95[1])}` : ""}`;
+
+const LANGUAGE_NAME: Record<string, string> = { en: "English", hi: "Hindi", kn: "Kannada" };
+
+/** One rate in a table: the figure first, so a column can be compared at a glance, its evidence beneath. */
+function RateCell({ rate }: { rate: EvalRate }) {
+  if (!rate.n) return <td className="py-2 text-ink-soft">-</td>;
+  return (
+    <td className="py-2">
+      <span className="block font-semibold">{pct(rate.rate)}</span>
+      <span className="block font-mono text-xs text-ink-soft">{counted(rate)}</span>
+    </td>
+  );
+}
 
 const FACTOR_LABEL: Record<string, string> = {
   possession_code: "Possession Code",
@@ -56,26 +69,27 @@ export default function EvalPage() {
   const caught = Object.entries(s.caught_by ?? {});
   const groups = [
     ...Object.entries(s.by_channel ?? {}).map(([k, g]) => [`Channel: ${k}`, g] as const),
-    ...Object.entries(s.by_language ?? {}).map(([k, g]) => [`Language: ${k}`, g] as const),
+    ...Object.entries(s.by_language ?? {}).map(([k, g]) => [`Language: ${LANGUAGE_NAME[k] ?? k}`, g] as const),
   ];
   const showGroups = Object.keys(s.by_channel ?? {}).length > 1 || Object.keys(s.by_language ?? {}).length > 1;
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader eyebrow="Eval Run" title={`Eval Run #${run.id}`}>
-        {run.label} · {new Date(run.created_at + "Z").toLocaleString()} · {s.real_calls} real, {s.clone_calls} Clone Calls
+      <PageHeader title={`Eval Run #${run.id}`}>
+        {run.label}, {new Date(run.created_at + "Z").toLocaleString()}: {s.real_calls} real and {s.clone_calls} Clone Calls
       </PageHeader>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* One ruled tally, cut from one surface: the figures compare across, not as four separate tiles. */}
+      <div className="elev-1 grid gap-px overflow-hidden rounded-2xl border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
         <Stat i={0} label="Catch Rate" value={pct(s.catch_rate)}
           note={s.catch ? `${counted(s.catch)} Clone Calls BLOCKed` : `share of ${s.clone_calls} Clone calls that ended in BLOCK`} />
         <Stat i={1} label="False Reject Rate" value={pct(s.false_reject_rate)}
           note={s.false_reject ? `${counted(s.false_reject)} real Calls not PASSed` : `share of ${s.real_calls} real calls not PASSed`} />
         <Stat i={2} label="Added Time (real)"
           value={added?.median != null ? `${added.median.toFixed(1)} s` : s.avg_added_seconds_real === null ? "-" : `${s.avg_added_seconds_real.toFixed(1)} s`}
-          note={added?.median != null ? `median per real Call · p95 ${added.p95} s · max ${added.max} s` : "average per real call"} />
+          note={added?.median != null ? `median per real Call, p95 ${added.p95} s, max ${added.max} s` : "average per real call"} />
         {hearing && hearing.n ? (
           <Stat i={3} label="Hearing time" value={`${hearing.median} ms`}
-            note={`median per Response${s.live_hearing_ms ? " (live Calls)" : " (Eval Run)"} · p95 ${hearing.p95} ms · max ${hearing.max} ms`} />
+            note={`median per Response${s.live_hearing_ms ? " (live Calls)" : " (Eval Run)"}, p95 ${hearing.p95} ms, max ${hearing.max} ms`} />
         ) : (
           <Stat i={3} label="Calls" value={String(s.calls)} note={`${s.real_calls} real, ${s.clone_calls} clone`} />
         )}
@@ -108,7 +122,7 @@ export default function EvalPage() {
                       <span className="text-ink">{FACTOR_LABEL[factor] ?? factor}</span>
                       <span className="font-mono text-ink-soft">
                         {n}/{blocks}
-                        {s.caught_by_only?.[factor] ? ` · only factor in ${s.caught_by_only[factor]}` : ""}
+                        {s.caught_by_only?.[factor] ? `, only factor in ${s.caught_by_only[factor]}` : ""}
                       </span>
                     </div>
                     <div className="mt-1 h-2 rounded-full bg-sunken" aria-hidden="true">
@@ -144,7 +158,7 @@ export default function EvalPage() {
       {showGroups && (
         <Card title="By channel and language">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="w-full min-w-[34rem] text-left text-sm [&_td]:pr-4 [&_th]:pr-4">
               <thead className="text-xs font-semibold text-ink-soft">
                 <tr><th className="py-2">Group</th><th>False Reject Rate</th><th>Catch Rate</th></tr>
               </thead>
@@ -152,8 +166,8 @@ export default function EvalPage() {
                 {groups.map(([name, g]) => (
                   <tr key={name} className="border-t border-line">
                     <td className="py-2 text-ink">{name}</td>
-                    <td className="font-mono text-xs">{g.false_reject.n ? `${pct(g.false_reject.rate)} · ${counted(g.false_reject)}` : "-"}</td>
-                    <td className="font-mono text-xs">{g.catch.n ? `${pct(g.catch.rate)} · ${counted(g.catch)}` : "-"}</td>
+                    <RateCell rate={g.false_reject} />
+                    <RateCell rate={g.catch} />
                   </tr>
                 ))}
               </tbody>
@@ -163,8 +177,9 @@ export default function EvalPage() {
       )}
 
       <Card title="Per call">
+        <p className="mb-2 text-xs text-ink-soft md:hidden">Swipe the table to see every column.</p>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[50rem] text-left text-sm [&_td]:pr-4 [&_th]:whitespace-nowrap [&_th]:pr-4">
             <thead className="text-xs font-semibold text-ink-soft">
               <tr>
                 <th className="py-2">Session</th>
@@ -186,12 +201,12 @@ export default function EvalPage() {
                     <td className="py-2 font-mono text-xs">{r.session_id}</td>
                     <td>
                       <span className={r.label === "clone" ? "font-semibold text-block" : "font-semibold text-pass"}>{r.label}</span>
-                      {tags.length > 0 && <span className="block text-xs text-ink-soft">{tags.join(" · ")}</span>}
+                      {tags.length > 0 && <span className="block text-xs text-ink-soft">{tags.join(", ")}</span>}
                     </td>
                     <td>{REQUEST_LABEL[r.request]}</td>
                     <td><VerdictBadge verdict={r.verdict} /></td>
                     <td className="font-mono">{r.liveness?.toFixed(2) ?? "-"}</td>
-                    <td className="font-mono">{r.added_seconds.toFixed(1)} s</td>
+                    <td>{r.added_seconds.toFixed(1)} s</td>
                     <td className="max-w-md truncate text-ink-soft" title={r.reasons.join("\n")}>
                       {r.caught_by && r.caught_by.length > 0
                         ? r.caught_by.map((f) => FACTOR_LABEL[f] ?? f).join(", ")
@@ -210,10 +225,10 @@ export default function EvalPage() {
 
 function Stat({ i, label, value, note }: { i: number; label: string; value: string; note: string }) {
   return (
-    <div className="motion-enter elev-1 flex flex-col rounded-2xl border border-line bg-surface p-5" style={{ "--i": i } as CSSProperties}>
-      <p className="eyebrow">{label}</p>
-      <p className="mt-4 font-mono text-[2.75rem] font-medium leading-none tracking-[-0.04em] text-ink">{value}</p>
-      <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-soft">{note}</p>
+    <div className="motion-enter flex flex-col bg-surface p-5" style={{ "--i": i } as CSSProperties}>
+      <p className="text-sm font-medium text-ink-soft">{label}</p>
+      <p className="mt-3 font-display text-5xl font-medium leading-none tracking-[-0.035em] text-ink">{value}</p>
+      <p className="mt-3 text-xs leading-relaxed text-ink-soft">{note}</p>
     </div>
   );
 }

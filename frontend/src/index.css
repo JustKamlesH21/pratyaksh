@@ -1,3 +1,15 @@
+/* Hallmark · checked: 2026-11-01 · genre: modern-minimal (inferred)
+ * floor: 0 FAIL · fixed: 34, 54, 62, 63, 67, 19, 18 · structural: 1 printed (58, the Adoption section's 204 words)
+ * built: the project · redesign: polish · v2.0.0 */
+/* Hallmark · waive 82 · bars differ in height and follow who is speaking · the hero waveform is a voice on the line and counts nothing */
+/* Hallmark · waive 39b · one 64px Call button, in the thumb zone of a phone screen · the Caller presses Call one-handed, so it stays larger than the app range */
+/* Hallmark · dismissed 41 · the paired ink token here is --color-on-accent, checked by scripts/contrast.mjs */
+/* Hallmark · dismissed 49 · Call as Rahul is a .btn, and .btn already sets white-space: nowrap */
+/* Hallmark · dismissed 77 · the page has eight sections; the render tier counted one */
+/* Hallmark · answered F4 · five button recipes by meaning, with one .btn-primary per group on every page */
+/* Hallmark · answered F19 · the Verdict word stays at 700 so it outranks every other head on the projector */
+/* Hallmark · reworded "Around every Verdict" to "Safeguards around every Verdict" · 54 folds the eyebrow into its heading */
+
 @import "@fontsource-variable/geist/wght.css";
 @import "@fontsource-variable/geist-mono/wght.css";
 @import "@fontsource-variable/bricolage-grotesque/opsz.css"; /* weight + optical size: headlines get display cuts */
@@ -88,6 +100,7 @@
        after Stripe's two levels). Dark redefines them as a top highlight plus a deep tinted drop. */
     --elev-1: 0 1px 2px oklch(0.3 0.04 250 / 0.06), 0 1px 3px oklch(0.3 0.04 250 / 0.08);
     --elev-2: 0 2px 6px -2px oklch(0.3 0.05 250 / 0.08), 0 24px 48px -20px oklch(0.3 0.06 250 / 0.22);
+    --edge-lit: inset 0 1px 0 oklch(1 0 0 / 0.22); /* the lit top edge of a filled pill */
   }
 
   /* Dark is the default (set before first paint in index.html); "system" follows the OS. */
@@ -108,8 +121,8 @@
       --color-pass-fill: oklch(0.5 0.11 158);
       --color-stepup-fill: oklch(0.51 0.105 62);
       --color-block-fill: oklch(0.515 0.165 27);
-      --elev-1: inset 0 1px 0 oklch(1 0 0 / 0.04);
-      --elev-2: inset 0 1px 0 oklch(1 0 0 / 0.06), 0 24px 48px -20px oklch(0.05 0.02 250 / 0.7);
+      --elev-1: inset 0 1px 0 oklch(1 0 0 / 0.06);
+      --elev-2: inset 0 1px 0 oklch(1 0 0 / 0.1), 0 24px 48px -20px oklch(0.05 0.02 250 / 0.7);
       color-scheme: dark;
     }
   }
@@ -129,8 +142,8 @@
     --color-pass-fill: oklch(0.5 0.11 158);
     --color-stepup-fill: oklch(0.51 0.105 62);
     --color-block-fill: oklch(0.515 0.165 27);
-    --elev-1: inset 0 1px 0 oklch(1 0 0 / 0.04);
-    --elev-2: inset 0 1px 0 oklch(1 0 0 / 0.06), 0 24px 48px -20px oklch(0.05 0.02 250 / 0.7);
+    --elev-1: inset 0 1px 0 oklch(1 0 0 / 0.06);
+    --elev-2: inset 0 1px 0 oklch(1 0 0 / 0.1), 0 24px 48px -20px oklch(0.05 0.02 250 / 0.7);
     color-scheme: dark;
   }
   :root[data-theme="light"] {
@@ -146,10 +159,33 @@
     font-size: 112.5%; /* a 1280x800 projector */
     --dur-sweep: var(--dur-emphasis);
   }
+  /* A full HD projector has the room: the Verdict word takes it. */
+  @media (min-width: 100rem) {
+    :root[data-stage] {
+      --text-ribbon: 9.5rem;
+    }
+  }
 
+  :root {
+    caret-color: var(--color-accent);
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+  html,
+  body {
+    overflow-x: clip; /* never a sideways scroll at phone width; clip, so sticky chrome keeps working */
+  }
   body {
     @apply bg-canvas text-ink font-sans antialiased;
     font-feature-settings: "tnum" 1; /* numbers do not jitter as Signals update */
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p,
+  li {
+    text-wrap: pretty;
   }
   code,
   kbd,
@@ -217,11 +253,18 @@
     padding: 0 1.5rem;
     font-size: 1rem;
   }
+  /* A finger needs 44px, whatever size the button looks on a laptop. */
+  @media (pointer: coarse) {
+    .btn:not(.btn-lg) {
+      min-height: 2.75rem;
+    }
+  }
   /* The one action that matters in a group. Hover mixes toward ink: darker in light, lighter in dark, so
      on-accent text only gains contrast. */
   .btn-primary {
     background: var(--color-accent);
     color: var(--color-on-accent);
+    box-shadow: var(--edge-lit);
   }
   .btn-primary:hover:not(:disabled) {
     background: color-mix(in oklab, var(--color-accent) 86%, var(--color-ink));
@@ -269,27 +312,11 @@
     border-color: var(--color-accent);
   }
 
-  /* Eyebrow: a small mono label above a heading that says where you are (section index, page kind).
-     Latin only: never put Hindi or Kannada in an eyebrow (uppercase and tracking break them). */
-  .eyebrow {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.625rem;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--color-ink-soft);
-  }
-  .eyebrow > b {
-    font-weight: 500;
-    color: var(--color-accent);
-  }
   /* Navy surfaces (the brand band): white text, a white pill as the one action. */
   .btn-on-brand {
     background: var(--color-on-fill);
     color: var(--color-brand);
+    box-shadow: var(--edge-lit);
   }
   .btn-on-brand:hover:not(:disabled) {
     background: color-mix(in oklab, var(--color-on-fill) 88%, var(--color-brand));
@@ -662,7 +689,7 @@
 .voice-bars {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 0.25rem;
   height: 2.5rem;
 }
 .voice-bars > span {
@@ -675,7 +702,7 @@
 }
 .voice-bars.is-compact {
   height: 1.625rem; /* inside the call screen's 52px turn orb */
-  gap: 3px;
+  gap: 0.125rem;
 }
 .voice-bars.is-compact > span {
   width: 4px;
@@ -726,11 +753,11 @@
   transition: transform 220ms var(--ease-arrive);
 }
 @media (prefers-reduced-motion: no-preference) {
-  :root:not([data-motion="reduce"]) .reveal:not(.is-visible) {
+  .js:not([data-motion="reduce"]) .reveal:not(.is-visible) {
     opacity: 0;
     transform: translateY(18px);
   }
-  :root:not([data-motion="reduce"]) .reveal:not(.is-visible) :is(.lp-line, .lp-digit) {
+  .js:not([data-motion="reduce"]) .reveal:not(.is-visible) :is(.lp-line, .lp-digit) {
     opacity: 0;
   }
 }
@@ -790,7 +817,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 3px;
+  gap: 0.125rem;
   height: 4.5rem;
 }
 .hero-wave > span {
@@ -811,19 +838,20 @@
 .hero-wave.is-whisper > span {
   --g: 0.38;
 }
+.hero-wave.is-held > span {
+  animation-play-state: paused;
+}
 .hero-wave.is-ring > span {
   transform: scaleY(0.09);
 }
 .hero-phone {
-  opacity: 0;
-  transform: translateY(28px);
   transition:
     opacity 500ms var(--ease-arrive),
     transform 800ms var(--ease-arrive);
 }
-.hero-phone.is-in {
-  opacity: 1;
-  transform: none;
+.js .hero-phone:not(.is-in) {
+  opacity: 0;
+  transform: translateY(28px);
 }
 .hero-card::before {
   content: "";

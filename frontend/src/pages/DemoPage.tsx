@@ -54,9 +54,9 @@ function useDemoCustomers(keyVersion: number, onLocked: () => void) {
   return { customers, error, refresh };
 }
 
-/** The Demo hub. With ?stage=1 it is the projector view: the Verdict Ribbon across the top third, the three
- *  Customers' phones below it, the Customer on the latest Call at full strength and the others stepped back,
- *  Possession Codes masked, and every laptop control (pairing links, Call buttons, Reset) hidden. */
+/** The Demo hub. With ?stage=1 it is the projector view: before a Call, the Verdict Ribbon over the three
+ *  Customers' phones; on a Call, the Ribbon beside that Customer's phone on one screen with the others stepped
+ *  down to a strip. Possession Codes masked, and every laptop control (pairing links, Call buttons, Reset) hidden. */
 export default function DemoPage() {
   const stage = useStage();
   const [keyVersion, setKeyVersion] = useState(0);
@@ -86,61 +86,80 @@ export default function DemoPage() {
   // The Ribbon follows the newest Call and holds its Verdict until the next Call starts.
   const latest = calls[0] ?? null;
   const subject = latest ? customers?.find((c) => c.id === latest.customer.id) : undefined;
+  const ribbon = (
+    <VerdictRibbon
+      call={latest}
+      name={subject?.name ?? latest?.customer.name ?? ""}
+      stage={stage}
+      connected={connected}
+      className={stage && latest ? "lg:h-full" : ""}
+    />
+  );
+  const cards = customers?.map((c) => (
+    <CustomerCard
+      key={c.id}
+      customer={c}
+      call={calls.find((x) => x.customer.id === c.id) ?? null}
+      stage={stage}
+      active={latest?.customer.id === c.id}
+      dim={stage && !!latest && latest.customer.id !== c.id}
+      featured={stage && latest?.customer.id === c.id}
+      onChanged={refresh}
+    />
+  ));
+
+  const pending = !customers ? (
+    <div className="grid gap-5 md:grid-cols-2 lg:col-span-full lg:grid-cols-3" aria-busy="true" aria-label="Loading Customers">
+      {[0, 1, 2].map((i) => <div key={i} className="skeleton h-[40rem] rounded-xl" />)}
+    </div>
+  ) : customers.length === 0 ? (
+    <p className="rounded-xl border border-line bg-surface p-6 text-sm text-ink-soft lg:col-span-full">
+      No Customers yet. Run <code>pratyaksh-seed</code> on the verifier to add the demo Customers.
+    </p>
+  ) : null;
+
+  // The projector's one beat, on one screen with no scrolling: the Verdict beside the real phone showing the
+  // Security Alert. The other Customers step down to a strip. One parent throughout, so no phone remounts.
+  if (stage)
+    return (
+      <div className={`flex flex-col gap-4 lg:grid lg:h-[calc(100dvh-2rem)] ${
+        latest ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,22rem)] lg:grid-rows-[minmax(0,1fr)_auto]" : "lg:grid-cols-3 lg:grid-rows-[auto_minmax(0,1fr)]"
+      }`}>
+        <div className={latest ? "min-h-0 lg:col-span-2" : "lg:col-span-3"}>{ribbon}</div>
+        {error && <div className="lg:col-span-full"><ErrorNote error={error} /></div>}
+        {pending}
+        {cards}
+      </div>
+    );
 
   return (
-    <div className={`flex flex-col ${stage ? "gap-4" : "gap-6"}`}>
-      {!stage && (
-        <PageHeader
-          eyebrow="Demo hub"
-          title="Every Customer, one screen"
-          actions={
-            <>
-              <LivePill connected={connected} />
-              <Link to="/console" className="btn btn-quiet">
-                <ShieldCheck size={16} aria-hidden /> Console
-              </Link>
-              <ResetDemo onDone={refresh} />
-            </>
-          }
-        >
-          Their Bank App, their Call and their Voice Pause. Place a Call from a card, read the Possession Code off that
-          Customer's phone, and lift a Voice Pause here. For the projector, open{" "}
-          <a href="/demo?stage=1" target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline-offset-4 hover:underline">
-            /demo?stage=1
-          </a>
-          .
-        </PageHeader>
-      )}
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Every Customer, one screen"
+        actions={
+          <>
+            <LivePill connected={connected} />
+            <Link to="/console" className="btn btn-quiet">
+              <ShieldCheck size={16} aria-hidden /> Console
+            </Link>
+            <ResetDemo onDone={refresh} />
+          </>
+        }
+      >
+        Place a Call from a card, read the Possession Code off that Customer's phone, and lift a Voice Pause here. For
+        the projector, open{" "}
+        <a href="/demo?stage=1" target="_blank" rel="noopener noreferrer" className="font-medium text-accent underline-offset-4 hover:underline">
+          /demo?stage=1
+        </a>
+        .
+      </PageHeader>
 
-      <VerdictRibbon call={latest} name={subject?.name ?? latest?.customer.name ?? ""} stage={stage} connected={connected} />
+      {ribbon}
 
       <ErrorNote error={error} />
 
-      {!customers && (
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading Customers">
-          {[0, 1, 2].map((i) => <div key={i} className="skeleton h-[40rem] rounded-xl" />)}
-        </div>
-      )}
-      {customers && customers.length === 0 && (
-        <p className="rounded-xl border border-line bg-surface p-6 text-sm text-ink-soft">
-          No Customers yet. Run <code>pratyaksh-seed</code> on the verifier to add the demo Customers.
-        </p>
-      )}
-      {customers && customers.length > 0 && (
-        <div className={`grid md:grid-cols-2 lg:grid-cols-3 ${stage ? "gap-6" : "gap-5"}`}>
-          {customers.map((c) => (
-            <CustomerCard
-              key={c.id}
-              customer={c}
-              call={calls.find((x) => x.customer.id === c.id) ?? null}
-              stage={stage}
-              active={latest?.customer.id === c.id}
-              dim={stage && !!latest && latest.customer.id !== c.id}
-              onChanged={refresh}
-            />
-          ))}
-        </div>
-      )}
+      {pending}
+      {cards && cards.length > 0 && <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{cards}</div>}
     </div>
   );
 }
@@ -172,13 +191,14 @@ function useDwell(n: number, ms: number): number {
 
 /** The projector's one large thing: the latest Call, Signal by Signal, then its Verdict. The same layout for
  *  PASS and BLOCK, so the contrast between them carries the story. */
-export function VerdictRibbon({ call, name, stage, connected = true }: {
+export function VerdictRibbon({ call, name, stage, connected = true, className = "" }: {
   call: CallView | null;
   name: string;
   stage: boolean;
   connected?: boolean;
+  className?: string;
 }) {
-  const pad = stage ? "min-h-[15rem] px-8 py-6" : "min-h-[9rem] px-5 py-4";
+  const pad = `${stage ? "min-h-[15rem] px-8 py-6" : "min-h-[9rem] px-5 py-4"} ${className}`;
   if (!call)
     return (
       <section aria-label="Verdict" aria-live="polite" className={`ribbon elev-1 flex flex-col justify-center gap-4 rounded-2xl border border-line bg-surface ${pad}`}>
@@ -207,12 +227,12 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
       aria-label="Verdict"
       aria-live="polite"
       data-verdict={verdict ?? undefined}
-      className={`ribbon flex flex-col gap-4 rounded-2xl border ${pad} ${
+      className={`ribbon flex flex-col gap-3 rounded-2xl border ${pad} ${
         verdict ? "elev-2 border-transparent text-on-fill" : "elev-1 border-line bg-surface text-ink"
       }`}
     >
       {/* who and what */}
-      <p className={`flex flex-wrap items-center gap-x-3 gap-y-1 font-medium ${stage ? "text-2xl" : "text-base"} ${verdict ? "text-on-fill/85" : "text-ink-soft"}`}>
+      <p className={`flex flex-wrap items-center gap-x-3 gap-y-1 font-medium ${stage ? "text-[1.375rem]" : "text-base"} ${verdict ? "text-on-fill/85" : "text-ink-soft"}`}>
         {live ? (
           <span className={`inline-flex items-center gap-2 font-semibold ${verdict ? "" : "text-accent"}`}>
             <span className="live-dot" aria-hidden /> In call
@@ -230,7 +250,7 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
 
       {/* the Verdict, or the step the Call is on */}
       {verdict && VIcon ? (
-        <div className="flex flex-col gap-2">
+        <div className={`flex flex-col gap-2 ${stage ? "flex-1 justify-center" : ""}`}>
           <p
             className="ribbon-word flex items-center gap-[0.18em] font-display font-bold leading-[0.95] tracking-[-0.03em]"
             style={{ fontSize: stage ? "var(--text-ribbon)" : "var(--text-ribbon-compact)" }}
@@ -238,7 +258,12 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
             <VIcon weight="fill" className={`size-[0.8em] shrink-0 ${verdict === "PASS" ? "ribbon-icon-spring" : ""}`} aria-hidden />
             {VERDICT_WORD[verdict]}
           </p>
-          <p className={`ribbon-word font-medium leading-snug ${stage ? "text-[2rem]" : "text-lg"}`}>{headline(call, first)}</p>
+          {/* A Reason can run to 155 characters ("no live microphone: ..."): it steps down, so nothing is clipped. */}
+          <p className={`ribbon-word font-medium leading-snug ${
+            !stage ? "text-lg" : headline(call, first).length > 90 ? "text-[clamp(1.375rem,1.7vw,2rem)]" : "text-[clamp(1.75rem,2.1vw,2.5rem)]"
+          }`}>
+            {headline(call, first)}
+          </p>
         </div>
       ) : (
         <LiveStep call={call} first={first} stage={stage} challengeOpen={live && call.state === "challenging" && !!challenge} />
@@ -263,24 +288,25 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
               </span>
               <span className="font-semibold">{t.label}</span>
               <span className="font-mono">{t.value}</span>
-              {t.need && <span className="font-mono text-[0.8em] opacity-80">{t.need}</span>}
+              {/* a 1280 projector needs the row for the longest Reason; the Console always shows the threshold */}
+              {t.need && <span className={`font-mono text-[0.875em] opacity-80 ${stage ? "hidden 2xl:inline" : ""}`}>{t.need}</span>}
             </li>
           ))}
           {spoof !== null && shown >= ticks.length && (
             <li
-              className={`tick inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1 sm:ml-auto ${
+              className={`tick inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1 ${
                 verdict ? "border-on-fill/50" : "border-line-strong text-ink-soft"
               }`}
               title="The spoof model flags some real whispers, so it never decides a Verdict."
             >
               <span>Spoof Score</span>
               <span className="font-mono">{spoof.toFixed(2)}</span>
-              <span className="text-[0.8em]">advisory, not used in the Verdict</span>
+              <span className="text-[0.875em]">{stage ? "advisory" : "advisory, not used in the Verdict"}</span>
             </li>
           )}
           {call.ai_voice && (
             <li
-              className={`tick inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1 sm:ml-auto ${
+              className={`tick inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1 ${
                 verdict ? "border-on-fill/50" : "border-line-strong text-ink-soft"
               }`}
               title={AI_VOICE_NOTE}
@@ -288,7 +314,7 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
               <span>AI voice check</span>
               <span className="font-semibold">{AI_VOICE_LABEL[call.ai_voice.label]}</span>
               <span className="font-mono">{call.ai_voice.score.toFixed(2)}</span>
-              <span className="text-[0.8em]">advisory</span>
+              <span className="text-[0.875em]">advisory</span>
             </li>
           )}
         </ul>
@@ -297,7 +323,7 @@ function RibbonBody({ call, name, stage, pad }: { call: CallView; name: string; 
       {by && (
         <p className={`flex flex-wrap items-center gap-3 ${stage ? "text-xl" : "text-sm"}`}>
           <span className="rounded-full bg-on-fill/15 px-3 py-1 font-semibold">Decided by: {FACTOR_LABEL[by]}</span>
-          {call.liveness !== null && <span className="font-mono">Liveness {call.liveness.toFixed(2)}</span>}
+          {call.liveness !== null && <span>Liveness {call.liveness.toFixed(2)}</span>}
         </p>
       )}
       {stage && <RibbonFooter decided={!!verdict} />}
@@ -348,12 +374,13 @@ function RibbonFooter({ decided }: { decided: boolean }) {
 
 /* ------------------------------------------------------------------ one Customer */
 
-function CustomerCard({ customer, call, stage, active, dim, onChanged }: {
+function CustomerCard({ customer, call, stage, active, dim, featured, onChanged }: {
   customer: DemoCustomer;
   call: CallView | null;
   stage: boolean;
   active: boolean;
   dim: boolean;
+  featured: boolean; // on the projector: this Customer's phone stands beside the Verdict
   onChanged: () => void;
 }) {
   const live = call !== null && call.state !== "closed";
@@ -363,12 +390,13 @@ function CustomerCard({ customer, call, stage, active, dim, onChanged }: {
   const tone = live ? "accent" : call?.verdict === "BLOCK" ? "block" : call?.verdict === "PASS" ? "pass" : null;
   const ring = { accent: "ring-2 ring-accent", block: "ring-2 ring-block", pass: "ring-2 ring-pass" };
   const text = { accent: "text-accent", block: "text-block", pass: "text-pass" };
+  const fills = stage && !dim; // on the projector a shown phone takes the height the screen leaves it
   return (
     <section
       aria-label={customer.name}
-      className={`tile flex min-w-0 flex-col gap-3 rounded-2xl border border-line bg-surface p-4 ${
+      className={`tile flex min-h-0 min-w-0 flex-col gap-3 rounded-2xl border border-line bg-surface p-4 ${
         tone && (active || !stage) ? ring[tone] : ""
-      } ${dim ? "is-dim" : ""}`}
+      } ${dim ? "is-dim" : ""} ${featured ? "lg:col-start-3 lg:row-span-2 lg:row-start-1" : ""}`}
     >
       {/* one arrival ring when this Customer's Call starts or gets its Verdict */}
       {tone && active && <span key={`${call?.id}-${call?.verdict ?? "live"}`} className={`ring-once ${text[tone]}`} aria-hidden />}
@@ -403,8 +431,16 @@ function CustomerCard({ customer, call, stage, active, dim, onChanged }: {
       {!stage && <CallState call={call} />}
       <VoicePause customer={customer} onLifted={onChanged} controls={!stage} />
 
-      <div className="mx-auto w-full max-w-[19rem]">
-        <BankApp customer={customer.id} device={customer.device_token} embedded maskCodes={stage} onAlertsDismissed={onChanged} />
+      {/* stays mounted when stepped down, so its Bank App keeps polling and nothing flashes */}
+      <div className={`mx-auto w-full ${fills ? "min-h-0 flex-1" : ""} ${featured ? "" : "max-w-[19rem]"} ${dim ? "hidden" : ""}`}>
+        <BankApp
+          customer={customer.id}
+          device={customer.device_token}
+          embedded
+          height={fills ? "h-[26rem] lg:h-full" : undefined}
+          maskCodes={stage}
+          onAlertsDismissed={onChanged}
+        />
       </div>
 
       {!stage && (
