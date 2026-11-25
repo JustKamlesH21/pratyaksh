@@ -1,9 +1,9 @@
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/banner-m.png"><img src="assets/readme/banner.svg" width="100%" alt="Pratyaksh, runner-up at FET Aavishkar 2026: tells a bank whether the caller is a live person holding the customer's phone, or an AI voice clone."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/banner-m.png?v=gold"><img src="assets/readme/banner.svg?v=gold" width="100%" alt="Pratyaksh, runner-up at FET Aavishkar 2026: tells a bank whether the caller is a live person holding the customer's phone, or an AI voice clone."></picture>
 </p>
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/award-m.png"><img src="assets/readme/award.svg" width="100%" alt="Hackathon result: runner-up, 2nd place, at FET Aavishkar 2026. Team Omnitrons, Cybersecurity."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/award-m.png?v=gold"><img src="assets/readme/award.svg?v=gold" width="100%" alt="Hackathon result: runner-up, 2nd place, at FET Aavishkar 2026. Team Omnitrons, Cybersecurity."></picture>
 </p>
 
 <p align="center"><b>Runner-up at FET Aavishkar 2026</b> · Team Omnitrons · Cybersecurity track<br>
@@ -16,13 +16,13 @@ Pratyaksh asks a different question: **is a live person holding the customer's r
 <p align="center"><a href="#same-voice-two-calls"><b>See two calls</b></a> · <a href="#how-a-call-works">How a call works</a> · <a href="#try-the-demo">Try the demo</a> · <a href="docs/SETUP.md">Setup guide</a> · <a href="docs/SECURITY.md">Security</a></p>
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/glance-m.png"><img src="assets/readme/glance.svg" width="100%" alt="At a glance. Built: Oct - Nov 2026; Made for: FET Aavishkar 2026, Team Omnitrons; Stack: FastAPI · LiveKit · MySQL · React; Result: Runner-up, 2nd place"></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/glance-m.png?v=gold"><img src="assets/readme/glance.svg?v=gold" width="100%" alt="At a glance. Built: Oct - Nov 2026; Made for: FET Aavishkar 2026, Team Omnitrons; Stack: FastAPI · LiveKit · MySQL · React; Result: Runner-up, 2nd place"></picture>
 </p>
 
 ## Same voice, two calls
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/two-calls-m.png"><img src="assets/readme/two-calls.svg" width="100%" alt="Same voice, two calls. The real customer asks to add a payee, whispers the random phrase in 1.5 to 2.9 seconds and reads the code from the paired Bank App: PASS, and a signed Verification Receipt is issued. The voice clone says the right words (Task Match 0.92) but scores 0.01 to 0.25 on whispering where 0.60 is needed: BLOCK, a Security Alert on the real customer's phone, and repeat calls are paused."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/two-calls-m.png?v=gold"><img src="assets/readme/two-calls.svg?v=gold" width="100%" alt="Same voice, two calls. The real customer asks to add a payee, whispers the random phrase in 1.5 to 2.9 seconds and reads the code from the paired Bank App: PASS, and a signed Verification Receipt is issued. The voice clone says the right words (Task Match 0.92) but scores 0.01 to 0.25 on whispering where 0.60 is needed: BLOCK, a Security Alert on the real customer's phone, and repeat calls are paused."></picture>
 </p>
 
 Text-to-speech and voice-cloning models speak; they don't whisper on demand. In the team's first test runs a synthetic caller said the right words but scored 0.01-0.25 on whispering, against the 0.60 needed, and was blocked. A clone run through a whisper filter can fake the whisper, which is why the second Challenge is a code that only shows on the customer's own phone.
@@ -38,7 +38,7 @@ Who would buy it, how it plugs into a bank and why RBI's 2025 rules point this w
 ## How a call works
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/how-it-works-m.png"><img src="assets/readme/how-it-works.svg" width="100%" alt="One call: the caller is asked live Challenges by the Voice Agent, the speech model and a whisper score measure Signals, policy.yaml turns them into a Verdict with Reasons."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/how-it-works-m.png?v=gold"><img src="assets/readme/how-it-works.svg?v=gold" width="100%" alt="One call: the caller is asked live Challenges by the Voice Agent, the speech model and a whisper score measure Signals, policy.yaml turns them into a Verdict with Reasons."></picture>
 </p>
 
 1. **Request.** The caller says what they want, in English, Hindi, Kannada or a mix. `policy.yaml` sets the Challenges: none for a balance check, two for a new payee, three for a SIM swap or a transfer over ₹5 lakh.
@@ -48,13 +48,13 @@ Who would buy it, how it plugs into a bank and why RBI's 2025 rules point this w
 5. **Record.** Every step goes on an insert-only, hash-chained Audit Trail, and a PASS comes with a signed, one-time Verification Receipt.
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/proof-m.png"><img src="assets/readme/proof.svg" width="100%" alt="In numbers: 1,344 equally likely Whisper Phrases; clone Whisper Scores of 0.01 to 0.25 where 0.60 is needed; 64 of 66 recorded human whispers detected; under 20 seconds of added time is the target for a real caller."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/proof-m.png?v=gold"><img src="assets/readme/proof.svg?v=gold" width="100%" alt="In numbers: 1,344 equally likely Whisper Phrases; clone Whisper Scores of 0.01 to 0.25 where 0.60 is needed; 64 of 66 recorded human whispers detected; under 20 seconds of added time is the target for a real caller."></picture>
 </p>
 
 ## Built to be trusted
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/trust-m.png"><img src="assets/readme/trust.svg" width="100%" alt="Built to be trusted. No voiceprint stored. The LLM never decides a Verdict. Tamper-evident, hash-chained audit trail. One-time signed receipts that core banking redeems once. A Security Alert and Voice Pause after every block. An Attack Wave alarm when 3 customers are blocked within 15 minutes."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/trust-m.png?v=gold"><img src="assets/readme/trust.svg?v=gold" width="100%" alt="Built to be trusted. No voiceprint stored. The LLM never decides a Verdict. Tamper-evident, hash-chained audit trail. One-time signed receipts that core banking redeems once. A Security Alert and Voice Pause after every block. An Attack Wave alarm when 3 customers are blocked within 15 minutes."></picture>
 </p>
 
 The details are in [docs/SECURITY.md](docs/SECURITY.md) and the seven [decision records](docs/adr/).
@@ -62,7 +62,7 @@ The details are in [docs/SECURITY.md](docs/SECURITY.md) and the seven [decision 
 ## Architecture
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/architecture-m.png"><img src="assets/readme/architecture.svg" width="100%" alt="Architecture. phones · frontend/: Caller app, Bank App, Console; LiveKit: Voice room, Voice Agent; verifier · FastAPI: Call state machine, Signals, Policy; data: MySQL 8, Voice cache"></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/architecture-m.png?v=gold"><img src="assets/readme/architecture.svg?v=gold" width="100%" alt="Architecture. phones · frontend/: Caller app, Bank App, Console; LiveKit: Voice room, Voice Agent; verifier · FastAPI: Call state machine, Signals, Policy; data: MySQL 8, Voice cache"></picture>
 </p>
 
 Everything runs on one LAN for the demo: a GPU laptop hosts the speech models, LiveKit and the verifier API, and phones and laptops join through the browser. A bank would connect its phone lines by adding a SIP trunk to LiveKit; verification stays the same ([ADR-0005](docs/adr/0005-self-hosted-livekit-on-the-demo-lan.md)).
@@ -132,5 +132,5 @@ Built by Team Omnitrons for FET Aavishkar 2026, led by [Kamlesh Choudhary](https
 No license file has been added yet, so default copyright applies.
 
 <p align="center">
-  <a href="https://github.com/JustKamlesH21"><picture><source media="(max-width: 767px)" srcset="assets/readme/footer-m.png"><img src="assets/readme/footer.svg" width="100%" alt="Part of Kamlesh OS. More projects on github.com/JustKamlesH21"></picture></a>
+  <a href="https://github.com/JustKamlesH21"><picture><source media="(max-width: 767px)" srcset="assets/readme/footer-m.png?v=gold"><img src="assets/readme/footer.svg?v=gold" width="100%" alt="Part of Kamlesh OS. More projects on github.com/JustKamlesH21"></picture></a>
 </p>
