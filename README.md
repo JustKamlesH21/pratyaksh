@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/readme/banner.svg" width="100%" alt="Pratyaksh: tells a bank whether the caller is a live person holding the customer's phone, or an AI voice clone.">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/banner-m.svg"><img src="assets/readme/banner.svg" width="100%" alt="Pratyaksh: tells a bank whether the caller is a live person holding the customer's phone, or an AI voice clone."></picture>
 </p>
 
 **Team Omnitrons · FET Aavishkar 2026 · Cybersecurity · #F1BBBA03 "Voice-clone consent verification protocol"**
@@ -7,11 +7,11 @@
 Pratyaksh decides whether the person on a bank call is a **live human holding the customer's registered phone**, not an AI voice clone, without storing anyone's voice. The Voice Agent asks random live Challenges (a whispered Kannada-Hindi-English phrase, a one-time code from the bank app), measures Signals from each reply, and returns a Verdict (PASS, STEP-UP or BLOCK) with plain-language Reasons.
 
 <p align="center">
-  <img src="assets/readme/how-it-works.svg" width="100%" alt="One call: the caller is asked live Challenges by the Voice Agent, speech and spoof models measure Signals, policy.yaml turns them into a Verdict with Reasons.">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/how-it-works-m.svg"><img src="assets/readme/how-it-works.svg" width="100%" alt="One call: the caller is asked live Challenges by the Voice Agent, speech and spoof models measure Signals, policy.yaml turns them into a Verdict with Reasons."></picture>
 </p>
 
 <p align="center">
-  <img src="assets/readme/proof.svg" width="100%" alt="In numbers: 1,344 Whisper Phrases in Kannada, Hindi and English; 3 verdicts: PASS, STEP-UP, BLOCK.">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/proof-m.svg"><img src="assets/readme/proof.svg" width="100%" alt="In numbers: 1,344 Whisper Phrases in Kannada, Hindi and English; 3 verdicts: PASS, STEP-UP, BLOCK."></picture>
 </p>
 
 - Product plan, features, flows and the plan to the finale: [`docs/PRD.md`](docs/PRD.md)
@@ -197,5 +197,5 @@ The Voice Agent's LiveKit adapter was verified against a local `livekit-server` 
 See [`data/eval/README.md`](data/eval/README.md): record consented real and Clone Calls with `RETAIN_AUDIO=true`, export them, run `pratyaksh-eval run`, read the Eval page, tune `policy.yaml`.
 
 <p align="center">
-  <a href="https://github.com/JustKamlesH21"><img src="assets/readme/footer.svg" width="100%" alt="Part of Kamlesh OS. More projects on github.com/JustKamlesH21"></a>
+  <a href="https://github.com/JustKamlesH21"><picture><source media="(max-width: 767px)" srcset="assets/readme/footer-m.svg"><img src="assets/readme/footer.svg" width="100%" alt="Part of Kamlesh OS. More projects on github.com/JustKamlesH21"></picture></a>
 </p>
