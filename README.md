@@ -6,26 +6,19 @@
   <picture><source media="(max-width: 767px)" srcset="assets/readme/award-m.svg"><img src="assets/readme/award.svg" width="100%" alt="Hackathon result: runner-up, 2nd place, at FET Aavishkar 2026. Team Omnitrons, Cybersecurity."></picture>
 </p>
 
-**Runner-up (2nd place) at FET Aavishkar 2026.** Team Omnitrons · Cybersecurity · #F1BBBA03 "Voice-clone consent verification protocol"
+Team Omnitrons · Cybersecurity · #F1BBBA03 "Voice-clone consent verification protocol"
 
 Pratyaksh decides whether the person on a bank call is a **live human holding the customer's registered phone**, not an AI voice clone, without storing anyone's voice. The Voice Agent asks random live Challenges (a whispered Kannada-Hindi-English phrase, a one-time code from the bank app), measures Signals from each reply, and returns a Verdict (PASS, STEP-UP or BLOCK) with plain-language Reasons.
+
+<p align="center">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/glance-m.svg"><img src="assets/readme/glance.svg" width="100%" alt="At a glance. Built: Oct - Nov 2026; Made for: FET Aavishkar 2026, Team Omnitrons; Stack: FastAPI · LiveKit · MySQL · React; Result: Runner-up, 2nd place"></picture>
+</p>
 
 <p align="center">
   <picture><source media="(max-width: 767px)" srcset="assets/readme/how-it-works-m.svg"><img src="assets/readme/how-it-works.svg" width="100%" alt="One call: the caller is asked live Challenges by the Voice Agent, speech and spoof models measure Signals, policy.yaml turns them into a Verdict with Reasons."></picture>
 </p>
 
-<p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/proof-m.svg"><img src="assets/readme/proof.svg" width="100%" alt="In numbers: 1,344 Whisper Phrases in Kannada, Hindi and English; 3 verdicts: PASS, STEP-UP, BLOCK."></picture>
-</p>
-
-- Product plan, features, flows and the plan to the finale: [`docs/PRD.md`](docs/PRD.md)
-- Why banks would buy it, who else would, and the plan after the hackathon: [`docs/BUSINESS.md`](docs/BUSINESS.md)
-- Domain vocabulary (use these words in code and in the pitch): [`CONTEXT.md`](CONTEXT.md)
-- Decisions and why: [`docs/adr/`](docs/adr/)
-
-<p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/glance-m.svg"><img src="assets/readme/glance.svg" width="100%" alt="At a glance. Built: Oct - Nov 2026; Made for: FET Aavishkar 2026, Team Omnitrons; Stack: FastAPI · LiveKit · MySQL · React; Result: Runner-up, 2nd place"></picture>
-</p>
+**Docs:** [product plan](docs/PRD.md) · [business case](docs/BUSINESS.md) · [vocabulary](CONTEXT.md) · [decisions](docs/adr/)
 
 ## Architecture
 
