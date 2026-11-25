@@ -1,156 +1,83 @@
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/banner-m.svg"><img src="assets/readme/banner.svg" width="100%" alt="Pratyaksh, runner-up at FET Aavishkar 2026: tells a bank whether the caller is a live person holding the customer's phone, or an AI voice clone."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/banner-m.png"><img src="assets/readme/banner.svg" width="100%" alt="Pratyaksh, runner-up at FET Aavishkar 2026: tells a bank whether the caller is a live person holding the customer's phone, or an AI voice clone."></picture>
 </p>
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/award-m.svg"><img src="assets/readme/award.svg" width="100%" alt="Hackathon result: runner-up, 2nd place, at FET Aavishkar 2026. Team Omnitrons, Cybersecurity."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/award-m.png"><img src="assets/readme/award.svg" width="100%" alt="Hackathon result: runner-up, 2nd place, at FET Aavishkar 2026. Team Omnitrons, Cybersecurity."></picture>
 </p>
 
-Team Omnitrons · Cybersecurity · #F1BBBA03 "Voice-clone consent verification protocol"
+<p align="center"><b>Runner-up at FET Aavishkar 2026</b> · Team Omnitrons · Cybersecurity track<br>
+Problem statement #F1BBBA03, "Voice-clone consent verification protocol" · demoed live at the 24-hour finale, 31 Oct to 1 Nov 2026</p>
 
-Pratyaksh decides whether the person on a bank call is a **live human holding the customer's registered phone**, not an AI voice clone, without storing anyone's voice. The Voice Agent asks random live Challenges (a whispered Kannada-Hindi-English phrase, a one-time code from the bank app), measures Signals from each reply, and returns a Verdict (PASS, STEP-UP or BLOCK) with plain-language Reasons.
+A scammer needs about ten seconds of someone's voice to clone it. Then they call the bank as that person and ask for the things that move money: a new payee, a SIM swap, a big transfer. Voice ID lets the clone in, because it sounds exactly right.
+
+Pratyaksh asks a different question: **is a live person holding the customer's registered phone on this call?** A Voice Agent sets random live Challenges (a whispered Kannada-Hindi-English phrase, and a one-time code that appears only in the customer's bank app), measures how each reply was spoken, and returns **PASS, STEP-UP or BLOCK** with reasons a bank officer can read. It never stores anyone's voice.
+
+<p align="center"><a href="#same-voice-two-calls"><b>See two calls</b></a> · <a href="#how-a-call-works">How a call works</a> · <a href="#try-the-demo">Try the demo</a> · <a href="docs/SETUP.md">Setup guide</a> · <a href="docs/SECURITY.md">Security</a></p>
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/glance-m.svg"><img src="assets/readme/glance.svg" width="100%" alt="At a glance. Built: Oct - Nov 2026; Made for: FET Aavishkar 2026, Team Omnitrons; Stack: FastAPI · LiveKit · MySQL · React; Result: Runner-up, 2nd place"></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/glance-m.png"><img src="assets/readme/glance.svg" width="100%" alt="At a glance. Built: Oct - Nov 2026; Made for: FET Aavishkar 2026, Team Omnitrons; Stack: FastAPI · LiveKit · MySQL · React; Result: Runner-up, 2nd place"></picture>
 </p>
+
+## Same voice, two calls
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/how-it-works-m.svg"><img src="assets/readme/how-it-works.svg" width="100%" alt="One call: the caller is asked live Challenges by the Voice Agent, speech and spoof models measure Signals, policy.yaml turns them into a Verdict with Reasons."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/two-calls-m.png"><img src="assets/readme/two-calls.svg" width="100%" alt="Same voice, two calls. The real customer asks to add a payee, whispers the random phrase in 1.5 to 2.9 seconds and reads the code from the paired Bank App: PASS, and a signed Verification Receipt is issued. The voice clone says the right words (Task Match 0.92) but scores 0.01 to 0.25 on whispering where 0.60 is needed: BLOCK, a Security Alert on the real customer's phone, and repeat calls are paused."></picture>
 </p>
 
-**Docs:** [product plan](docs/PRD.md) · [business case](docs/BUSINESS.md) · [vocabulary](CONTEXT.md) · [decisions](docs/adr/)
+Text-to-speech and voice-cloning models speak; they don't whisper on demand. In the team's first test runs a synthetic caller said the right words but scored 0.01-0.25 on whispering, against the 0.60 needed, and was blocked. A clone run through a whisper filter can fake the whisper, which is why the second Challenge is a code that only shows on the customer's own phone.
+
+## Why it matters
+
+- Indians lost about **₹22,846 crore to cyber fraud in 2024**, roughly three times 2023 (MHA reply in Parliament, I4C data, [PTI via The Week](https://www.theweek.in/wire-updates/business/2025/07/22/del23-lsq-cyber-fraud.html)).
+- In McAfee's 2023 survey, **69% of Indian adults could not tell a cloned voice from a real one** ([BusinessWorld](https://businessworld.in/article/ai-voice-scams-more-prevalent-in-india-affects-almost-50-indians-mcafee-report-475192)).
+- In 2023 a journalist **got into his own Lloyds Bank account by playing an AI clone of his voice** to its Voice ID ([IT Brew](https://www.itbrew.com/stories/2023/03/31/voice-generation-ai-blows-through-bank-s-voice-id-security)).
+
+Who would buy it, how it plugs into a bank and why RBI's 2025 rules point this way: [business case](docs/BUSINESS.md).
+
+## How a call works
+
+<p align="center">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/how-it-works-m.png"><img src="assets/readme/how-it-works.svg" width="100%" alt="One call: the caller is asked live Challenges by the Voice Agent, the speech model and a whisper score measure Signals, policy.yaml turns them into a Verdict with Reasons."></picture>
+</p>
+
+1. **Request.** The caller says what they want, in English, Hindi, Kannada or a mix. `policy.yaml` sets the Challenges: none for a balance check, two for a new payee, three for a SIM swap or a transfer over ₹5 lakh.
+2. **Challenges.** The Voice Agent asks for a random Whisper Phrase (one of 1,344) and a six-digit Possession Code shown on the paired Bank App.
+3. **Signals.** faster-whisper checks the words (Task Match), the audio is scored for whispering (Whisper Score), and the reply time is measured.
+4. **Verdict.** Rules combine the Signals into PASS, STEP-UP (one more phrase, then app approval) or BLOCK, each with a plain-language Reason. An LLM helps understand off-script callers but never decides a Verdict.
+5. **Record.** Every step goes on an insert-only, hash-chained Audit Trail, and a PASS comes with a signed, one-time Verification Receipt.
+
+<p align="center">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/proof-m.png"><img src="assets/readme/proof.svg" width="100%" alt="In numbers: 1,344 equally likely Whisper Phrases; clone Whisper Scores of 0.01 to 0.25 where 0.60 is needed; 64 of 66 recorded human whispers detected; under 20 seconds of added time is the target for a real caller."></picture>
+</p>
+
+## Built to be trusted
+
+<p align="center">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/trust-m.png"><img src="assets/readme/trust.svg" width="100%" alt="Built to be trusted. No voiceprint stored. The LLM never decides a Verdict. Tamper-evident, hash-chained audit trail. One-time signed receipts that core banking redeems once. A Security Alert and Voice Pause after every block. An Attack Wave alarm when 3 customers are blocked within 15 minutes."></picture>
+</p>
+
+The details are in [docs/SECURITY.md](docs/SECURITY.md) and the seven [decision records](docs/adr/).
 
 ## Architecture
 
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/architecture-m.svg"><img src="assets/readme/architecture.svg" width="100%" alt="Architecture. phones · frontend/: Caller app, Bank App, Console; LiveKit: Voice room, Voice Agent; verifier · FastAPI: Call state machine, Signals, Policy; data: MySQL 8, Voice cache"></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/architecture-m.png"><img src="assets/readme/architecture.svg" width="100%" alt="Architecture. phones · frontend/: Caller app, Bank App, Console; LiveKit: Voice room, Voice Agent; verifier · FastAPI: Call state machine, Signals, Policy; data: MySQL 8, Voice cache"></picture>
 </p>
 
-## Repository map
+Everything runs on one LAN for the demo: a GPU laptop hosts the speech models, LiveKit and the verifier API, and phones and laptops join through the browser. A bank would connect its phone lines by adding a SIP trunk to LiveKit; verification stays the same ([ADR-0005](docs/adr/0005-self-hosted-livekit-on-the-demo-lan.md)).
 
-```
-backend/                 Python: the verifier API, the Voice Agent, Eval Runs
-  pyproject.toml
-  src/pratyaksh/
-    domain.py            value types (Step, Signals, Verdict…)
-    policy.py + .yaml    Requests → Challenges, Signals → Verdict + Reasons
-    knowledge.yaml       answers the Voice Agent may give to Questions (edit freely)
-    signals.py           SignalExtractor + speech model adapters (faster-whisper, spoof classifier)
-    language.py          Kannada/Devanagari/Latin folding, spoken digits
-    phrases.py           Whisper Phrase bank
-    verification/        Verifier: Call state machine, Interpreter (any utterance), Possession Codes,
-                         Device Inbox, Audit Trail
-    voice.py             PromptVoice: Indic Parler-TTS with a disk cache
-    api/                 FastAPI verifier (HTTP + WebSocket)
-    agent/               LiveKit Voice Agent worker (thin; ADR-0001)
-    eval/                Eval Runs: export recordings, measure Catch Rate
-  tests/                 pytest, all through module interfaces
-  scripts/               LAN HTTPS certificate, smoke Call, whisper red-team
-frontend/                Vite + React + TS: landing page, Console, Demo hub, Deepfake view, Caller app,
-                         Bank App, Eval page
-attacker/                red-team Clone tools (separate laptop, consent only)
-infra/                   docker-compose for MySQL + LiveKit
-scripts/windows/         start, stop and LAN-IP scripts for the GPU laptop
-docs/                    PRD, ADRs, design system, business case
-```
+## Try the demo
 
-The services run from the repository root, which holds the git-ignored runtime state: `.venv`, `.env`, `.cache/` (voice cache, logs) and `data/` (keys, recordings).
+With the stack running (see [Run it](#run-it)), open these screens:
 
-## How the pieces run
-
-| Process | Where | Command |
-|---|---|---|
-| MySQL 8 | GPU laptop | Docker (`infra/`) or a native install |
-| LiveKit server | GPU laptop | `livekit-server` binary or Docker |
-| Verifier API (models live here) | GPU laptop | `pratyaksh-api` |
-| Voice Agent worker | GPU laptop | `pratyaksh-agent dev` |
-| Web app | any laptop | `npm run dev` in `frontend/` |
-| Clone tools | attacker laptop | `attacker/clone_speak.py` |
-
-## Setup on the GPU laptop
-
-Prerequisites: Python 3.11+, Node 20+, an NVIDIA driver with CUDA 12, Git, and either Docker or MySQL 8.
-
-### 1. Python
-
-```bash
-git clone https://github.com/JustKamlesH21/pratyaksh.git && cd pratyaksh
-python -m venv .venv
-source .venv/bin/activate                   # Windows: .venv\Scripts\activate
-pip install -e "backend[agent,dev]"         # API, agent, tests
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124   # CUDA builds first; a PyPI torchaudio crashes on import (WinError 127)
-pip install -e "backend[ml]"                # faster-whisper, transformers, parler-tts
-pip install -e "backend[agent]" "protobuf>=6.33.5,<8"   # [ml] downgrades protobuf and LiveKit; this puts the agent's versions back
-cp .env.example .env                        # then edit LAN_IP, secrets, URLs
-(cd backend && pytest)                      # should be all green without a GPU
-```
-
-The last line makes pip warn that `descript-audiotools` wants `protobuf<5`. That is safe to ignore: parler-tts needs audiotools only for its audio codec, and audiotools touches protobuf only through a tensorboard import used in training. LiveKit needs protobuf 5 or newer. The CUDA libraries faster-whisper needs (cuBLAS 12, cuDNN 9) ship inside the torch wheel, so no CUDA toolkit install is needed.
-
-Indic Parler-TTS is a gated model on Hugging Face: accept its terms on the model page, then `hf auth login` once.
-
-### 2. MySQL
-
-Docker: `cd infra && docker compose --env-file ../.env up -d mysql`
-
-Native install: create the database and user, then grant them:
-```sql
-CREATE DATABASE pratyaksh CHARACTER SET utf8mb4;
-CREATE USER 'pratyaksh'@'%' IDENTIFIED BY 'pratyaksh-dev';
-GRANT ALL PRIVILEGES ON pratyaksh.* TO 'pratyaksh'@'%';
-SET PERSIST log_bin_trust_function_creators = 1;  -- lets the app add the Audit Trail triggers; survives restarts
-```
-Then `pratyaksh-seed` creates the tables, triggers and three demo Customers (the API also does this on start). If it cannot add the Audit Trail triggers it says why and exits with an error; fix the grant or setting it names and run it again. `pratyaksh-seed --reset` drops everything first: use it to clear demo data, or when the API says the database is older than the code.
-
-### 3. LiveKit server
-
-Download `livekit-server` for your OS from https://github.com/livekit/livekit/releases, then:
-```bash
-livekit-server --bind 0.0.0.0 --node-ip <LAN_IP> --keys "pratyaksh: <LIVEKIT_API_SECRET>"
-```
-On Linux you can use `docker compose --env-file ../.env up -d livekit` from `infra/` instead. Allow TCP 7880–7881 and UDP 50000–50200 through the firewall.
-
-### 4. Verifier and Voice Agent
-
-Two terminals, both with the venv active:
-```bash
-pratyaksh-api             # http://<LAN_IP>:8000/docs ; first start downloads and warms the models
-pratyaksh-agent dev       # registers with LiveKit and waits for Calls
-```
-
-Once per machine, with the API stopped, voice everything the Voice Agent can say into the cache (`.cache/tts`), including the prompt for every one of the 1,344 Whisper Phrases:
-```bash
-pratyaksh-voice-cache     # ~3.6 h per voice with Parler on a laptop GPU (API stopped; unthrottle with power.ps1 -Match); cached lines are skipped
-```
-Parler takes about 6–7 s per sentence on an RTX 3060, so without this every Challenge prompt would add that to the Call. Speech is cached sentence by sentence, so a new lead-in in front of a cached prompt costs only the new sentence. Answers to Questions are voiced on first use and then cached.
-
-The default voice is Mary; Anu is the backup (`PARLER_DESCRIPTION` in `.env.example`). Each voice has its own cache, so run `pratyaksh-voice-cache` once per voice you may switch to.
-
-**Windows: one command for everything.** `scripts\windows\` starts and stops LiveKit, the API, the agent and the web app in the background, with logs in `.cache\run`:
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\windows\start.ps1        # -Only api|agent|web|livekit; -Online on the very first start
-powershell -ExecutionPolicy Bypass -File scripts\windows\stop.ps1
-powershell -ExecutionPolicy Bypass -File scripts\windows\set-lan-ip.ps1   # new Wi-Fi or the venue hotspot: then stop + start
-```
-Set `LIVEKIT_SERVER` to the path of `livekit-server.exe` once. Models load offline from the Hugging Face cache, which matters on slow Wi-Fi. On the RTX 3060 laptop in Turbo mode, `/v1/status` says Ready 75–110 s after start: Whisper 7 s, spoof model 1.5 s, Parler 64 s.
-
-### 5. Web app
-
-```bash
-cd frontend
-npm install
-cp .env.example .env      # VITE_API_URL=http://<LAN_IP>:8000
-npm run dev               # http://localhost:5173
-```
-
-Open:
-- **Landing page** (open first for the judges): `http://localhost:5173/`. The hero plays a labelled simulation of a real Customer and a Clone; the numbers below it are live from the verifier. Dark by default; the header button switches to light or the system setting.
-- **Console** (projector): `http://localhost:5173/console`. It asks for `CONSOLE_KEY` once per tab. The Transcript tab shows both sides of each Call with Signals and hearing times (Download .txt for a fraud case); the strip above each Call shows the Customer's risk and any Voice Pause. The strip at the top says **Ready** only when the setup can take a real Call; its warnings say what to fix.
-- **Caller app**: `http://localhost:5173/call`
-- **Bank App** on the Customer's phone: the **pairing link** printed by `pratyaksh-seed` (and in the API log), opened as `http://<LAN_IP>:5173/bank?customer=…&device=…`. Without the link the Bank App shows nothing, which is the point: the attacker laptop can't read codes or approve requests.
-- **Eval**: `http://localhost:5173/eval`
-
-## First Call
+| Screen | Who it's for |
+|---|---|
+| `/` landing page | Judges: a labelled simulation of a real customer and a clone, with live numbers from the verifier |
+| `/console` | The bank's fraud team: live Signals, Verdicts, Reasons and transcripts |
+| `/call` | The caller |
+| `/bank` | The customer's paired phone, opened from the pairing link `pratyaksh-seed` prints |
+| `/eval` | Eval Run results |
 
 1. Caller app: pick *Ananya Rao*, press **Call**.
 2. Say *"I want to add a new payee"*.
@@ -164,45 +91,46 @@ Try going off-script too: ask "why should I whisper?" in the middle of a Challen
 
 Answers come from `backend/src/pratyaksh/knowledge.yaml` (its header explains the keyword format; add an entry to teach the agent a new question). Anything the keywords miss goes to the LLM (`OLLAMA_API_KEY`, `OLLAMA_MODEL=gpt-oss:120b`), which is told where the Call is and uses the same answers as its facts.
 
-## Security, in one place
+## Run it
 
-- **Only the Voice Agent talks to the agent endpoints.** Set `AGENT_KEY` (and `CONSOLE_KEY`) in `.env`; the agent sends the key, so another laptop cannot post Responses with a forged Reply Latency. A keyless or oversized upload is refused before a byte of it is read; WAV headers are checked (8–48 kHz, `MAX_RESPONSE_S`) before decoding, which runs off the event loop.
-- **Console reads are for bank staff.** With `CONSOLE_KEY` set, Calls, Transcripts, the Audit Trail and Customer risk need the key (the Console asks once; the WebSocket takes it as its first message). `/v1/status`, `/v1/stats` and receipt checking stay open.
-- **Security Alert and Voice Pause.** Every BLOCK shows "Blocked call attempt" on the Customer's Bank App. Until they dismiss it there (or `protection.pause_minutes` in `policy.yaml` passes), risky Requests for that Customer are refused on voice, so an impostor cannot keep calling back. Dismiss the alert before re-running the demo.
-- **Tamper-evident Audit Trail.** Events are insert-only (database triggers) and hash-chained; `GET /v1/calls/{id}/audit` and the Console badge show whether anything was edited or deleted.
-- **Verification Receipts.** `GET /v1/calls/{id}/receipt` (console key) returns an Ed25519-signed JWT of a closed Call's result; `executable` says whether core banking may act. Check it with `POST /v1/receipts/verify` or any JWT library and `GET /v1/receipts/key`. Before acting, core banking calls `POST /v1/receipts/redeem` (console key): it works once per Call and goes on the Audit Trail, so a receipt cannot be replayed. The signing key is created in `data/keys/` on first start; keep it off git (it is ignored).
-- **Attack Wave.** Blocked Calls for 3 different Customers within 15 minutes (`protection.wave_customers`, `wave_minutes`) look like a Clone campaign: until it passes, every risky Request also needs Agent Review and the Console shows a banner. Re-running the clone demo three times trips it; wait it out or set `wave_customers: 0`.
-- **Transcripts.** Every line the Voice Agent says is an Audit Trail event too, so `GET /v1/calls/{id}/transcript?format=text` is a complete, tamper-evident record with the Audit head to match a Verification Receipt.
-- **Guessing is bounded.** 1,344 equally likely Whisper Phrases; a code readout with more than 8 digits never matches; LLM replies are dropped if they contain any number not in `knowledge.yaml` (1930 aside), claim an outcome ("has been added"), or ask for a PIN, OTP or password rather than warn about it.
-- **Slow is not suspicious.** A correct Possession Code read after it expired gets a fresh code once, then App Approval; only a wrong code BLOCKs. A failed Whisper Phrase never PASSes until a STEP-UP phrase after it is completed.
-- **One Outcome per Call.** On SQLite every transaction takes the write lock up front (`BEGIN IMMEDIATE`), on MySQL the row lock; Audit Trail sequence numbers are unique per Call.
+It needs a GPU laptop (NVIDIA, CUDA 12), Python 3.11+, Node 20+, MySQL 8 and a `livekit-server` binary. The full walkthrough, including a one-command start on Windows, is in **[docs/SETUP.md](docs/SETUP.md)**. What runs where:
 
-## Gotchas
-
-- **Microphone needs a secure page.** Browsers allow the mic only on `https://` or `localhost`. Run the Caller app from `localhost` on each calling laptop (with `VITE_API_URL` pointing at the GPU laptop), or in Chrome add `http://<LAN_IP>:5173` under `chrome://flags/#unsafely-treat-insecure-origin-as-secure`. The Bank App needs no mic.
-- **HTTP proxies break the agent's WebSocket** to LiveKit. Unset `HTTP_PROXY`/`HTTPS_PROXY` for the agent if you see `405 Invalid response status`.
-- **Test whispers on day one.** `VAD_ACTIVATION=0.15` caught 64 of 66 recorded human whispers (0.35 missed 11); if room noise triggers it, raise it a little.
-- **Calibrate Reply Latency on the real setup.** The 2500/6000 ms bounds in `policy.yaml` come from real iPhone Calls (genuine whispers took 1.5–2.9 s); run an Eval Run with the finale mics and adjust.
-- **Without a GPU** set `WHISPER_MODEL=small WHISPER_DEVICE=cpu WHISPER_COMPUTE_TYPE=int8 TTS_BACKEND=tone`. Calls work; the agent beeps instead of speaking.
-- **The LLM is optional.** With no `OLLAMA_API_KEY`, unclear Requests get a scripted clarification. Set `OLLAMA_MODEL` to a model your Ollama account can run.
+| Process | Where | Command |
+|---|---|---|
+| MySQL 8 | GPU laptop | Docker (`infra/`) or a native install |
+| LiveKit server | GPU laptop | `livekit-server` binary or Docker |
+| Verifier API (models live here) | GPU laptop | `pratyaksh-api` |
+| Voice Agent worker | GPU laptop | `pratyaksh-agent dev` |
+| Web app | any laptop | `npm run dev` in `frontend/` |
+| Clone tools | attacker laptop | `attacker/clone_speak.py` |
 
 ## Tests
 
 ```bash
-cd backend && pytest     # Policy, Signals, whole Calls through the Verifier, HTTP interface, call loop, Eval Runs
+cd backend && pytest       # Policy, Signals, whole Calls through the Verifier, HTTP API, call loop, Eval Runs
 cd frontend && npm run build
 ```
-The same suite runs on MySQL (tables in that database are dropped before each test, so use a spare one):
-```bash
-mysql -uroot -p -e "CREATE DATABASE pratyaksh_test CHARACTER SET utf8mb4; GRANT ALL PRIVILEGES ON pratyaksh_test.* TO 'pratyaksh'@'%';"
-cd backend && PRATYAKSH_TEST_DATABASE_URL=mysql+pymysql://pratyaksh:pratyaksh-dev@127.0.0.1:3306/pratyaksh_test pytest
-```
-The Voice Agent's LiveKit adapter was verified against a local `livekit-server` with a scripted caller; it is not part of `pytest` because it needs the server binary.
 
-## Eval Runs
+The suite needs no GPU. It can also run against MySQL; see [docs/SETUP.md](docs/SETUP.md#tests).
 
-See [`data/eval/README.md`](data/eval/README.md): record consented real and Clone Calls with `RETAIN_AUDIO=true`, export them, run `pratyaksh-eval run`, read the Eval page, tune `policy.yaml`.
+## Project docs
+
+| Doc | What's in it |
+|---|---|
+| [PRD](docs/PRD.md) | Goals for the finale, features and acceptance checks |
+| [Business case](docs/BUSINESS.md) | The fraud problem, buyers, integration path and pricing ideas, with sources |
+| [Vocabulary](CONTEXT.md) | What Caller, Challenge, Signal, Verdict and the rest mean here |
+| [Decisions](docs/adr/) | Seven ADRs, from "no voice biometrics" to signed receipts |
+| [Setup](docs/SETUP.md) | Installing and running every piece, plus gotchas |
+| [Security](docs/SECURITY.md) | Keys, the audit trail, receipts, Voice Pause and Attack Wave |
+| [Eval Runs](data/eval/README.md) | Recording consented calls and measuring Catch Rate |
+
+## Team
+
+Built by Team Omnitrons for FET Aavishkar 2026, led by [Kamlesh Choudhary](https://github.com/JustKamlesH21).
+
+No license file has been added yet, so default copyright applies.
 
 <p align="center">
-  <a href="https://github.com/JustKamlesH21"><picture><source media="(max-width: 767px)" srcset="assets/readme/footer-m.svg"><img src="assets/readme/footer.svg" width="100%" alt="Part of Kamlesh OS. More projects on github.com/JustKamlesH21"></picture></a>
+  <a href="https://github.com/JustKamlesH21"><picture><source media="(max-width: 767px)" srcset="assets/readme/footer-m.png"><img src="assets/readme/footer.svg" width="100%" alt="Part of Kamlesh OS. More projects on github.com/JustKamlesH21"></picture></a>
 </p>

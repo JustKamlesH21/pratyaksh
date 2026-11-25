@@ -31,3 +31,6 @@ frontend/public/pratyaksh-ca.crt
 
 # Local assistant notes
 CLAUDE.md
+
+# signing keys created on first start when the API runs from backend/
+backend/data/keys/
