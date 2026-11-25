@@ -23,6 +23,10 @@ Pratyaksh decides whether the person on a bank call is a **live human holding th
 - Domain vocabulary (use these words in code and in the pitch): [`CONTEXT.md`](CONTEXT.md)
 - Decisions and why: [`docs/adr/`](docs/adr/)
 
+<p align="center">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/glance-m.svg"><img src="assets/readme/glance.svg" width="100%" alt="At a glance. Built: Oct - Nov 2026; Made for: FET Aavishkar 2026, Team Omnitrons; Stack: FastAPI · LiveKit · MySQL · React; Result: Runner-up, 2nd place"></picture>
+</p>
+
 ## Architecture
 
 <p align="center">
