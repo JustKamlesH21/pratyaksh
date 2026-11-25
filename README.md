@@ -23,6 +23,12 @@ Pratyaksh decides whether the person on a bank call is a **live human holding th
 - Domain vocabulary (use these words in code and in the pitch): [`CONTEXT.md`](CONTEXT.md)
 - Decisions and why: [`docs/adr/`](docs/adr/)
 
+## Architecture
+
+<p align="center">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/architecture-m.svg"><img src="assets/readme/architecture.svg" width="100%" alt="Architecture. phones · frontend/: Caller app, Bank App, Console; LiveKit: Voice room, Voice Agent; verifier · FastAPI: Call state machine, Signals, Policy; data: MySQL 8, Voice cache"></picture>
+</p>
+
 ## Repository map
 
 ```
