@@ -1,8 +1,12 @@
 <p align="center">
-  <picture><source media="(max-width: 767px)" srcset="assets/readme/banner-m.svg"><img src="assets/readme/banner.svg" width="100%" alt="Pratyaksh: tells a bank whether the caller is a live person holding the customer's phone, or an AI voice clone."></picture>
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/banner-m.svg"><img src="assets/readme/banner.svg" width="100%" alt="Pratyaksh, runner-up at FET Aavishkar 2026: tells a bank whether the caller is a live person holding the customer's phone, or an AI voice clone."></picture>
 </p>
 
-**Team Omnitrons · FET Aavishkar 2026 · Cybersecurity · #F1BBBA03 "Voice-clone consent verification protocol"**
+<p align="center">
+  <picture><source media="(max-width: 767px)" srcset="assets/readme/award-m.svg"><img src="assets/readme/award.svg" width="100%" alt="Hackathon result: runner-up, 2nd place, at FET Aavishkar 2026. Team Omnitrons, Cybersecurity."></picture>
+</p>
+
+**Runner-up (2nd place) at FET Aavishkar 2026.** Team Omnitrons · Cybersecurity · #F1BBBA03 "Voice-clone consent verification protocol"
 
 Pratyaksh decides whether the person on a bank call is a **live human holding the customer's registered phone**, not an AI voice clone, without storing anyone's voice. The Voice Agent asks random live Challenges (a whispered Kannada-Hindi-English phrase, a one-time code from the bank app), measures Signals from each reply, and returns a Verdict (PASS, STEP-UP or BLOCK) with plain-language Reasons.
 
